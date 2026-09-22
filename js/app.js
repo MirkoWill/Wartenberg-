@@ -188,57 +188,86 @@
   };
 
   // US 1.3 – Live-ÖPNV-Monitor
-  const transit = { timer: null, loading: false };
+  // Die kostenlosen transport.rest-Dienste sind nicht immer erreichbar. Deshalb werden
+  // mehrere nacheinander versucht; der zuletzt funktionierende wird zuerst genommen.
+  const transit = { timer: null, loading: false, preferred: 0 };
 
   async function loadDepartures() {
     if (transit.loading) return;
     transit.loading = true;
     const status = $("#transitStatus");
     status.textContent = "Lade Abfahrten …";
+    status.classList.remove("is-error");
+
+    const apis = CFG.TRANSIT_APIS;
+    const order = apis.map((_, i) => (transit.preferred + i) % apis.length);
+    const problems = [];
 
     try {
-      const stopId = await resolveStopId();
-      const url = `${CFG.TRANSIT_API}/stops/${encodeURIComponent(stopId)}/departures`
-        + `?duration=60&results=${CFG.TRANSIT_RESULTS}&remarks=false&language=de`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      // transport.rest v6 liefert { departures: [...] }, ältere Versionen ein Array.
-      const departures = Array.isArray(data) ? data : data.departures || [];
-      renderDepartures(departures);
-      status.textContent = `Stand ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr · aktualisiert alle ${CFG.TRANSIT_REFRESH_SECONDS} s`;
-    } catch (err) {
-      console.error("ÖPNV-Abfrage fehlgeschlagen:", err);
-      status.textContent = "Abfahrten konnten nicht geladen werden. Neuer Versuch in Kürze.";
+      for (const i of order) {
+        const api = apis[i];
+        try {
+          const stopId = await resolveStopId(api);
+          const data = await fetchJson(`${api}/stops/${encodeURIComponent(stopId)}/departures`
+            + `?duration=60&results=${CFG.TRANSIT_RESULTS}&remarks=false&language=de`);
+          // transport.rest v6 liefert { departures: [...] }, ältere Versionen ein Array.
+          renderDepartures(Array.isArray(data) ? data : data.departures || []);
+          transit.preferred = i;
+          status.textContent = `Stand ${formatTime(new Date())} Uhr · aktualisiert alle ${CFG.TRANSIT_REFRESH_SECONDS} s`;
+          return;
+        } catch (err) {
+          console.warn(`ÖPNV über ${api} fehlgeschlagen:`, err);
+          problems.push(`${new URL(api).hostname.split(".")[1]}: ${err.message}`);
+        }
+      }
+      status.textContent = "Abfahrten derzeit nicht verfügbar – der kostenlose Fahrplandienst antwortet nicht. "
+        + "Neuer Versuch in Kürze. (" + problems.join(" · ") + ")";
+      status.classList.add("is-error");
     } finally {
       transit.loading = false;
     }
   }
 
+  /** fetch mit Zeitlimit, damit die Anzeige nicht endlos „lädt“. */
+  async function fetchJson(url) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), CFG.TRANSIT_TIMEOUT_SECONDS * 1000);
+    try {
+      const res = await fetch(url, { headers: { Accept: "application/json" }, signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      if (err.name === "AbortError") throw new Error("Zeitüberschreitung");
+      if (err instanceof TypeError) throw new Error("nicht erreichbar");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /**
    * Haltestellen-ID ermitteln: fest konfiguriert (id) oder per Namenssuche (query).
-   * Das Suchergebnis wird im Browser gespeichert, damit nur einmal gesucht wird.
+   * Das Suchergebnis wird je Dienst im Browser gespeichert, damit nur einmal gesucht wird.
    */
-  async function resolveStopId() {
+  async function resolveStopId(api) {
     const stop = OBJ.transitStop;
     if (stop.id) return stop.id;
 
-    const cacheKey = "mieterapp.stop." + stop.query;
+    const cacheKey = `mieterapp.stop.${new URL(api).hostname}.${stop.query}`;
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) return cached;
     } catch (e) { /* Storage blockiert */ }
 
-    const url = `${CFG.TRANSIT_API}/locations?query=${encodeURIComponent(stop.query)}`
-      + "&results=5&addresses=false&poi=false";
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const results = (await res.json()).filter((r) => r.type === "stop" || r.type === "station");
+    const data = await fetchJson(`${api}/locations?query=${encodeURIComponent(stop.query)}`
+      + "&results=8&addresses=false&poi=false");
+    const results = (Array.isArray(data) ? data : [])
+      .filter((r) => r.type === "stop" || r.type === "station");
     const wanted = (stop.match || stop.query).toLowerCase();
-    const hit = results.find((r) => r.name.toLowerCase().includes(wanted)) || results[0];
-    if (!hit) throw new Error("Haltestelle nicht gefunden: " + stop.query);
+    const hit = results.find((r) => r.name.toLowerCase().includes(wanted));
+    if (!hit) throw new Error("Haltestelle nicht gefunden");
 
-    console.info(`Haltestelle "${hit.name}" hat die ID ${hit.id} – kann in config.js als transitStop.id eingetragen werden.`);
+    console.info(`Haltestelle "${hit.name}" hat bei ${api} die ID ${hit.id}.`);
     try { localStorage.setItem(cacheKey, hit.id); } catch (e) { /* egal */ }
     return hit.id;
   }
@@ -293,6 +322,11 @@
 
   function initTransit() {
     $("#transitStop").textContent = OBJ.transitStop.name;
+    if (OBJ.transitStop.infoUrl) {
+      const link = $("#transitInfo");
+      link.href = OBJ.transitStop.infoUrl;
+      link.hidden = false;
+    }
     $("#transitRefresh").addEventListener("click", loadDepartures);
     // Nach Rückkehr in die App sofort aktualisieren.
     document.addEventListener("visibilitychange", () => {

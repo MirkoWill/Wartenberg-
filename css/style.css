@@ -467,3 +467,6 @@ input:focus, select:focus, textarea:focus { border-color: var(--c-primary); outl
 
 /* Honeypot gegen Spam-Bots – für Menschen unsichtbar */
 .hp { position: absolute !important; left: -9999px !important; width: 1px; height: 1px; overflow: hidden; }
+
+.transit-info { margin-top: 16px; }
+#transitStatus.is-error { color: var(--c-danger); }
