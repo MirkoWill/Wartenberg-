@@ -196,10 +196,10 @@
     const status = $("#transitStatus");
     status.textContent = "Lade Abfahrten …";
 
-    const url = `${CFG.TRANSIT_API}/stops/${encodeURIComponent(OBJ.transitStop.id)}/departures`
-      + `?duration=60&results=${CFG.TRANSIT_RESULTS}&remarks=false&language=de`;
-
     try {
+      const stopId = await resolveStopId();
+      const url = `${CFG.TRANSIT_API}/stops/${encodeURIComponent(stopId)}/departures`
+        + `?duration=60&results=${CFG.TRANSIT_RESULTS}&remarks=false&language=de`;
       const res = await fetch(url, { headers: { Accept: "application/json" } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -213,6 +213,34 @@
     } finally {
       transit.loading = false;
     }
+  }
+
+  /**
+   * Haltestellen-ID ermitteln: fest konfiguriert (id) oder per Namenssuche (query).
+   * Das Suchergebnis wird im Browser gespeichert, damit nur einmal gesucht wird.
+   */
+  async function resolveStopId() {
+    const stop = OBJ.transitStop;
+    if (stop.id) return stop.id;
+
+    const cacheKey = "mieterapp.stop." + stop.query;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) return cached;
+    } catch (e) { /* Storage blockiert */ }
+
+    const url = `${CFG.TRANSIT_API}/locations?query=${encodeURIComponent(stop.query)}`
+      + "&results=5&addresses=false&poi=false";
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const results = (await res.json()).filter((r) => r.type === "stop" || r.type === "station");
+    const wanted = (stop.match || stop.query).toLowerCase();
+    const hit = results.find((r) => r.name.toLowerCase().includes(wanted)) || results[0];
+    if (!hit) throw new Error("Haltestelle nicht gefunden: " + stop.query);
+
+    console.info(`Haltestelle "${hit.name}" hat die ID ${hit.id} – kann in config.js als transitStop.id eingetragen werden.`);
+    try { localStorage.setItem(cacheKey, hit.id); } catch (e) { /* egal */ }
+    return hit.id;
   }
 
   function renderDepartures(list) {
