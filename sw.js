@@ -3,7 +3,7 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v4";
+const CACHE_VERSION = "mieterapp-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -29,22 +29,21 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Nur eigene GET-Anfragen aus dem Cache bedienen (stale-while-revalidate).
-// API-Aufrufe (Apps Script, transport.rest) gehen immer direkt ins Netz.
+// Nur eigene GET-Anfragen: zuerst Netz (immer aktuelle Version), bei fehlender
+// Verbindung aus dem Cache. API-Aufrufe (Apps Script, transport.rest) werden nicht angefasst.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.open(CACHE_VERSION).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: true });
-      const network = fetch(req)
-        .then((res) => {
-          if (res.ok) cache.put(req, res.clone());
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(req)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req, { ignoreSearch: true }))
   );
 });

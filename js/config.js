@@ -16,8 +16,13 @@ window.APP_CONFIG = {
   // Leer lassen = Demo-Modus: Formulare werden nur simuliert (Konsole).
   API_URL: "", // TODO nach Einrichtung von backend/Code.gs eintragen
 
-  // Basis-URL der transport.rest-Instanz (VBB = Berlin/Brandenburg).
-  TRANSIT_API: "https://v6.vbb.transport.rest",
+  // transport.rest-Dienste für Abfahrten, werden der Reihe nach versucht (kostenlos, ohne Gewähr).
+  TRANSIT_APIS: [
+    "https://v6.bvg.transport.rest",
+    "https://v6.vbb.transport.rest",
+    "https://v6.db.transport.rest",
+  ],
+  TRANSIT_TIMEOUT_SECONDS: 8,
   TRANSIT_REFRESH_SECONDS: 60,
   TRANSIT_RESULTS: 10,
 
@@ -72,6 +77,7 @@ window.APP_CONFIG = {
       name: "Dorfstr./Lindenberger Str.",
       query: "Dorfstr./Lindenberger Str. (Berlin)",
       match: "dorfstr./lindenberger",
+      infoUrl: "https://www.bvg.de/en/connections/station-overview/dorfstr-lindenberger-str",
     },
 
     // Kiez-Guide & Dokumente (US 1.4)
