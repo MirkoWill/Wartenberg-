@@ -1,0 +1,11 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Hausverwaltung;TODO;;;
+FN:Hausverwaltung TODO
+ORG:TODO Hausverwaltung GmbH
+TEL;TYPE=WORK,VOICE:+4930000000000
+TEL;TYPE=CELL:+49170XXXXXXX
+EMAIL;TYPE=WORK:info@example.org
+ADR;TYPE=WORK:;;TODO Straße 1;Berlin;;13059;Deutschland
+NOTE:Havarie-Notdienst 24/7: +4930000000001
+END:VCARD
