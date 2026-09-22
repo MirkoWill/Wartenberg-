@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Mieter-App der Wohnanlage: Notfallnummern, Abfahrten, Dokumente und Services.">
+  <title>Mieter-App</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header__inner">
+      <button class="icon-btn" id="backBtn" type="button" aria-label="Zurück" hidden>←</button>
+      <div class="app-header__titles">
+        <a class="app-header__eyebrow" href="#aufgang" title="Adresse wechseln"><span id="objectName">Wohnanlage</span> <span aria-hidden="true">▾</span></a>
+        <h1 class="app-header__title" id="viewTitle">Notfall</h1>
+      </div>
+    </div>
+    <div class="demo-banner" id="demoBanner" hidden>Demo-Modus: Formulare werden nicht wirklich gesendet.</div>
+  </header>
+
+  <main id="main" class="app-main" tabindex="-1">
+
+    <!-- ============ Aufgang-Auswahl ============ -->
+    <section class="view" data-view="aufgang" data-title="Ihre Adresse" hidden>
+      <p class="lead">Bitte wählen Sie Ihre Hausnummer. Die App merkt sich die Auswahl.</p>
+      <div id="entranceList"></div>
+    </section>
+
+    <!-- ============ EPIC 1 – US 1.1: Notfall ============ -->
+    <section class="view" data-view="notfall" data-title="Notfall">
+      <p class="lead">Im Notfall einfach antippen – der Anruf startet sofort.</p>
+      <ul class="contact-list" id="emergencyList"></ul>
+
+      <h2 class="section-title">Verhaltensregeln</h2>
+      <div class="rules" id="emergencyRules"></div>
+    </section>
+
+    <!-- ============ EPIC 1 – US 1.3: Live-ÖPNV ============ -->
+    <section class="view" data-view="oepnv" data-title="Abfahrten" hidden>
+      <div class="card transit-head">
+        <div>
+          <div class="muted small">Haltestelle</div>
+          <div class="transit-head__stop" id="transitStop">–</div>
+        </div>
+        <button class="btn btn--ghost btn--small" id="transitRefresh" type="button">Aktualisieren</button>
+      </div>
+      <p class="muted small" id="transitStatus" aria-live="polite">Lade Abfahrten …</p>
+      <ul class="departures" id="departures"></ul>
+    </section>
+
+    <!-- ============ EPIC 1 – US 1.2 + 1.4: Kalender, Dokumente, Kiez ============ -->
+    <section class="view" data-view="infos" data-title="Infos" hidden>
+      <div class="card card--accent">
+        <h2 class="card__title">📅 Abfall- &amp; Hauskalender</h2>
+        <p>Müllabfuhr, Treppenhausreinigung und Termine der Wohnanlage direkt im eigenen Handy-Kalender.</p>
+        <a class="btn btn--primary btn--block" id="calendarSubscribe" href="#">Kalender abonnieren</a>
+        <a class="btn btn--ghost btn--block" id="calendarDownload" href="#" download>Als .ics-Datei herunterladen</a>
+        <a class="link small" id="calendarWeb" href="#" target="_blank" rel="noopener" hidden>Kalender im Browser ansehen</a>
+      </div>
+
+      <h2 class="section-title">Dokumente</h2>
+      <ul class="link-list" id="documentList"></ul>
+
+      <h2 class="section-title">Kiez-Guide</h2>
+      <div class="rules" id="kiezList"></div>
+
+      <h2 class="section-title">Apotheken-Notdienst</h2>
+      <div class="card iframe-card">
+        <iframe id="pharmacyFrame" title="Apotheken-Notdienst" loading="lazy" referrerpolicy="no-referrer"></iframe>
+        <a class="btn btn--ghost btn--block" id="pharmacyLink" href="#" target="_blank" rel="noopener">In neuem Fenster öffnen</a>
+      </div>
+    </section>
+
+    <!-- ============ EPIC 2: Service-Übersicht ============ -->
+    <section class="view" data-view="services" data-title="Services" hidden>
+      <p class="lead">Was möchten Sie erledigen?</p>
+      <div class="tile-grid">
+        <a class="tile" href="#wasser"><span class="tile__icon">💧</span><span class="tile__label">Wasserzähler melden</span></a>
+        <a class="tile" href="#strom"><span class="tile__icon">⚡</span><span class="tile__label">Zugang Stromzähler</span></a>
+        <a class="tile" href="#elektro"><span class="tile__icon">🔧</span><span class="tile__label">Techniker anmelden</span></a>
+        <a class="tile" href="#klingel"><span class="tile__icon">🔔</span><span class="tile__label">Klingelschild</span></a>
+        <a class="tile" href="#mangel"><span class="tile__icon">🛠️</span><span class="tile__label">Mangel melden</span></a>
+      </div>
+    </section>
+
+    <!-- ============ US 2.1: Wasserzähler ============ -->
+    <section class="view" data-view="wasser" data-title="Wasserzähler" data-parent="services" hidden>
+      <p class="lead">Jährliche Ablesung – bitte für jeden Zähler einzeln absenden.</p>
+      <form class="form" id="formWater" novalidate>
+        <label class="field">
+          <span class="field__label">Wohnungsnummer *</span>
+          <input name="wohnung" required autocomplete="off" placeholder="z. B. Whg 04">
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="field__label">Raum *</span>
+            <select name="raum" id="waterRoom" required></select>
+          </label>
+          <fieldset class="field">
+            <legend class="field__label">Art *</legend>
+            <div class="segmented">
+              <label><input type="radio" name="art" value="Kalt" required checked><span>Kalt</span></label>
+              <label><input type="radio" name="art" value="Warm"><span>Warm</span></label>
+            </div>
+          </fieldset>
+        </div>
+        <label class="field">
+          <span class="field__label">Zählernummer *</span>
+          <input name="zaehlernummer" required autocomplete="off" placeholder="steht auf dem Zähler">
+        </label>
+        <label class="field">
+          <span class="field__label">Zählerstand (m³) *</span>
+          <input name="zaehlerstand" required inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,3})?" placeholder="z. B. 123,456">
+        </label>
+        <label class="field">
+          <span class="field__label">Belegfoto *</span>
+          <input type="file" name="foto" accept="image/*" capture="environment" required data-preview="waterPreview">
+          <img class="photo-preview" id="waterPreview" alt="Vorschau Belegfoto" hidden>
+        </label>
+        <label class="field">
+          <span class="field__label">Ihr Name</span>
+          <input name="name" autocomplete="family-name">
+        </label>
+        <button class="btn btn--primary btn--block" type="submit">Zählerstand senden</button>
+      </form>
+    </section>
+
+    <!-- ============ US 2.2: Stromzähler (WhatsApp) ============ -->
+    <section class="view" data-view="strom" data-title="Stromzähler" data-parent="services" hidden>
+      <p class="lead">Die Stromzähler sind verschlossen. Fragen Sie den Zugang oder Zählerstand direkt per WhatsApp an – ohne Registrierung.</p>
+      <form class="form" id="formPower" novalidate>
+        <label class="field">
+          <span class="field__label">Wohnungsnummer *</span>
+          <input name="wohnung" required autocomplete="off" placeholder="z. B. Whg 04">
+        </label>
+        <button class="btn btn--whatsapp btn--block" type="submit">Per WhatsApp anfragen</button>
+      </form>
+    </section>
+
+    <!-- ============ US 2.3: Elektroraum / Techniker ============ -->
+    <section class="view" data-view="elektro" data-title="Techniker anmelden" data-parent="services" hidden>
+      <p class="lead">Für Telekom, Vodafone &amp; Co. Termine sind frühestens in <strong>2 Werktagen</strong> möglich, nur Montag bis Freitag.</p>
+      <form class="form" id="formElectric" novalidate>
+        <label class="field">
+          <span class="field__label">Wohnungsnummer *</span>
+          <input name="wohnung" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span class="field__label">Ihr Name *</span>
+          <input name="name" required autocomplete="family-name">
+        </label>
+        <label class="field">
+          <span class="field__label">Wunschtermin *</span>
+          <input type="date" name="date" id="electricDate" required>
+          <span class="field__hint" id="electricDateHint"></span>
+        </label>
+        <label class="field">
+          <span class="field__label">Firma &amp; Zeitfenster *</span>
+          <textarea name="details" rows="3" required placeholder="z. B. Telekom-Techniker zwischen 10–12 Uhr"></textarea>
+        </label>
+        <label class="field">
+          <span class="field__label">Telefon für Rückfragen</span>
+          <input type="tel" name="telefon" autocomplete="tel">
+        </label>
+        <button class="btn btn--primary btn--block" type="submit">Anmeldung senden</button>
+      </form>
+    </section>
+
+    <!-- ============ US 2.4a: Klingelschild ============ -->
+    <section class="view" data-view="klingel" data-title="Klingelschild" data-parent="services" hidden>
+      <p class="lead">Neues oder geändertes Klingel- und Briefkastenschild beantragen.</p>
+      <form class="form" id="formBell" novalidate>
+        <label class="field">
+          <span class="field__label">Wohnungsnummer *</span>
+          <input name="wohnung" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span class="field__label">Ihr Name *</span>
+          <input name="name" required autocomplete="family-name">
+        </label>
+        <label class="field">
+          <span class="field__label">Gewünschte Beschriftung *</span>
+          <input name="details" required maxlength="40" placeholder="z. B. Müller / Schmidt">
+        </label>
+        <label class="field">
+          <span class="field__label">Telefon oder E-Mail</span>
+          <input name="kontakt" autocomplete="email">
+        </label>
+        <button class="btn btn--primary btn--block" type="submit">Antrag senden</button>
+      </form>
+    </section>
+
+    <!-- ============ US 2.4b: Mängelmeldung ============ -->
+    <section class="view" data-view="mangel" data-title="Mangel melden" data-parent="services" hidden>
+      <p class="lead">Schaden im Hausflur, Keller oder Außenbereich? Kurz beschreiben, gern mit Foto.</p>
+      <form class="form" id="formDefect" novalidate>
+        <label class="field">
+          <span class="field__label">Wo? *</span>
+          <select name="ort" required>
+            <option value="">Bitte wählen</option>
+            <option>Treppenhaus / Flur</option>
+            <option>Keller</option>
+            <option>Waschküche</option>
+            <option>Tiefgarage</option>
+            <option>Aufzug</option>
+            <option>Außenbereich / Müllplatz</option>
+            <option>Sonstiges</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Beschreibung *</span>
+          <textarea name="details" rows="4" required placeholder="Was ist kaputt? Seit wann?"></textarea>
+        </label>
+        <label class="field">
+          <span class="field__label">Foto (optional)</span>
+          <input type="file" name="foto" accept="image/*" capture="environment" data-preview="defectPreview">
+          <img class="photo-preview" id="defectPreview" alt="Vorschau Foto" hidden>
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="field__label">Wohnung</span>
+            <input name="wohnung" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="field__label">Name</span>
+            <input name="name" autocomplete="family-name">
+          </label>
+        </div>
+        <button class="btn btn--primary btn--block" type="submit">Meldung senden</button>
+      </form>
+    </section>
+
+    <footer class="app-footer">
+      <div class="app-footer__site" id="siteName"></div>
+      <div>Ein Service von <a id="providerLink" href="#" target="_blank" rel="noopener"></a></div>
+    </footer>
+  </main>
+
+  <nav class="tabbar" aria-label="Hauptnavigation">
+    <a class="tabbar__item" href="#notfall" data-tab="notfall"><span aria-hidden="true">🚨</span>Notfall</a>
+    <a class="tabbar__item" href="#oepnv" data-tab="oepnv"><span aria-hidden="true">🚆</span>Abfahrten</a>
+    <a class="tabbar__item" href="#infos" data-tab="infos"><span aria-hidden="true">📄</span>Infos</a>
+    <a class="tabbar__item" href="#services" data-tab="services"><span aria-hidden="true">🧰</span>Services</a>
+  </nav>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
