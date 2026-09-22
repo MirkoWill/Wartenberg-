@@ -40,7 +40,7 @@ docs/API.md           Schnittstelle Frontend ↔ Backend
 
 ```bash
 python3 -m http.server 8000
-# → http://localhost:8000/index.html?obj=h1-a
+# → http://localhost:8000/index.html?obj=lind6
 ```
 
 Ist `API_URL` in `js/config.js` leer, läuft die App im **Demo-Modus**: Formulare werden nicht
@@ -53,13 +53,13 @@ Konfiguration erbt: **SITE → Haus → Aufgang** (z. B. eigener Ort des Hauptwa
 
 Jeder Aufgang bekommt einen eigenen QR-Code am Aushang:
 
-| Aufgang | QR-Code-Link |
-|---|---|
-| Haus 1 · Aufgang A | `https://mirkowill.github.io/Wartenberg-/?obj=h1-a` |
-| Haus 1 · Aufgang B | `https://mirkowill.github.io/Wartenberg-/?obj=h1-b` |
-| Haus 2 · Aufgang A | `https://mirkowill.github.io/Wartenberg-/?obj=h2-a` |
-| Haus 2 · Aufgang B | `https://mirkowill.github.io/Wartenberg-/?obj=h2-b` |
-| Haus 3 · Aufgang A | `https://mirkowill.github.io/Wartenberg-/?obj=h3-a` |
+| Haus | Aufgang | QR-Code-Link |
+|---|---|---|
+| Haus 1 | Dorfstr. 27 | `https://mirkowill.github.io/Wartenberg-/?obj=dorf27` |
+| Haus 2 | Lindenberger Str. 2 | `https://mirkowill.github.io/Wartenberg-/?obj=lind2` |
+| Haus 2 | Lindenberger Str. 4 | `https://mirkowill.github.io/Wartenberg-/?obj=lind4` |
+| Haus 3 | Lindenberger Str. 6 | `https://mirkowill.github.io/Wartenberg-/?obj=lind6` |
+| Haus 3 | Lindenberger Str. 8 | `https://mirkowill.github.io/Wartenberg-/?obj=lind8` |
 
 Der gewählte Aufgang wird gemerkt, auch nach dem Start vom Homescreen. Ohne Link zeigt die App eine
 Auswahl; über den Aufgangsnamen oben in der Kopfzeile lässt er sich jederzeit wechseln.
@@ -73,11 +73,9 @@ Nach Änderungen an Dateien `CACHE_VERSION` in `sw.js` hochzählen, damit Nutzer
 
 ## Offene Platzhalter (`TODO` in `js/config.js`, `assets/hausverwaltung.vcf`)
 
-- Telefonnummern Hausverwaltung, Havarie-Notdienst, Schlüsseldienst (+ Festpreis)
-- WhatsApp-Nummer für den Stromzähler
-- Ort des Hauptwasserhahns und weitere Verhaltensregeln
+- Telefonnummer des Hausmeisters (Notfälle) und Schlüsseldienst (+ Festpreis)
+- Ort des Hauptwasserhahns je Haus und weitere Verhaltensregeln
 - Öffentliche iCal-Adresse des Google Kalenders
 - VBB-Haltestellen-ID (derzeit Demo: Alexanderplatz)
 - Google-Drive-Links (Hausordnung usw.) und Kiez-Tipps
 - `API_URL` der Apps-Script-Web-App (Einrichtung: `backend/README.md`)
-- Echte Namen/Adressen der 3 Häuser und die Zuordnung der 5 Aufgänge

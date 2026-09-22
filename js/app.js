@@ -56,7 +56,7 @@
         houseName: house.name,
         entranceName: entrance.name,
         address: house.address,
-        label: `${house.name} · ${entrance.name}`,
+        label: entrance.name, // z. B. "Lindenberger Str. 6"
       }
     );
   }
@@ -411,7 +411,7 @@
 
       try {
         const payload = await buildPayload(form);
-        payload.object = OBJ.key;          // Aufgang-ID, z. B. "h1-a"
+        payload.object = OBJ.key;          // Aufgang-ID, z. B. "lind6"
         payload.house = OBJ.houseName || "";
         payload.entrance = OBJ.entranceName || "";
         payload.website = form.elements.website ? form.elements.website.value : ""; // Honeypot
@@ -603,7 +603,7 @@
      ====================================================================== */
 
   function init() {
-    $("#objectName").textContent = OBJ.key ? OBJ.label : "Bitte Aufgang wählen";
+    $("#objectName").textContent = OBJ.key ? OBJ.label : "Bitte Adresse wählen";
     $("#demoBanner").hidden = !!CFG.API_URL;
     $("#siteName").textContent = CFG.SITE.name;
     const provider = $("#providerLink");

@@ -14,9 +14,9 @@ Jede Anfrage enthält zusätzlich:
 
 | Feld | Beispiel | Bedeutung |
 |---|---|---|
-| `object` | `h1-a` | Aufgang-ID aus dem QR-Code |
-| `house` | `Haus 1` | Hausname laut `js/config.js` |
-| `entrance` | `Aufgang A` | Aufgangname |
+| `object` | `lind6` | Aufgang-ID aus dem QR-Code |
+| `house` | `Haus 3` | Hausname laut `js/config.js` |
+| `entrance` | `Lindenberger Str. 6` | Aufgang (Adresse) |
 | `submittedAt` | `2026-09-22T14:30:00.000Z` | Zeitpunkt im Browser (ISO-8601) |
 | `website` | `""` | Honeypot, muss leer sein, sonst verwirft das Backend die Anfrage still |
 
