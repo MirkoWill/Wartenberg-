@@ -21,22 +21,52 @@
 
   const OBJ_STORAGE_KEY = "mieterapp.obj";
 
+  /** Alle Aufgänge als flache Liste: { id, name, house }. */
+  const ENTRANCES = CFG.HOUSES.flatMap((house) =>
+    house.entrances.map((e) => ({ id: e.id, name: e.name, house })));
+
+  /**
+   * Liefert die zusammengeführte Konfiguration SITE → Haus → Aufgang.
+   * Ist kein Aufgang bekannt, nur SITE (key = null) – die App zeigt dann die Auswahl.
+   */
   function resolveObject() {
     const fromUrl = new URLSearchParams(location.search).get("obj");
-    let key = fromUrl && CFG.OBJECTS[fromUrl] ? fromUrl : null;
+    const known = (id) => ENTRANCES.some((e) => e.id === id);
+    let key = known(fromUrl) ? fromUrl : null;
 
-    // Beim Start vom Homescreen fehlt der Parameter evtl. – letztes Haus merken.
+    // Beim Start vom Homescreen fehlt der Parameter evtl. – letzten Aufgang merken.
     try {
       if (key) localStorage.setItem(OBJ_STORAGE_KEY, key);
       else key = localStorage.getItem(OBJ_STORAGE_KEY);
     } catch (e) { /* Storage blockiert – egal */ }
 
-    if (!key || !CFG.OBJECTS[key]) key = CFG.DEFAULT_OBJECT;
-    const base = CFG.OBJECTS[CFG.DEFAULT_OBJECT];
-    return Object.assign({ key }, base, CFG.OBJECTS[key]);
+    const entrance = ENTRANCES.find((e) => e.id === key);
+    if (!entrance) return Object.assign({ key: null, label: CFG.SITE.name }, CFG.SITE);
+
+    const { house } = entrance;
+    const entranceCfg = house.entrances.find((e) => e.id === key);
+    return Object.assign(
+      {},
+      CFG.SITE,
+      house.overrides,
+      entranceCfg.overrides,
+      {
+        key,
+        houseId: house.id,
+        houseName: house.name,
+        entranceName: entrance.name,
+        address: house.address,
+        label: `${house.name} · ${entrance.name}`,
+      }
+    );
   }
 
   const OBJ = resolveObject();
+
+  /** Ersetzt {feld} im Text durch den Wert aus der Konfiguration. */
+  function fill(text) {
+    return String(text).replace(/\{(\w+)\}/g, (m, k) => (OBJ[k] != null ? OBJ[k] : m));
+  }
 
   /* ======================================================================
      2. Router
@@ -56,7 +86,7 @@
 
     $$(".view").forEach((v) => { v.hidden = v !== view; });
     $("#viewTitle").textContent = view.dataset.title;
-    document.title = `${view.dataset.title} · ${OBJ.name}`;
+    document.title = `${view.dataset.title} · ${OBJ.label}`;
 
     const parent = view.dataset.parent;
     const activeTab = parent || viewName;
@@ -75,9 +105,28 @@
   }
 
   function initRouter() {
+    // Ohne bekannten Aufgang zuerst die Auswahl zeigen.
+    if (!OBJ.key && !location.hash) history.replaceState(null, "", "#aufgang");
     const route = () => showView(location.hash.replace(/^#/, "") || DEFAULT_VIEW);
     window.addEventListener("hashchange", route);
     route();
+  }
+
+  /* ======================================================================
+     Aufgang-Auswahl (falls die App ohne QR-Code-Link geöffnet wird)
+     ====================================================================== */
+
+  function renderEntrancePicker() {
+    $("#entranceList").innerHTML = CFG.HOUSES.map((house) => `
+      <div class="picker-group">
+        <h2 class="section-title">${esc(house.name)}<span class="section-title__sub">${esc(house.address || "")}</span></h2>
+        <div class="picker">
+          ${house.entrances.map((e) => `
+            <a class="picker__item${e.id === OBJ.key ? " is-active" : ""}" href="?obj=${encodeURIComponent(e.id)}#notfall">
+              ${esc(e.name)}${e.id === OBJ.key ? '<span class="picker__check" aria-label="ausgewählt">✓</span>' : ""}
+            </a>`).join("")}
+        </div>
+      </div>`).join("");
   }
 
   /* ======================================================================
@@ -254,7 +303,8 @@
       const form = e.currentTarget;
       if (!validate(form)) return;
       const wohnung = form.elements.wohnung.value.trim();
-      const text = `Hallo, ich benötige den Zählerstand/Zugang für Wohnung ${wohnung}.`;
+      const where = OBJ.key ? ` (${OBJ.label})` : "";
+      const text = `Hallo, ich benötige den Zählerstand/Zugang für Wohnung ${wohnung}${where}.`;
       const url = `https://wa.me/${OBJ.whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
       window.open(url, "_blank", "noopener");
     });
@@ -361,8 +411,10 @@
 
       try {
         const payload = await buildPayload(form);
-        payload.object = OBJ.key;
-        payload.objectName = OBJ.name;
+        payload.object = OBJ.key;          // Aufgang-ID, z. B. "h1-a"
+        payload.house = OBJ.houseName || "";
+        payload.entrance = OBJ.entranceName || "";
+        payload.website = form.elements.website ? form.elements.website.value : ""; // Honeypot
         payload.submittedAt = new Date().toISOString();
         await postToBackend(payload);
         toast(successMsg, "ok");
@@ -372,7 +424,7 @@
         form.dispatchEvent(new Event("app:reset"));
       } catch (err) {
         console.error(err);
-        toast("Senden fehlgeschlagen. Bitte Internetverbindung prüfen und erneut versuchen.", "error");
+        toast(err.userMessage || "Senden fehlgeschlagen. Bitte Internetverbindung prüfen und erneut versuchen.", "error");
       } finally {
         btn.disabled = false;
         btn.textContent = label;
@@ -429,7 +481,11 @@
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json().catch(() => ({}));
-    if (data.ok === false) throw new Error(data.error || "Backend-Fehler");
+    if (data.ok === false) {
+      const err = new Error(data.error || "Backend-Fehler");
+      err.userMessage = data.error; // z. B. "Termin frühestens in 2 Werktagen möglich"
+      throw err;
+    }
     return data;
   }
 
@@ -521,8 +577,8 @@
   function renderAccordion(items, openFirst) {
     return items.map((r, i) => `
       <details class="rule"${openFirst && i === 0 ? " open" : ""}>
-        <summary>${esc(r.title)}</summary>
-        <p>${esc(r.text)}</p>
+        <summary>${esc(fill(r.title))}</summary>
+        <p>${esc(fill(r.text))}</p>
       </details>`).join("");
   }
 
@@ -547,9 +603,18 @@
      ====================================================================== */
 
   function init() {
-    $("#objectName").textContent = OBJ.name;
+    $("#objectName").textContent = OBJ.key ? OBJ.label : "Bitte Aufgang wählen";
     $("#demoBanner").hidden = !!CFG.API_URL;
+    $("#siteName").textContent = CFG.SITE.name;
+    const provider = $("#providerLink");
+    provider.textContent = CFG.PROVIDER.name;
+    provider.href = CFG.PROVIDER.url;
 
+    // Unsichtbares Honeypot-Feld in jedes Formular: Bots füllen es aus, Menschen nicht.
+    $$("form.form").forEach((form) => form.insertAdjacentHTML("beforeend",
+      '<label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>'));
+
+    renderEntrancePicker();
     renderEmergency();
     renderCalendar();
     renderInfos();

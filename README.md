@@ -1,10 +1,13 @@
 # Wartenberg – Mieter-App (PWA)
 
-Mieter-App für die WEG Dorfkrug Wartenberg. Reines Frontend (HTML, CSS, Vanilla JS) für **GitHub Pages**,
+Mieter-App für die WEG Wartenberger Dorfkrug. Reines Frontend (HTML, CSS, Vanilla JS) für **GitHub Pages**,
 Backend über **Google Apps Script + Google Sheets**. Betriebskosten: 0 €.
 
-Stand: **Epic 1 (Information & Sicherheit)** und **Epic 2 (Formulare & Services)** für Mieter.
-Das Hausmeister-Portal (Epic 3) folgt.
+Stand: **Epic 1 (Information & Sicherheit)** und **Epic 2 (Formulare & Services)** für Mieter, inkl.
+fertigem Google-Apps-Script-Backend. Das Hausmeister-Portal (Epic 3) ist im Backend vorbereitet, das Frontend folgt.
+
+Design im Stil von Willbrandt und Kompagnon (Petrol `#107082`, Kupfer `#b87333`, Serifen-Überschriften),
+mit automatischem Dark Mode.
 
 ## Funktionen
 
@@ -28,24 +31,39 @@ js/config.js          ALLE anpassbaren Daten (Telefonnummern, Haltestelle, Links
 js/app.js             Logik
 sw.js, manifest.json  PWA (installierbar, Notfallseite offline verfügbar)
 assets/               Visitenkarte der Hausverwaltung (.vcf)
-docs/API.md           Schnittstelle zum Google-Apps-Script-Backend
+backend/Code.gs       Google-Apps-Script-Backend (Tabelle + Drive-Fotos + E-Mail)
+backend/README.md     Schritt-für-Schritt-Einrichtung des Backends
+docs/API.md           Schnittstelle Frontend ↔ Backend
 ```
 
 ## Lokal starten
 
 ```bash
 python3 -m http.server 8000
-# → http://localhost:8000/index.html?obj=dorfkrug
+# → http://localhost:8000/index.html?obj=h1-a
 ```
 
 Ist `API_URL` in `js/config.js` leer, läuft die App im **Demo-Modus**: Formulare werden nicht
 gesendet, sondern die Payload wird in der Browser-Konsole ausgegeben.
 
-## Mehrere Häuser / QR-Code
+## Häuser, Aufgänge & QR-Codes
 
-Jedes Haus bekommt einen Eintrag in `OBJECTS` in `js/config.js`. Der QR-Code am Aushang zeigt auf
-`https://<user>.github.io/Wartenberg-/index.html?obj=<schluessel>`. Das zuletzt gewählte Haus wird
-gemerkt, damit die App auch nach dem Start vom Homescreen das richtige Haus zeigt.
+Die Wohnanlage hat 3 Häuser mit 5 Aufgängen, gepflegt unter `HOUSES` in `js/config.js`. Die
+Konfiguration erbt: **SITE → Haus → Aufgang** (z. B. eigener Ort des Hauptwasserhahns pro Haus).
+
+Jeder Aufgang bekommt einen eigenen QR-Code am Aushang:
+
+| Aufgang | QR-Code-Link |
+|---|---|
+| Haus 1 · Aufgang A | `https://mirkowill.github.io/Wartenberg-/?obj=h1-a` |
+| Haus 1 · Aufgang B | `https://mirkowill.github.io/Wartenberg-/?obj=h1-b` |
+| Haus 2 · Aufgang A | `https://mirkowill.github.io/Wartenberg-/?obj=h2-a` |
+| Haus 2 · Aufgang B | `https://mirkowill.github.io/Wartenberg-/?obj=h2-b` |
+| Haus 3 · Aufgang A | `https://mirkowill.github.io/Wartenberg-/?obj=h3-a` |
+
+Der gewählte Aufgang wird gemerkt, auch nach dem Start vom Homescreen. Ohne Link zeigt die App eine
+Auswahl; über den Aufgangsnamen oben in der Kopfzeile lässt er sich jederzeit wechseln.
+Jede Meldung ans Backend enthält Haus und Aufgang.
 
 ## Veröffentlichen (GitHub Pages)
 
@@ -61,4 +79,5 @@ Nach Änderungen an Dateien `CACHE_VERSION` in `sw.js` hochzählen, damit Nutzer
 - Öffentliche iCal-Adresse des Google Kalenders
 - VBB-Haltestellen-ID (derzeit Demo: Alexanderplatz)
 - Google-Drive-Links (Hausordnung usw.) und Kiez-Tipps
-- `API_URL` der Apps-Script-Web-App
+- `API_URL` der Apps-Script-Web-App (Einrichtung: `backend/README.md`)
+- Echte Namen/Adressen der 3 Häuser und die Zuordnung der 5 Aufgänge
