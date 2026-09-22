@@ -73,9 +73,9 @@ Nach Änderungen an Dateien `CACHE_VERSION` in `sw.js` hochzählen, damit Nutzer
 
 ## Offene Platzhalter (`TODO` in `js/config.js`, `assets/hausverwaltung.vcf`)
 
-- Telefonnummer des Hausmeisters (Notfälle) und Schlüsseldienst (+ Festpreis)
+- Telefonnummer des Hausmeisters (Notfälle)
 - Ort des Hauptwasserhahns je Haus und weitere Verhaltensregeln
 - Öffentliche iCal-Adresse des Google Kalenders
-- VBB-Haltestellen-ID (derzeit Demo: Alexanderplatz)
+- Optional: VBB-Haltestellen-ID fest eintragen (wird sonst automatisch per Name gesucht)
 - Google-Drive-Links (Hausordnung usw.) und Kiez-Tipps
 - `API_URL` der Apps-Script-Web-App (Einrichtung: `backend/README.md`)

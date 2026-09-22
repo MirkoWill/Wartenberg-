@@ -40,7 +40,7 @@ window.APP_CONFIG = {
     emergencyContacts: [
       { label: "Hausmeister", sub: "Notfälle: Wasser, Heizung, Strom", phone: "+4930000000001", icon: "🧰" }, // TODO Telefonnummer
       { label: "Willbrandt und Kompagnon", sub: "Hausverwaltung · 030 99270747", phone: "+493099270747", icon: "🏢" },
-      { label: "Schlüsseldienst", sub: "Festpreis 89 € (tagsüber)", phone: "+4930000000002", icon: "🔑" }, // TODO Anbieter, Nummer, Preis
+      { label: "Schlüsseldienst Günther", sub: "Schlossmontage J. Günther GmbH · Mo, Mi, Fr 8–18 · Di, Do 8–16 Uhr", phone: "+49304237223", icon: "🔑" }, // Nummer laut Branchenverzeichnis – bitte prüfen
       { label: "Feuerwehr / Rettung", sub: "Lebensgefahr", phone: "112", icon: "🚒", danger: true },
       { label: "Polizei", sub: "Notruf", phone: "110", icon: "🚓", danger: true },
     ],
@@ -65,9 +65,14 @@ window.APP_CONFIG = {
     calendarIcsUrl: "https://calendar.google.com/calendar/ical/TODO%40group.calendar.google.com/public/basic.ics", // TODO
     calendarWebUrl: "", // optional: Link zur Web-Ansicht des Kalenders
 
-    // Live-ÖPNV (US 1.3) – Haltestellen-ID aus transport.rest.
-    // Ermitteln: https://v6.vbb.transport.rest/locations?query=S%20Wartenberg
-    transitStop: { id: "900100003", name: "S+U Alexanderplatz (Demo – TODO)" }, // TODO
+    // Live-ÖPNV (US 1.3) – Bus 256, 893, N56.
+    // Ohne "id" sucht die App die Haltestelle beim ersten Aufruf über "query" und merkt sich die ID.
+    // Die gefundene ID steht in der Browser-Konsole und kann hier als id: "900…" fest eingetragen werden.
+    transitStop: {
+      name: "Dorfstr./Lindenberger Str.",
+      query: "Dorfstr./Lindenberger Str. (Berlin)",
+      match: "dorfstr./lindenberger",
+    },
 
     // Kiez-Guide & Dokumente (US 1.4)
     documents: [
