@@ -461,7 +461,16 @@
   const NEWS_KEY = "mieterapp.news";
   let newsLoadedAt = 0;
 
-  function renderNews(items) {
+  /** Wiederkehrende Hinweise aus der Konfiguration, die heute (Berliner Zeit) gelten. */
+  function recurringNotices() {
+    const day = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Berlin", weekday: "short" }).format(new Date());
+    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(day);
+    return (OBJ.recurringNotices || []).filter((n) => n.weekday === weekday)
+      .map((n) => ({ title: t_(n.title), text: t_(n.text), important: !!n.important }));
+  }
+
+  function renderNews(sheetItems) {
+    const items = recurringNotices().concat(sheetItems || []);
     const box = $("#newsBox");
     if (!items || !items.length) { box.hidden = true; box.innerHTML = ""; return; }
     box.hidden = false;
@@ -479,7 +488,7 @@
   async function loadNews() {
     // Höchstens alle 5 Minuten neu laden; bis dahin gespeicherten Stand zeigen.
     const cached = readJson(NEWS_KEY);
-    if (cached && cached.obj === OBJ.key) renderNews(cached.items);
+    renderNews(cached && cached.obj === OBJ.key ? cached.items : []);
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
       const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}${pinParam()}`);

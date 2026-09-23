@@ -63,6 +63,8 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
   (sonst unbegrenzt), *Titel* und *Text*; *Wichtig* hebt den Hinweis rot hervor. In *Nur für Aufgang-IDs* können
   Aufgänge eingetragen werden (z. B. `lind6, lind8`), leer = alle. Die App aktualisiert höchstens alle 5 Minuten.
   Hinweise erscheinen in der eingegebenen Sprache (nicht automatisch übersetzt).
+  Wiederkehrende Hinweise (z. B. jeden Mittwoch „Heute Treppenhausreinigung“) stehen nicht in der Tabelle,
+  sondern in `js/config.js` unter `recurringNotices` und erscheinen automatisch, übersetzt.
 - **Meine Meldungen:** Mieter sehen in der App den Status ihrer Tickets (Spalte *Status*) und Zählermeldungen
   (*eingegangen*, bzw. *geprüft*, sobald alle Zähler der Meldung in *Zählerstände* abgehakt sind).
 - **Tickets:** Spalte *Status* per Auswahl auf `in Arbeit` / `erledigt` setzen. Alles, was nicht `erledigt` ist,
