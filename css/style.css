@@ -829,3 +829,31 @@ body.lang-de .i18n-note { display: none; }
 .badge--unbekannt { background: var(--c-danger-soft); color: var(--c-danger); }
 .status-lookup { margin-top: 28px; }
 .tile--status { border-top-color: var(--c-heading); }
+
+/* Anleitung in Verhaltensregeln (z. B. Wasser abstellen) */
+.guide { margin: 4px 16px 16px; padding: 14px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); }
+.guide__title { font-size: 18px; margin: 0 0 10px; color: var(--c-primary); }
+.guide__steps { margin: 12px 0 0; padding-left: 22px; }
+.guide__steps li { margin-bottom: 8px; line-height: 1.45; }
+.guide__steps li::marker { color: var(--c-primary); font-weight: 700; }
+.valves { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.valve { margin: 0; text-align: center; }
+.valve svg { width: 100%; height: auto; max-height: 80px; }
+.valve figcaption { font-size: 13px; line-height: 1.25; margin-top: 2px; }
+.v-pipe { fill: #9aa3ab; }
+.v-body { fill: #c9a24a; }
+.v-hub { fill: #fff; stroke: #333; stroke-width: 1.5; }
+.v-lever.v-ok { fill: #2e7d32; }
+.v-lever.v-stop { fill: var(--c-danger); }
+.v-wheel { fill: var(--c-danger); }
+.v-arrow { fill: none; stroke: var(--c-text); stroke-width: 3; stroke-linecap: round; }
+.v-arrowhead { fill: var(--c-text); }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 700; font-size: 12px; color: #fff; margin-bottom: 2px; }
+.tag--ok { background: #2e7d32; }
+.tag--stop { background: var(--c-danger); }
+.steps__tip { margin: 10px 0 0; font-size: 16px; }
+.stand { display: flex; gap: 6px; }
+.stand input { flex: 1; min-width: 0; }
+.stand select { width: auto; flex: none; }
+.segmented--3 { display: grid; grid-template-columns: repeat(3, 1fr); }
+.stand select[hidden] { display: none; }

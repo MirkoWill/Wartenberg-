@@ -14,11 +14,11 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 
 | Story | Ansicht | Umsetzung |
 |---|---|---|
-| US 1.1 Notfall-Dashboard | `#notfall` | Klickbare `tel:`-Links, aufklappbare Verhaltensregeln |
+| US 1.1 Notfall-Dashboard | `#notfall` | Klickbare `tel:`-Links, aufklappbare Verhaltensregeln; Anleitung „Wasser in der Wohnung abstellen“ mit Grafik |
 | US 1.2 Abfallkalender | `#infos` | Nächste Abholungen aus der BSR-`.ics` (`assets/abfuhrkalender-2026.ics`), Kalender-Abo per `webcal://`, PDF, Sperrmüll-Buchung, Trennhilfe |
 | US 1.3 Live-ÖPNV | `#oepnv` | transport.rest (VBB), Verspätung rot/grün, Auto-Refresh 60 s (nur solange sichtbar) |
 | US 1.4 Kiez & Dokumente | `#infos`, `#hausordnung` | Supermärkte, Apotheke, Pakete mit Kartenlink; Hausordnung als Seite; `.vcf`-Visitenkarte; aponet-Notdienst mit PLZ 13059 |
-| US 2.1 Wasserzähler | `#wasser` | Formular + Kamera-Foto → verkleinert, Base64, POST |
+| US 2.1 Zählerstände | `#wasser` | Wasser kalt/warm und Heizungszähler (kWh/MWh), mehrere pro Meldung, Kamera-Foto → verkleinert, Base64, POST |
 | US 2.2 Stromzähler | `#strom` | WhatsApp-Deep-Link `wa.me` mit vorausgefülltem Text |
 | US 2.3 Elektroraum | `#elektro` | Datum ≥ 2 Werktage, Sa/So werden abgelehnt und geleert |
 | US 2.4 Klingelschild / Mangel | `#klingel`, `#mangel` | POST ans Backend, Mangel mit optionalem Foto |

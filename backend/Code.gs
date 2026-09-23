@@ -26,13 +26,13 @@ const CONFIG = {
     meter: {
       name: "Zählerstände",
       headers: ["ID", "Eingang", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Raum", "Art",
-        "Zählernummer", "Zählerstand (m³)", "Name", "Foto", "Geprüft", "Erfassungs-ID", "Ablesedatum"],
+        "Zählernummer", "Zählerstand", "Name", "Foto", "Geprüft", "Erfassungs-ID", "Ablesedatum", "Einheit"],
     },
     // Wird automatisch aus "Zählerstände" erzeugt – nicht von Hand bearbeiten.
     meterOverview: {
       name: "Übersicht Zähler",
       headers: ["Haus", "Aufgang", "Wohnung", "Ablesedatum", "Raum", "Art", "Zählernummer",
-        "Zählerstand (m³)", "Foto", "Name", "Eingang", "Erfassungs-ID", "Geprüft"],
+        "Zählerstand", "Einheit", "Foto", "Name", "Eingang", "Erfassungs-ID", "Geprüft"],
     },
     // Hinweise für die App-Startseite, von der Verwaltung gepflegt.
     news: {
@@ -53,6 +53,8 @@ const CONFIG = {
   TIMEZONE: "Europe/Berlin",
   MIN_WORKDAYS_ELEKTRO: 2,
   MAX_METERS: 8,
+  // Zählerarten und erlaubte Einheiten (erste = Standard).
+  METER_UNITS: { Kalt: ["m³"], Warm: ["m³"], Heizung: ["kWh", "MWh"] },
   SITE_NAME: "WEG Wartenberger Dorfkrug",
   SENDER_NAME: "Willbrandt und Kompagnon",
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
@@ -231,9 +233,11 @@ function submitMeterReadings(p) {
     const label = `Zähler ${i + 1}`;
     if (!nr) throw userError(`${label}: Zählernummer fehlt`);
     if (!/^\d+(\.\d{1,3})?$/.test(stand)) throw userError(`${label}: ungültiger Zählerstand`);
-    if (["Kalt", "Warm"].indexOf(art) === -1) throw userError(`${label}: ungültige Zählerart`);
+    if (CONFIG.METER_UNITS[art] === undefined) throw userError(`${label}: ungültige Zählerart`);
+    const units = CONFIG.METER_UNITS[art];
+    const einheit = units.indexOf(str(m.einheit, 5)) !== -1 ? str(m.einheit, 5) : units[0];
     if (!m.photo) throw userError(`${label}: bitte ein Foto anhängen`);
-    return { nr, stand: Number(stand), art, raum: str(m.raum, 30), photo: m.photo };
+    return { nr, stand: Number(stand), art, einheit, raum: str(m.raum, 30), photo: m.photo };
   });
 
   const batchId = newId("E");
@@ -243,7 +247,7 @@ function submitMeterReadings(p) {
     const photoUrl = savePhoto(m.photo, `${id}_${wohnung}_${m.raum}_${m.art}`);
     return [
       id, now, str(p.house, 60), str(p.entrance, 60), str(p.object, 20),
-      wohnung, m.raum, m.art, m.nr, m.stand, str(p.name, 80), photoUrl, false, batchId, ablesedatum,
+      wohnung, m.raum, m.art, m.nr, m.stand, str(p.name, 80), photoUrl, false, batchId, ablesedatum, m.einheit,
     ];
   });
   appendRows(CONFIG.SHEETS.meter.name, rows);
@@ -256,7 +260,7 @@ function submitMeterReadings(p) {
     `Name: ${plain(p.name, 80)}`,
     `Ablesedatum: ${Utilities.formatDate(ablesedatum, CONFIG.TIMEZONE, "dd.MM.yyyy")}`,
     "",
-    ...rows.map((r) => `${r[6]} ${r[7]}: Zähler ${r[8]} – Stand ${String(r[9]).replace(".", ",")} m³ – Foto: ${r[11]}`),
+    ...rows.map((r) => `${r[6]} ${r[7]}: Zähler ${r[8]} – Stand ${String(r[9]).replace(".", ",")} ${r[15]} – Foto: ${r[11]}`),
     "",
     `Erfassungs-ID: ${batchId}`,
   ]);
@@ -286,7 +290,8 @@ function rebuildMeterOverview() {
     return {
       haus: String(get(r, "Haus")), aufgang: String(get(r, "Aufgang")), wohnung: String(get(r, "Wohnung")),
       ablese, raum: get(r, "Raum"), art: get(r, "Art"), nr: get(r, "Zählernummer"),
-      stand: get(r, "Zählerstand (m³)"), foto: String(get(r, "Foto") || ""), name: get(r, "Name"),
+      stand: col("Zählerstand") >= 0 ? get(r, "Zählerstand") : get(r, "Zählerstand (m³)"), // alte Kopfzeile
+      einheit: get(r, "Einheit") || (CONFIG.METER_UNITS[get(r, "Art")] || ["m³"])[0], foto: String(get(r, "Foto") || ""), name: get(r, "Name"),
       eingang, erfassung: get(r, "Erfassungs-ID") || get(r, "ID"), geprueft: get(r, "Geprüft") === true,
     };
   });
@@ -306,7 +311,7 @@ function rebuildMeterOverview() {
   if (rows.length) {
     // getValues() liefert Text ohne das schützende ' – daher erneut absichern.
     const data = rows.map((r) => [
-      r.haus, r.aufgang, r.wohnung, r.ablese, r.raum, r.art, r.nr, r.stand,
+      r.haus, r.aufgang, r.wohnung, r.ablese, r.raum, r.art, r.nr, r.stand, r.einheit,
       "", // Foto-Link wird unten als echter Link gesetzt
       r.name, r.eingang, r.erfassung, r.geprueft,
     ].map(protectCell));
@@ -331,9 +336,10 @@ function rebuildMeterOverview() {
       return new Array(def.headers.length).fill(shade ? "#eef0e6" : "#ffffff");
     });
     range.setBackgrounds(colors);
-    out.getRange(2, 4, data.length, 1).setNumberFormat("dd.MM.yyyy");
-    out.getRange(2, 11, data.length, 1).setNumberFormat("dd.MM.yyyy HH:mm");
-    out.getRange(2, 8, data.length, 1).setNumberFormat("0.000");
+    const oc = (name) => def.headers.indexOf(name) + 1;
+    out.getRange(2, oc("Ablesedatum"), data.length, 1).setNumberFormat("dd.MM.yyyy");
+    out.getRange(2, oc("Eingang"), data.length, 1).setNumberFormat("dd.MM.yyyy HH:mm");
+    out.getRange(2, oc("Zählerstand"), data.length, 1).setNumberFormat("0.000");
   }
   out.getRange(1, 1, Math.max(rows.length, 1) + 1, def.headers.length).createFilter();
   out.autoResizeColumns(1, def.headers.length);
@@ -412,7 +418,7 @@ function getStatus(idsParam) {
     if (!rows.length) return { id, status: "unbekannt" };
     const checked = rows.every((row) => row[mc("Geprüft")] === true);
     return {
-      id, kind: "meter", type: "Wasserzähler", count: rows.length,
+      id, kind: "meter", type: "Zählerstände", count: rows.length,
       status: checked ? "geprüft" : "eingegangen", created: iso(rows[0][mc("Eingang")]),
     };
   });
