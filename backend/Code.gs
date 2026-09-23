@@ -222,6 +222,17 @@ function submitMeterReadings(p) {
   appendRows(CONFIG.SHEETS.meter.name, rows);
 
   try { rebuildMeterOverview(); } catch (err) { console.error("Übersicht:", err); }
+
+  notify(`Neue Zählerstände: ${plain(p.entrance, 60)}, ${whg(wohnung)} (${rows.length} Zähler)`, [
+    `Aufgang: ${plain(p.house, 60)} · ${plain(p.entrance, 60)}`,
+    `Wohnung: ${wohnung}`,
+    `Name: ${plain(p.name, 80)}`,
+    `Ablesedatum: ${Utilities.formatDate(ablesedatum, CONFIG.TIMEZONE, "dd.MM.yyyy")}`,
+    "",
+    ...rows.map((r) => `${r[6]} ${r[7]}: Zähler ${r[8]} – Stand ${String(r[9]).replace(".", ",")} m³ – Foto: ${r[11]}`),
+    "",
+    `Erfassungs-ID: ${batchId}`,
+  ]);
   return { ok: true, id: batchId, count: rows.length };
 }
 
@@ -463,7 +474,7 @@ function authHausmeister(token) {
 
 /** Optionale E-Mail an die Verwaltung. Fehler hier dürfen den Antrag nicht scheitern lassen. */
 function notify(subject, lines) {
-  const to = PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL");
+  const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
   if (!to) return;
   try {
     MailApp.sendEmail({
@@ -476,6 +487,25 @@ function notify(subject, lines) {
   }
 }
 
+/**
+ * Test im Script-Editor: Funktion „testMail“ auswählen → Ausführen.
+ * Zeigt im Ausführungsprotokoll, an wen gesendet wird, und verschickt eine Testmail.
+ */
+function testMail() {
+  const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
+  if (!to) {
+    Logger.log("NOTIFY_EMAIL ist NICHT gesetzt. Projekteinstellungen → Script-Eigenschaften → NOTIFY_EMAIL anlegen.");
+    return;
+  }
+  Logger.log("NOTIFY_EMAIL = %s · verbleibendes Mail-Kontingent heute: %s", to, MailApp.getRemainingDailyQuota());
+  MailApp.sendEmail({
+    to,
+    subject: "[Mieter-App] Testmail",
+    body: "Diese Testmail bestätigt, dass die Benachrichtigungen der Mieter-App ankommen.\n\n" + getSpreadsheet().getUrl(),
+  });
+  Logger.log("Testmail an %s verschickt. Bitte auch den Spam-Ordner prüfen.", to);
+}
+
 /* ==========================================================================
    Aufträge an den Hausmeister (Klingelschild) mit Erledigt-Link
    ========================================================================== */
@@ -483,6 +513,12 @@ function notify(subject, lines) {
 /** Reiner Text ohne Tabellen-Schutzzeichen, für E-Mails. */
 function plain(value, max) {
   return value == null ? "" : String(value).trim().slice(0, max || CONFIG.MAX_TEXT);
+}
+
+/** "04" → "Whg 04", "Whg 04" bleibt unverändert. */
+function whg(value) {
+  const v = String(value || "").replace(/^'/, "").trim();
+  return /^(whg|wohnung|we)\b/i.test(v) ? v : `Whg ${v}`;
 }
 
 function escHtml(value) {
@@ -538,7 +574,7 @@ function sendBellOrder(id, code, p) {
     const replyTo = PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "";
     MailApp.sendEmail({
       to,
-      subject: `Klingelschild aktualisieren – ${plain(p.entrance, 60)}, Whg ${plain(p.wohnung, 60)} (${id})`,
+      subject: `Klingelschild aktualisieren – ${plain(p.entrance, 60)}, ${whg(plain(p.wohnung, 60))} (${id})`,
       body,
       htmlBody,
       name: CONFIG.SENDER_NAME,
