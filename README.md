@@ -6,8 +6,9 @@ Backend über **Google Apps Script + Google Sheets**. Betriebskosten: 0 €.
 Stand: **Epic 1 (Information & Sicherheit)** und **Epic 2 (Formulare & Services)** für Mieter, inkl.
 fertigem Google-Apps-Script-Backend. Das Hausmeister-Portal (Epic 3) ist im Backend vorbereitet, das Frontend folgt.
 
-Design im Stil von Willbrandt und Kompagnon (Petrol `#107082`, Kupfer `#b87333`, Serifen-Überschriften),
-mit automatischem Dark Mode.
+Design angelehnt an willbrandt-kompagnon.de: Oliv `#6d7454`, Hellgrün `#e3f2b3` auf Dunkel,
+Hintergrund `#f8f8f8`, Schriften Playfair Display / Source Sans 3 / Oswald (lokal in `fonts/`,
+SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 
 ## Funktionen
 
@@ -30,6 +31,7 @@ css/style.css         Mobile-First-Styles inkl. Dark Mode
 js/config.js          ALLE anpassbaren Daten (Telefonnummern, Haltestelle, Links …)
 js/app.js             Logik
 sw.js, manifest.json  PWA (installierbar, Notfallseite offline verfügbar)
+fonts/                Schriften (woff2) inkl. Lizenzen
 assets/               Visitenkarte der Hausverwaltung (.vcf)
 backend/Code.gs       Google-Apps-Script-Backend (Tabelle + Drive-Fotos + E-Mail)
 backend/README.md     Schritt-für-Schritt-Einrichtung des Backends
