@@ -210,10 +210,109 @@
   const CONSENT_VERSION = "2026-09b"; // bei Änderung der Hinweise hochzählen
   let consentGiven = false;
 
+  /** Zustimmung für diese Sitzung UND gültige PIN auf diesem Gerät. */
   function hasConsent() {
+    if (!pinOk()) return false;
     if (consentGiven) return true;
     try { consentGiven = sessionStorage.getItem(CONSENT_KEY) === CONSENT_VERSION; } catch (e) { /* blockiert */ }
     return consentGiven;
+  }
+
+  /* ---------- Zugangs-PIN (einmal pro Gerät; 3 Fehlversuche → 15 Minuten Sperre) ---------- */
+
+  const PIN_KEY = "mieterapp.pin";
+  const PIN_LOCK_KEY = "mieterapp.pinlock";
+  let pinTimer = null;
+
+  /** Gespeicherte PIN, sofern sie zur aktuell gültigen PIN passt (sonst ""). */
+  function storedPin() {
+    const saved = readJson(PIN_KEY);
+    return saved && saved.hash === CFG.PIN_SHA256 ? String(saved.pin || "") : "";
+  }
+  function pinOk() { return !CFG.PIN_SHA256 || !!storedPin(); }
+
+  function pinLock() { return readJson(PIN_LOCK_KEY) || { fails: 0, until: 0 }; }
+  function pinLockedFor() { return Math.max(0, pinLock().until - Date.now()); }
+
+  async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /** Prüft die eingegebene PIN. Gibt true zurück, wenn sie stimmt. */
+  async function checkPinInput() {
+    const input = $("#pinInput");
+    const msg = $("#pinMsg");
+    const pin = input.value.trim();
+    if (pinLockedFor()) { updatePinUi(); return false; }
+    if (!/^\d{5}$/.test(pin)) {
+      msg.textContent = t_("Bitte die 5-stellige PIN eingeben.");
+      input.focus();
+      return false;
+    }
+    if ((await sha256Hex(pin)) === CFG.PIN_SHA256) {
+      writeJson(PIN_KEY, { pin, hash: CFG.PIN_SHA256 });
+      localRemove(PIN_LOCK_KEY);
+      msg.textContent = "";
+      return true;
+    }
+    const lock = pinLock();
+    lock.fails = (lock.fails || 0) + 1;
+    const max = CFG.PIN_MAX_TRIES || 3;
+    if (lock.fails >= max) {
+      lock.fails = 0;
+      lock.until = Date.now() + (CFG.PIN_LOCK_MINUTES || 15) * 60000;
+    }
+    writeJson(PIN_LOCK_KEY, lock);
+    input.value = "";
+    if (lock.until > Date.now()) updatePinUi();
+    else {
+      msg.textContent = t_("Falsche PIN. Noch {n} Versuch(e).", { n: max - lock.fails });
+      input.focus();
+    }
+    return false;
+  }
+
+  /** PIN-Feld ein-/ausblenden, Sperre mit Restzeit anzeigen. */
+  function updatePinUi() {
+    const box = $("#consentPin");
+    if (!box) return;
+    const needPin = !pinOk();
+    box.hidden = !needPin;
+    const input = $("#pinInput");
+    const locked = needPin ? pinLockedFor() : 0;
+    input.disabled = !!locked;
+    clearTimeout(pinTimer);
+    if (locked) {
+      $("#pinMsg").textContent = t_("Zu viele Fehlversuche. Bitte in {n} Minute(n) erneut versuchen.",
+        { n: Math.ceil(locked / 60000) });
+      pinTimer = setTimeout(updatePinUi, Math.min(locked, 30000));
+    } else if (input.dataset.wasLocked) {
+      $("#pinMsg").textContent = "";
+    }
+    input.dataset.wasLocked = locked ? "1" : "";
+    updateAcceptButton();
+  }
+
+  function updateAcceptButton() {
+    const accept = $("#consentAccept");
+    const checked = $("#consentCheck").checked;
+    const pinReady = pinOk() || (!pinLockedFor() && $("#pinInput").value.trim().length === 5);
+    accept.disabled = !(checked && pinReady);
+  }
+
+  /** Backend meldet „PIN ungültig“ (z. B. nach PIN-Wechsel): neu abfragen. */
+  function handlePinRejected() {
+    localRemove(PIN_KEY);
+    consentGiven = false;
+    try { sessionStorage.removeItem(CONSENT_KEY); } catch (e) { /* egal */ }
+    $("#pinInput").value = "";
+    $("#pinMsg").textContent = t_("Die PIN hat sich geändert. Bitte die aktuelle PIN vom Aushang eingeben.");
+    updateConsentUi();
+  }
+
+  function localRemove(key) {
+    try { localStorage.removeItem(key); } catch (e) { /* egal */ }
   }
 
   function updateConsentUi() {
@@ -228,6 +327,7 @@
       showConsentStep("ask");
       $("#consentTitle").focus();
     }
+    if (!dialog.hidden) updatePinUi();
   }
 
   function showConsentStep(step) {
@@ -240,10 +340,20 @@
     const check = $("#consentCheck");
     const accept = $("#consentAccept");
     $("#consentTitle").tabIndex = -1;
-    check.addEventListener("change", () => { accept.disabled = !check.checked; });
+    check.addEventListener("change", updateAcceptButton);
+    const pinInput = $("#pinInput");
+    pinInput.addEventListener("input", () => {
+      pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, 5);
+      if (!pinLockedFor()) $("#pinMsg").textContent = "";
+      updateAcceptButton();
+    });
+    pinInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !accept.disabled) accept.click();
+    });
 
-    accept.addEventListener("click", () => {
+    accept.addEventListener("click", async () => {
       if (!check.checked) return;
+      if (!pinOk() && !(await checkPinInput())) { updateAcceptButton(); return; }
       consentGiven = true;
       try { sessionStorage.setItem(CONSENT_KEY, CONSENT_VERSION); } catch (e) { /* nur für diese Seite */ }
       updateConsentUi();
@@ -308,9 +418,10 @@
     renderStatusList();
     if (!list.length || !CFG.API_URL) return;
     try {
-      const url = `${CFG.API_URL}?action=status&ids=${encodeURIComponent(list.map((t) => t.id).join(","))}`;
+      const url = `${CFG.API_URL}?action=status&ids=${encodeURIComponent(list.map((t) => t.id).join(","))}${pinParam()}`;
       const res = await fetch(url);
       const data = await res.json();
+      if (data.code === "pin") { handlePinRejected(); return; }
       const byId = {};
       (data.items || []).forEach((i) => { byId[i.id] = i; });
       renderStatusList(byId);
@@ -363,8 +474,9 @@
     if (cached && cached.obj === OBJ.key) renderNews(cached.items);
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
-      const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}`);
+      const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}${pinParam()}`);
       const data = await res.json();
+      if (data.code === "pin") { handlePinRejected(); return; }
       if (!data.ok) return;
       newsLoadedAt = Date.now();
       writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items });
@@ -1095,6 +1207,11 @@
    * Content-Type "text/plain" ist Absicht: So entsteht kein CORS-Preflight,
    * den Apps Script nicht beantworten kann. Im Script: JSON.parse(e.postData.contents).
    */
+  function pinParam() {
+    const pin = storedPin();
+    return pin ? `&pin=${encodeURIComponent(pin)}` : "";
+  }
+
   async function postToBackend(payload) {
     try {
       return await postJson(payload);
@@ -1123,12 +1240,13 @@
     const res = await fetch(CFG.API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, pin: storedPin() }),
       redirect: "follow",
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json().catch(() => ({}));
     if (data.ok === false) {
+      if (data.code === "pin") handlePinRejected();
       const err = new Error(data.error || "Backend-Fehler");
       err.userMessage = data.error; // z. B. "Termin frühestens in 2 Werktagen möglich"
       throw err;

@@ -99,3 +99,11 @@ Auftragsliste: `GET <API_URL>?action=getTasks&token=…` →
   (max. 20 IDs, nur Art/Status/Datum, keine personenbezogenen Daten)
 - `GET <API_URL>?action=news&obj=lind6` → `{ ok, items: [{ title, text, important, from, to }] }`
   (aktive Einträge aus dem Blatt „Aktuelles“, gefiltert nach Zeitraum und Aufgang)
+
+## Zugangs-PIN
+
+Alle Anfragen der App (POST sowie `GET ?action=status|news`) enthalten die PIN: im JSON als `"pin": "13059"`,
+bei GET als `&pin=13059`. Falsche oder fehlende PIN: `{ "ok": false, "error": "PIN ungültig", "code": "pin" }` –
+die App fragt die PIN dann erneut ab. Zu viele Fehlversuche: `"code": "pin_locked"`.
+Ausgenommen: `?action=done` (Erledigt-Link) und Hausmeister-Aktionen mit Token.
+
