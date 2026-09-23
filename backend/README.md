@@ -25,7 +25,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 
 | Eigenschaft | Beispiel | Zweck |
 |---|---|---|
-| `NOTIFY_EMAIL` | `verwaltung@example.org` | E-Mail bei jedem neuen Antrag (mehrere kommagetrennt) |
+| `NOTIFY_EMAIL` | `verwaltung@example.org` | E-Mail bei jedem neuen Antrag, jeder Zählermeldung und jeder Erledigt-Meldung (mehrere kommagetrennt). Prüfen: Funktion **testMail** ausführen. |
 | `HAUSMEISTER_TOKENS` | `{"langer-zufallscode": "hm_becker"}` | Zugang für das Hausmeister-Portal (Epic 3) |
 
 ## 4. Als Web-App bereitstellen
