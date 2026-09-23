@@ -26,6 +26,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 | Eigenschaft | Beispiel | Zweck |
 |---|---|---|
 | `NOTIFY_EMAIL` | `verwaltung@example.org` | E-Mail bei jedem neuen Antrag, jeder Zählermeldung und jeder Erledigt-Meldung (mehrere kommagetrennt). Prüfen: Funktion **testMail** ausführen. |
+| `APP_PIN` | `13059` | Zugangs-PIN der App (ohne Eintrag gilt 13059). Bei Änderung auch `PIN_SHA256` in `js/config.js` anpassen. |
 | `HAUSMEISTER_TOKENS` | `{"langer-zufallscode": "hm_becker"}` | Zugang für das Hausmeister-Portal (Epic 3) |
 
 ## 4. Als Web-App bereitstellen
@@ -94,8 +95,14 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 
 ## Sicherheit & Datenschutz
 
+- **Zugangs-PIN:** Die App fragt einmal pro Gerät die PIN ab (3 Fehlversuche → 15 Minuten Sperre auf dem Gerät).
+  Das Backend prüft die PIN bei jeder Meldung und Statusabfrage selbst; nach 30 Fehlversuchen in 15 Minuten
+  (alle Geräte zusammen) nimmt es 15 Minuten lang keine PIN an. Der Erledigt-Link des Hausmeisters braucht keine PIN.
+- **Missbrauchsbremse:** höchstens 40 Meldungen pro Stunde und 10 Hausmeister-Mails je 6 Stunden (insgesamt).
+  Darüber hinaus werden Meldungen abgelehnt bzw. Aufträge nur in der Tabelle gespeichert (`CONFIG.LIMITS`).
+
 - Eingaben werden serverseitig geprüft (Pflichtfelder, Werktags-Regel, Bildtyp, max. 6 MB).
-- Formel-Injection wird verhindert (Eingaben, die mit `=`, `+`, `-` oder `@` beginnen, werden als Text gespeichert).
+- Formel-Injection wird verhindert (Eingaben, die mit `=`, `+`, `-`, `@`, Tab oder Zeilenumbruch beginnen, werden als Text gespeichert – auch in der Zähler-Übersicht).
 - Ein unsichtbares Honeypot-Feld filtert einfache Spam-Bots.
 - Die Daten liegen in Ihrem Google-Konto. Für den Livebetrieb bitte die Datenschutzerklärung der App um
   Google (Speicherung) und transport.rest (Abfahrten) ergänzen.

@@ -16,6 +16,13 @@ window.APP_CONFIG = {
   // Leer lassen = Demo-Modus: Formulare werden nur simuliert (Konsole).
   API_URL: "https://script.google.com/macros/s/AKfycbzhN3ZvHKkXgBEyHddQNgCMd7rGNDpnvLdrS82Q8XO-MC8r4UFhDQnJWVnGtTygYcrd/exec",
 
+  // Zugangs-PIN (steht auf den Aushängen). Hier nur als SHA-256-Prüfsumme; geprüft wird sie
+  // zusätzlich im Backend (Script-Eigenschaft APP_PIN). PIN ändern: beide Stellen anpassen,
+  // Prüfsumme z. B. mit: printf '12345' | sha256sum
+  PIN_SHA256: "0a8d9ad647b7466f586c6e9083a079605fdf1b2d7aca69b3c8f6ea6583d41c96",
+  PIN_MAX_TRIES: 3,
+  PIN_LOCK_MINUTES: 15,
+
   // transport.rest-Dienste für Abfahrten, werden der Reihe nach versucht (kostenlos, ohne Gewähr).
   TRANSIT_APIS: [
     "https://v6.bvg.transport.rest",

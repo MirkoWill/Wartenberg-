@@ -26,6 +26,7 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 | Aktuelles | `#notfall` (oben) | Hinweise aus dem Blatt „Aktuelles“, je Aufgang filterbar |
 | Mehrsprachigkeit | Kopfzeile, Zustimmung | DE, EN, RU, UK, CS – Wörterbuch in `js/i18n.js` (Schlüssel = deutscher Text); Impressum/Datenschutz/Hausordnung nur Deutsch |
 | Rechtliches | `#impressum`, `#datenschutz` | Impressum, Datenschutzerklärung; Zustimmungsdialog bei jedem App-Start (Sitzung). Vor der Zustimmung werden keine externen Dienste geladen; bei Ablehnung Kontaktdaten und Notrufnummern |
+| Zugangs-PIN | Zustimmungsdialog | PIN vom Aushang, einmal pro Gerät; 3 Fehlversuche → 15 Min. Sperre; Prüfung zusätzlich im Backend (`APP_PIN`), Content-Security-Policy |
 
 ## Struktur
 

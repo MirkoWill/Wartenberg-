@@ -11,6 +11,8 @@
  *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Aufträge an den Hausmeister)
  *   HAUSMEISTER_TOKENS  optional (Epic 3), JSON: {"geheimer-token": "hm_becker"}
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
+ *   APP_PIN             optional, Zugangs-PIN der App (Standard: CONFIG.APP_PIN). Bei Änderung auch
+ *                       PIN_SHA256 in js/config.js anpassen.
  */
 
 const CONFIG = {
@@ -56,6 +58,15 @@ const CONFIG = {
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
   // Adresse dieser Web-App (für den Erledigt-Link in E-Mails). Leer = automatisch ermitteln.
+  // Zugangs-PIN (steht auf den Aushängen). Script-Eigenschaft APP_PIN hat Vorrang.
+  APP_PIN: "13059",
+  // Schutz vor Missbrauch der offenen Adresse (gilt für alle Nutzer zusammen):
+  LIMITS: {
+    pinFailsPer15Min: 30,     // danach 15 Minuten keine PIN-Prüfung möglich
+    submitsPerHour: 40,       // Meldungen insgesamt pro Stunde
+    hausmeisterMailsPer6h: 10, // Klingelschild-Aufträge per E-Mail je 6 Stunden
+    maxRequestBytes: 25 * 1024 * 1024,
+  },
   WEBAPP_URL: "https://script.google.com/macros/s/AKfycbzhN3ZvHKkXgBEyHddQNgCMd7rGNDpnvLdrS82Q8XO-MC8r4UFhDQnJWVnGtTygYcrd/exec",
 };
 
@@ -110,21 +121,27 @@ function onOpen() {
  */
 function doPost(e) {
   try {
-    const p = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    const raw = (e && e.postData && e.postData.contents) || "{}";
+    if (raw.length > CONFIG.LIMITS.maxRequestBytes) throw userError("Anfrage zu groß");
+    const p = JSON.parse(raw);
+
+    // Hausmeister-Aktion hat eigenen Zugang (Token), alles andere braucht die App-PIN.
+    if (p.action === "logCleaning") return json(logCleaning(p));
+    requirePin(p.pin);
 
     // Honeypot: Nur Bots füllen das unsichtbare Feld aus. Still "Erfolg" melden.
     if (p.website) return json({ ok: true });
 
     switch (p.action) {
-      case "submitTicket": return json(submitTicket(p));
-      case "submitMeterReadings": return json(submitMeterReadings(p));
-      case "submitMeterReading": return json(submitMeterReadings(Object.assign({}, p, { meters: [p] }))); // ältere App-Version
-      case "logCleaning": return json(logCleaning(p));
+      case "submitTicket": rateLimit("submit", CONFIG.LIMITS.submitsPerHour, 3600); return json(submitTicket(p));
+      case "submitMeterReadings": rateLimit("submit", CONFIG.LIMITS.submitsPerHour, 3600); return json(submitMeterReadings(p));
+      case "submitMeterReading": // ältere App-Version
+        rateLimit("submit", CONFIG.LIMITS.submitsPerHour, 3600);
+        return json(submitMeterReadings(Object.assign({}, p, { meters: [p] })));
       default: return json({ ok: false, error: "Unbekannte Aktion" });
     }
   } catch (err) {
-    if (!err.userMessage) console.error(err);
-    return json({ ok: false, error: err.userMessage || "Serverfehler" });
+    return errorJson(err);
   }
 }
 
@@ -137,12 +154,11 @@ function doGet(e) {
     const q = (e && e.parameter) || {};
     if (q.action === "getTasks") return json(getTasks(q.token));
     if (q.action === "done") return completeTicketPage(q);
-    if (q.action === "status") return json(getStatus(q.ids));
-    if (q.action === "news") return json(getNews(q.obj));
-    return json({ ok: true, service: "mieter-app", time: new Date().toISOString() });
+    if (q.action === "status") { requirePin(q.pin); return json(getStatus(q.ids)); }
+    if (q.action === "news") { requirePin(q.pin); return json(getNews(q.obj)); }
+    return json({ ok: true, service: "mieter-app" });
   } catch (err) {
-    if (!err.userMessage) console.error(err);
-    return json({ ok: false, error: err.userMessage || "Serverfehler" });
+    return errorJson(err);
   }
 }
 
@@ -180,7 +196,10 @@ function submitTicket(p) {
     str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "", doneCode,
   ]);
 
-  if (type === "Klingelschild") sendBellOrder(id, doneCode, p);
+  if (type === "Klingelschild") {
+    if (withinLimit("hausmeisterMail", CONFIG.LIMITS.hausmeisterMailsPer6h, 21600)) sendBellOrder(id, doneCode, p);
+    else console.warn("Tageslimit Hausmeister-Mails erreicht – Auftrag nur in der Tabelle:", id);
+  }
 
   notify(`Neuer Antrag: ${type} (${id})`, [
     `Typ: ${type}`,
@@ -285,11 +304,12 @@ function rebuildMeterOverview() {
   out.setFrozenRows(1);
 
   if (rows.length) {
+    // getValues() liefert Text ohne das schützende ' – daher erneut absichern.
     const data = rows.map((r) => [
       r.haus, r.aufgang, r.wohnung, r.ablese, r.raum, r.art, r.nr, r.stand,
       "", // Foto-Link wird unten als echter Link gesetzt
       r.name, r.eingang, r.erfassung, r.geprueft,
-    ]);
+    ].map(protectCell));
     const range = out.getRange(2, 1, data.length, def.headers.length);
     range.setValues(data);
 
@@ -297,7 +317,7 @@ function rebuildMeterOverview() {
     // anders als eine HYPERLINK-Formel (dort Komma vs. Semikolon).
     const fotoCol = def.headers.indexOf("Foto") + 1;
     out.getRange(2, fotoCol, data.length, 1).setRichTextValues(rows.map((r) => [
-      r.foto
+      /^https:\/\/drive\.google\.com\//.test(r.foto)
         ? SpreadsheetApp.newRichTextValue().setText("Foto öffnen").setLinkUrl(r.foto).build()
         : SpreadsheetApp.newRichTextValue().setText("").build(),
     ]));
@@ -457,10 +477,65 @@ function json(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function userError(message) {
+function userError(message, code) {
   const err = new Error(message);
   err.userMessage = message;
+  if (code) err.code = code;
   return err;
+}
+
+function errorJson(err) {
+  if (!err.userMessage) console.error(err);
+  const out = { ok: false, error: err.userMessage || "Serverfehler" };
+  if (err.code) out.code = err.code;
+  return json(out);
+}
+
+/* ---------- Zugangs-PIN und Missbrauchsschutz ---------- */
+
+function appPin() {
+  return String(PropertiesService.getScriptProperties().getProperty("APP_PIN") || CONFIG.APP_PIN || "").trim();
+}
+
+/**
+ * Prüft die App-PIN. Fehlversuche werden (für alle Nutzer zusammen) gezählt; ab
+ * CONFIG.LIMITS.pinFailsPer15Min ist 15 Minuten lang keine Prüfung möglich (gegen Durchprobieren).
+ */
+function requirePin(pin) {
+  const expected = appPin();
+  if (!expected) return;
+  const cache = CacheService.getScriptCache();
+  const fails = Number(cache.get("pinFails") || 0);
+  if (fails >= CONFIG.LIMITS.pinFailsPer15Min) {
+    throw userError("Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.", "pin_locked");
+  }
+  if (String(pin || "").trim() === expected) return;
+  cache.put("pinFails", String(fails + 1), 900);
+  throw userError("PIN ungültig", "pin");
+}
+
+/** Wie withinLimit, wirft aber einen Fehler, wenn das Limit erreicht ist. */
+function rateLimit(key, max, seconds) {
+  if (!withinLimit(key, max, seconds)) {
+    throw userError("Derzeit gehen sehr viele Meldungen ein. Bitte später erneut versuchen oder anrufen.");
+  }
+}
+
+/** Zählt Aufrufe je Zeitfenster (Script-Cache, max. 6 Std.). true = noch im Limit. */
+function withinLimit(key, max, seconds) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const cache = CacheService.getScriptCache();
+    const slot = Math.floor(Date.now() / 1000 / seconds);
+    const k = `rl_${key}_${slot}`;
+    const n = Number(cache.get(k) || 0);
+    if (n >= max) return false;
+    cache.put(k, String(n + 1), Math.min(seconds, 21600));
+    return true;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -468,14 +543,17 @@ function userError(message) {
  * (Eingaben wie "=HYPERLINK(...)" würden sonst in der Tabelle ausgeführt).
  */
 function str(value, max) {
-  let s = value == null ? "" : String(value).trim().slice(0, max || CONFIG.MAX_TEXT);
-  if (/^[=+\-@]/.test(s)) s = "'" + s;
-  return s;
+  return protectCell(value == null ? "" : String(value).trim().slice(0, max || CONFIG.MAX_TEXT));
+}
+
+/** Text, der in Tabellen als Formel gelten würde, mit ' als reinen Text kennzeichnen. */
+function protectCell(s) {
+  return typeof s === "string" && /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
 }
 
 function newId(prefix) {
   const day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyMMdd");
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const rand = Utilities.getUuid().replace(/-/g, "").slice(0, 4).toUpperCase();
   return `${prefix}-${day}-${rand}`;
 }
 

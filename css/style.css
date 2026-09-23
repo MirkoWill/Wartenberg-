@@ -589,6 +589,24 @@ body.has-modal { overflow: hidden; }
   appearance: auto;
   accent-color: var(--c-primary);
 }
+.consent__pin { margin: 16px 0 0; }
+.consent__pin label { display: block; font-weight: 600; margin-bottom: 6px; }
+.consent__pin label .muted { font-weight: 400; }
+.consent__pin input {
+  width: 100%;
+  max-width: 220px;
+  font-size: 26px;
+  letter-spacing: 0.4em;
+  text-align: center;
+  padding: 10px 12px;
+  border: 1.5px solid var(--c-primary);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  color: var(--c-text);
+}
+.consent__pin input:disabled { opacity: 0.5; }
+.consent__pinmsg { color: var(--c-danger, #b3261e); font-weight: 600; font-size: 16px !important; margin: 8px 0 0 !important; min-height: 0; }
+.consent__pinmsg:empty { display: none; }
 .consent__contact { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 14px; }
 .consent__back { margin-top: 16px; }
 .consent-return {
