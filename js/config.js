@@ -53,7 +53,7 @@ window.APP_CONFIG = {
       { label: "Willbrandt und Kompagnon", sub: "Hausverwaltung · 030 99270747", phone: "+493099270747", icon: "🏢" },
       { label: "Schlüsseldienst Günther", sub: "Schlossmontage J. Günther GmbH · Mo, Mi, Fr 8–18 · Di, Do 8–16 Uhr", phone: "+49304237223", icon: "🔑" }, // Nummer laut Branchenverzeichnis – bitte prüfen
       { label: "GASAG-Entstörungsdienst", sub: "Gasgeruch, Störung der Gasversorgung · 030 787272", phone: "+4930787272", icon: "🔥" },
-      { label: "Vattenfall-Entstörungsdienst", sub: "Stromausfall im Haus oder in der Straße · 0800 2112525", phone: "+498002112525", icon: "⚡️" },
+      { label: "Stromnetz Berlin – Störungsdienst", sub: "Stromausfall im Haus oder in der Straße · 0800 2112525", phone: "+498002112525", icon: "⚡️" },
       { label: "Feuerwehr / Rettung", sub: "Lebensgefahr", phone: "112", icon: "🚒", danger: true },
       { label: "Polizei", sub: "Notruf", phone: "110", icon: "🚓", danger: true },
     ],
@@ -72,7 +72,7 @@ window.APP_CONFIG = {
       {
         title: "Stromausfall",
         text: "Sicherungskasten Ihrer Wohnung prüfen (Flur). Ist das ganze Haus betroffen, bitte den Hausmeister informieren.",
-        actions: [{ type: "tel", label: "Vattenfall-Entstörungsdienst anrufen", phone: "+498002112525" }],
+        actions: [{ type: "tel", label: "Stromnetz Berlin anrufen", phone: "+498002112525" }],
       },
       {
         title: "Gasgeruch",
@@ -87,6 +87,12 @@ window.APP_CONFIG = {
     // Wiederkehrende Hinweise unter „Aktuelles“ (ohne Eintrag in der Tabelle).
     // weekday: 0 = Sonntag, 1 = Montag … 3 = Mittwoch (Berliner Zeit).
     recurringNotices: [
+      {
+        weekday: 2,
+        title: "Morgen Treppenhausreinigung",
+        text: "Mittwoch ist Reinigungstag (D. Schreier Gebäudeservice). Bitte Läufer, Schuhe und Kinderwagen "
+          + "bis morgen früh aus dem Treppenhaus entfernen.",
+      },
       {
         weekday: 3,
         important: true,
