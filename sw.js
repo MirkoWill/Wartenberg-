@@ -3,13 +3,13 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v10";
+const CACHE_VERSION = "mieterapp-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css",
-  "./js/config.js",
-  "./js/app.js",
+  "./css/style.css?v=11",
+  "./js/config.js?v=11",
+  "./js/app.js?v=11",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
@@ -44,7 +44,9 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(req)
+    // "no-cache": beim Server nachfragen, ob es eine neuere Version gibt (sonst liefert der
+    // Browser-Cache evtl. alte Dateien und die App besteht aus alten und neuen Teilen).
+    fetch(req, { cache: "no-cache" })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
