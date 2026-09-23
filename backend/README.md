@@ -80,9 +80,13 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
      (exakt `NOTIFY_EMAIL`, Großbuchstaben, Unterstrich).
    - „Testmail an … verschickt“ → Postfach prüfen, auch **Spam**, **„Alle Nachrichten“** und **„Gesendet“**.
    - Fehlermeldung zu Berechtigungen → einmal **Berechtigungen prüfen → Zulassen** (wie bei der Einrichtung).
-3. **Empfänger = Absender?** Das Script sendet von dem Konto, dem die Tabelle gehört (info@willbrandt-kompagnon.de).
-   Mails an genau diese Adresse zeigt Gmail oft nur unter „Gesendet“. Besser eine andere Adresse eintragen,
-   z. B. service@willbrandt-kompagnon.de.
+3. **„Testmail verschickt“, kommt aber nie an (auch nicht im Spam)?** Dann ist das Google-Konto vermutlich
+   mit einer Adresse der eigenen Domain angelegt (z. B. info@willbrandt-kompagnon.de) ohne eigenes Gmail.
+   Google versendet dann in deren Namen, der Mailserver der Domain hält das für eine Fälschung (SPF) und
+   verwirft die Mail still – das betrifft auch die Mails an den Hausmeister.
+   **Lösung (so eingerichtet):** Dem Google-Konto eine Gmail-Adresse hinzufügen
+   (hier: willbrandtundkompagnon@gmail.com). Absendername bleibt „Willbrandt und Kompagnon“, Antworten
+   gehen an `NOTIFY_EMAIL`. Alternative: im DNS der Domain den SPF-Eintrag um `include:_spf.google.com` ergänzen.
 4. **Welche Aktionen senden eine Mail?** Techniker-Termin, Klingelschild, Mängelmeldung, Wasserzähler und
    „Erledigt“-Meldungen des Hausmeisters. Die Stromzähler-Anfrage läuft über WhatsApp und sendet keine Mail.
 5. **Protokoll ansehen:** Im Apps-Script-Editor links **Ausführungen** (Uhr-Symbol) – dort stehen Fehler wie
