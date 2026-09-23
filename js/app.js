@@ -1075,21 +1075,15 @@
     $$("form.form").forEach((form) => form.insertAdjacentHTML("beforeend",
       '<label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>'));
 
-    renderEntrancePicker();
-    renderEmergency();
-    renderWaste();
-    renderInfos();
-    initTransit();
-
-    initWaterForm();
-    initPowerForm();
-    initElectricForm();
-    initBellForm();
-    initDefectForm();
-    initPhotoPreviews();
-    initProfile();
-
-    initConsent();
+    // Jeder Bereich einzeln abgesichert: Ein Fehler in einem Teil darf Navigation,
+    // Notfallnummern und Zustimmung nicht lahmlegen.
+    [
+      renderEntrancePicker, renderEmergency, renderWaste, renderInfos, initTransit,
+      initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
+      initPhotoPreviews, initProfile, initConsent,
+    ].forEach((step) => {
+      try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); }
+    });
     initRouter();
 
     if ("serviceWorker" in navigator) {
