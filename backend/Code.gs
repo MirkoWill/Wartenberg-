@@ -268,11 +268,20 @@ function rebuildMeterOverview() {
   if (rows.length) {
     const data = rows.map((r) => [
       r.haus, r.aufgang, r.wohnung, r.ablese, r.raum, r.art, r.nr, r.stand,
-      r.foto ? `=HYPERLINK("${r.foto.replace(/"/g, "")}", "Foto öffnen")` : "",
+      "", // Foto-Link wird unten als echter Link gesetzt
       r.name, r.eingang, r.erfassung, r.geprueft,
     ]);
     const range = out.getRange(2, 1, data.length, def.headers.length);
     range.setValues(data);
+
+    // Foto als echter Link (Rich Text) – unabhängig von der Spracheinstellung der Tabelle,
+    // anders als eine HYPERLINK-Formel (dort Komma vs. Semikolon).
+    const fotoCol = def.headers.indexOf("Foto") + 1;
+    out.getRange(2, fotoCol, data.length, 1).setRichTextValues(rows.map((r) => [
+      r.foto
+        ? SpreadsheetApp.newRichTextValue().setText("Foto öffnen").setLinkUrl(r.foto).build()
+        : SpreadsheetApp.newRichTextValue().setText("").build(),
+    ]));
 
     // Jede Wohnung als farbiges „Paket“ (abwechselnd hell/weiß)
     let shade = false;
