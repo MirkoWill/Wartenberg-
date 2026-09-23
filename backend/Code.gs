@@ -8,6 +8,7 @@
  *
  * Script-Eigenschaften (Projekteinstellungen → Script-Eigenschaften):
  *   NOTIFY_EMAIL        optional, E-Mail(s) für Benachrichtigungen, kommagetrennt
+ *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Aufträge an den Hausmeister)
  *   HAUSMEISTER_TOKENS  optional (Epic 3), JSON: {"geheimer-token": "hm_becker"}
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
  */
@@ -17,12 +18,19 @@ const CONFIG = {
     tickets: {
       name: "Tickets",
       headers: ["ID", "Eingang", "Typ", "Status", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Name",
-        "Termin", "Details", "Ort", "Telefon/Kontakt", "Foto", "Erledigt am", "Notiz Verwaltung"],
+        "Termin", "Details", "Ort", "Telefon/Kontakt", "Foto", "Erledigt am", "Notiz Verwaltung",
+        "Erledigt-Code"],
     },
     meter: {
       name: "Zählerstände",
       headers: ["ID", "Eingang", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Raum", "Art",
-        "Zählernummer", "Zählerstand (m³)", "Name", "Foto", "Geprüft"],
+        "Zählernummer", "Zählerstand (m³)", "Name", "Foto", "Geprüft", "Erfassungs-ID", "Ablesedatum"],
+    },
+    // Wird automatisch aus "Zählerstände" erzeugt – nicht von Hand bearbeiten.
+    meterOverview: {
+      name: "Übersicht Zähler",
+      headers: ["Haus", "Aufgang", "Wohnung", "Ablesedatum", "Raum", "Art", "Zählernummer",
+        "Zählerstand (m³)", "Foto", "Name", "Eingang", "Erfassungs-ID", "Geprüft"],
     },
     cleaning: {
       name: "Reinigung",
@@ -37,6 +45,13 @@ const CONFIG = {
   MAX_PHOTO_BYTES: 6 * 1024 * 1024,
   TIMEZONE: "Europe/Berlin",
   MIN_WORKDAYS_ELEKTRO: 2,
+  MAX_METERS: 8,
+  SITE_NAME: "WEG Wartenberger Dorfkrug",
+  SENDER_NAME: "Willbrandt und Kompagnon",
+  // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
+  HAUSMEISTER_EMAIL: "info@gs-schreier.de",
+  // Adresse dieser Web-App (für den Erledigt-Link in E-Mails). Leer = automatisch ermitteln.
+  WEBAPP_URL: "https://script.google.com/macros/s/AKfycbzhN3ZvHKkXgBEyHddQNgCMd7rGNDpnvLdrS82Q8XO-MC8r4UFhDQnJWVnGtTygYcrd/exec",
 };
 
 /* ==========================================================================
@@ -45,7 +60,7 @@ const CONFIG = {
 
 /** Legt Tabellenblätter, Kopfzeilen, Status-Auswahl und den Foto-Ordner an. */
 function setup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   Object.values(CONFIG.SHEETS).forEach((def) => {
     const sheet = ss.getSheetByName(def.name) || ss.insertSheet(def.name);
     sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers])
@@ -68,7 +83,16 @@ function setup() {
   const leer = ss.getSheetByName("Tabellenblatt1") || ss.getSheetByName("Sheet1");
   if (leer && leer.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(leer);
 
+  rebuildMeterOverview();
   Logger.log("Einrichtung abgeschlossen. Foto-Ordner: %s", props.getProperty("PHOTO_FOLDER_ID"));
+}
+
+/** Menü „Mieter-App“ in der Tabelle. */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("Mieter-App")
+    .addItem("Zähler-Übersicht aktualisieren", "rebuildMeterOverview")
+    .addToUi();
 }
 
 /* ==========================================================================
@@ -87,7 +111,8 @@ function doPost(e) {
 
     switch (p.action) {
       case "submitTicket": return json(submitTicket(p));
-      case "submitMeterReading": return json(submitMeterReading(p));
+      case "submitMeterReadings": return json(submitMeterReadings(p));
+      case "submitMeterReading": return json(submitMeterReadings(Object.assign({}, p, { meters: [p] }))); // ältere App-Version
       case "logCleaning": return json(logCleaning(p));
       default: return json({ ok: false, error: "Unbekannte Aktion" });
     }
@@ -105,6 +130,7 @@ function doGet(e) {
   try {
     const q = (e && e.parameter) || {};
     if (q.action === "getTasks") return json(getTasks(q.token));
+    if (q.action === "done") return completeTicketPage(q);
     return json({ ok: true, service: "mieter-app", time: new Date().toISOString() });
   } catch (err) {
     if (!err.userMessage) console.error(err);
@@ -136,14 +162,17 @@ function submitTicket(p) {
   }
 
   const id = newId("T");
+  const doneCode = Utilities.getUuid().replace(/-/g, "");
   const photoUrl = p.photo ? savePhoto(p.photo, `${id}_${type}`) : "";
 
   appendRow(CONFIG.SHEETS.tickets.name, [
     id, new Date(), type, CONFIG.STATUS_OPEN,
     str(p.house, 60), str(p.entrance, 60), str(p.object, 20),
     str(p.wohnung, 60), str(p.name, 80), termin, details,
-    str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "",
+    str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "", doneCode,
   ]);
+
+  if (type === "Klingelschild") sendBellOrder(id, doneCode, p);
 
   notify(`Neuer Antrag: ${type} (${id})`, [
     `Typ: ${type}`,
@@ -159,27 +188,107 @@ function submitTicket(p) {
   return { ok: true, id };
 }
 
-/** US 2.1 – Wasserzähler */
-function submitMeterReading(p) {
+/** US 2.1 – Wasserzähler: mehrere Zähler einer Wohnung in einer Meldung */
+function submitMeterReadings(p) {
   const wohnung = str(p.wohnung, 60);
-  const zaehlernummer = str(p.zaehlernummer, 60);
-  const standRaw = str(p.zaehlerstand, 20).replace(",", ".");
-  const art = str(p.art, 10);
+  if (!wohnung) throw userError("Bitte die Wohnung angeben");
+  const meters = Array.isArray(p.meters) ? p.meters : [];
+  if (!meters.length) throw userError("Bitte mindestens einen Zähler erfassen");
+  if (meters.length > CONFIG.MAX_METERS) throw userError("Zu viele Zähler in einer Meldung");
 
-  if (!wohnung || !zaehlernummer) throw userError("Wohnung und Zählernummer sind Pflichtfelder");
-  if (!/^\d+(\.\d{1,3})?$/.test(standRaw)) throw userError("Ungültiger Zählerstand");
-  if (["Kalt", "Warm"].indexOf(art) === -1) throw userError("Ungültige Zählerart");
-  if (!p.photo) throw userError("Bitte ein Belegfoto anhängen");
+  const ablesedatum = parseIsoDate(p.ablesedatum) || new Date();
+  const checked = meters.map((m, i) => {
+    const nr = str(m.zaehlernummer, 60);
+    const stand = str(m.zaehlerstand, 20).replace(",", ".");
+    const art = str(m.art, 10);
+    const label = `Zähler ${i + 1}`;
+    if (!nr) throw userError(`${label}: Zählernummer fehlt`);
+    if (!/^\d+(\.\d{1,3})?$/.test(stand)) throw userError(`${label}: ungültiger Zählerstand`);
+    if (["Kalt", "Warm"].indexOf(art) === -1) throw userError(`${label}: ungültige Zählerart`);
+    if (!m.photo) throw userError(`${label}: bitte ein Foto anhängen`);
+    return { nr, stand: Number(stand), art, raum: str(m.raum, 30), photo: m.photo };
+  });
 
-  const id = newId("Z");
-  const photoUrl = savePhoto(p.photo, `${id}_${wohnung}_${art}`);
+  const batchId = newId("E");
+  const now = new Date();
+  const rows = checked.map((m) => {
+    const id = newId("Z");
+    const photoUrl = savePhoto(m.photo, `${id}_${wohnung}_${m.raum}_${m.art}`);
+    return [
+      id, now, str(p.house, 60), str(p.entrance, 60), str(p.object, 20),
+      wohnung, m.raum, m.art, m.nr, m.stand, str(p.name, 80), photoUrl, false, batchId, ablesedatum,
+    ];
+  });
+  appendRows(CONFIG.SHEETS.meter.name, rows);
 
-  appendRow(CONFIG.SHEETS.meter.name, [
-    id, new Date(), str(p.house, 60), str(p.entrance, 60), str(p.object, 20),
-    wohnung, str(p.raum, 30), art, zaehlernummer, Number(standRaw), str(p.name, 80), photoUrl, false,
-  ]);
+  try { rebuildMeterOverview(); } catch (err) { console.error("Übersicht:", err); }
+  return { ok: true, id: batchId, count: rows.length };
+}
 
-  return { ok: true, id };
+/**
+ * Baut das Blatt „Übersicht Zähler“ neu auf: sortiert nach Haus, Aufgang, Wohnung und
+ * Ablesedatum (neueste zuerst), jede Wohnung farblich als „Paket“ gruppiert, mit
+ * Foto-Link und Filter. Wird nach jeder Meldung und über das Menü aufgerufen.
+ */
+function rebuildMeterOverview() {
+  const ss = getSpreadsheet();
+  const src = ss.getSheetByName(CONFIG.SHEETS.meter.name);
+  if (!src) return;
+  const def = CONFIG.SHEETS.meterOverview;
+  const out = ss.getSheetByName(def.name) || ss.insertSheet(def.name);
+
+  const values = src.getDataRange().getValues();
+  const h = values.shift() || [];
+  const col = (name) => h.indexOf(name);
+  const get = (r, name) => (col(name) >= 0 ? r[col(name)] : "");
+
+  const rows = values.filter((r) => r[0]).map((r) => {
+    const eingang = get(r, "Eingang");
+    const ablese = get(r, "Ablesedatum") || eingang;
+    return {
+      haus: String(get(r, "Haus")), aufgang: String(get(r, "Aufgang")), wohnung: String(get(r, "Wohnung")),
+      ablese, raum: get(r, "Raum"), art: get(r, "Art"), nr: get(r, "Zählernummer"),
+      stand: get(r, "Zählerstand (m³)"), foto: String(get(r, "Foto") || ""), name: get(r, "Name"),
+      eingang, erfassung: get(r, "Erfassungs-ID") || get(r, "ID"), geprueft: get(r, "Geprüft") === true,
+    };
+  });
+
+  const cmp = (a, b) => String(a).localeCompare(String(b), "de", { numeric: true, sensitivity: "base" });
+  const time = (d) => (d instanceof Date ? d.getTime() : 0);
+  rows.sort((a, b) => cmp(a.haus, b.haus) || cmp(a.aufgang, b.aufgang) || cmp(a.wohnung, b.wohnung)
+    || time(b.ablese) - time(a.ablese) || cmp(a.raum, b.raum) || cmp(a.art, b.art));
+
+  const existingFilter = out.getFilter();
+  if (existingFilter) existingFilter.remove();
+  out.clear();
+  out.getRange(1, 1, 1, def.headers.length).setValues([def.headers])
+    .setFontWeight("bold").setBackground("#6d7454").setFontColor("#ffffff");
+  out.setFrozenRows(1);
+
+  if (rows.length) {
+    const data = rows.map((r) => [
+      r.haus, r.aufgang, r.wohnung, r.ablese, r.raum, r.art, r.nr, r.stand,
+      r.foto ? `=HYPERLINK("${r.foto.replace(/"/g, "")}", "Foto öffnen")` : "",
+      r.name, r.eingang, r.erfassung, r.geprueft,
+    ]);
+    const range = out.getRange(2, 1, data.length, def.headers.length);
+    range.setValues(data);
+
+    // Jede Wohnung als farbiges „Paket“ (abwechselnd hell/weiß)
+    let shade = false;
+    let lastKey = null;
+    const colors = rows.map((r) => {
+      const key = `${r.haus}|${r.aufgang}|${r.wohnung}`;
+      if (key !== lastKey) { shade = !shade; lastKey = key; }
+      return new Array(def.headers.length).fill(shade ? "#eef0e6" : "#ffffff");
+    });
+    range.setBackgrounds(colors);
+    out.getRange(2, 4, data.length, 1).setNumberFormat("dd.MM.yyyy");
+    out.getRange(2, 11, data.length, 1).setNumberFormat("dd.MM.yyyy HH:mm");
+    out.getRange(2, 8, data.length, 1).setNumberFormat("0.000");
+  }
+  out.getRange(1, 1, Math.max(rows.length, 1) + 1, def.headers.length).createFilter();
+  out.autoResizeColumns(1, def.headers.length);
 }
 
 /** US 3.2 – Reinigungsnachweis per QR-Scan (Frontend folgt in Epic 3) */
@@ -198,7 +307,7 @@ function logCleaning(p) {
 /** US 3.3 – offene Aufträge (read-only) */
 function getTasks(token) {
   authHausmeister(token);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEETS.tickets.name);
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.tickets.name);
   const values = sheet.getDataRange().getValues();
   const h = values.shift();
   const col = (name) => h.indexOf(name);
@@ -253,12 +362,36 @@ function newId(prefix) {
   return `${prefix}-${day}-${rand}`;
 }
 
+/** Die Tabelle, an die das Script gebunden ist. */
+function getSpreadsheet() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+/** "2026-09-23" → Date (lokal) oder null. */
+function parseIsoDate(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+
+/** Schreibt mehrere Zeilen am Stück (unter Sperre). */
+function appendRows(sheetName, rows) {
+  if (!rows.length) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = getSpreadsheet().getSheetByName(sheetName);
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /** Schreibt eine Zeile; die Sperre verhindert Konflikte bei gleichzeitigen Anfragen. */
 function appendRow(sheetName, row) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName).appendRow(row);
+    getSpreadsheet().getSheetByName(sheetName).appendRow(row);
   } finally {
     lock.releaseLock();
   }
@@ -327,9 +460,138 @@ function notify(subject, lines) {
     MailApp.sendEmail({
       to,
       subject: `[Mieter-App] ${subject}`,
-      body: lines.filter(Boolean).join("\n") + "\n\n" + SpreadsheetApp.getActiveSpreadsheet().getUrl(),
+      body: lines.filter(Boolean).join("\n") + "\n\n" + getSpreadsheet().getUrl(),
     });
   } catch (err) {
     console.error("E-Mail fehlgeschlagen:", err);
   }
+}
+
+/* ==========================================================================
+   Aufträge an den Hausmeister (Klingelschild) mit Erledigt-Link
+   ========================================================================== */
+
+/** Reiner Text ohne Tabellen-Schutzzeichen, für E-Mails. */
+function plain(value, max) {
+  return value == null ? "" : String(value).trim().slice(0, max || CONFIG.MAX_TEXT);
+}
+
+function escHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function doneUrl(id, code) {
+  const base = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
+  return `${base}?action=done&id=${encodeURIComponent(id)}&t=${encodeURIComponent(code)}`;
+}
+
+/** E-Mail an den Hausmeister: Klingelschild aktualisieren. Fehler blockieren den Antrag nicht. */
+function sendBellOrder(id, code, p) {
+  const to = PropertiesService.getScriptProperties().getProperty("HAUSMEISTER_EMAIL") || CONFIG.HAUSMEISTER_EMAIL;
+  if (!to) return;
+  const link = doneUrl(id, code);
+  const facts = [
+    ["Adresse", [plain(p.entrance, 60), plain(p.house, 60)].filter(Boolean).join(" · ")],
+    ["Wohnung", plain(p.wohnung, 60)],
+    ["Name", plain(p.name, 80)],
+    ["Neue Beschriftung", plain(p.details, 200)],
+    ["Kontakt", plain(p.kontakt || p.telefon, 120)],
+  ].filter((f) => f[1]);
+
+  const body = [
+    "Liebes Hausmeister-Team,",
+    "",
+    `bitte aktualisieren Sie folgendes Klingelschild in der ${CONFIG.SITE_NAME}:`,
+    "",
+    ...facts.map(([k, v]) => `${k}: ${v}`),
+    "",
+    `Ticketnummer: ${id}`,
+    "",
+    "Nach Erledigung bitte hier bestätigen:",
+    link,
+    "",
+    "Vielen Dank!",
+    CONFIG.SENDER_NAME,
+  ].join("\n");
+
+  const htmlBody = `
+    <p>Liebes Hausmeister-Team,</p>
+    <p>bitte aktualisieren Sie folgendes Klingelschild in der ${escHtml(CONFIG.SITE_NAME)}:</p>
+    <table cellpadding="4" style="border-collapse:collapse">
+      ${facts.map(([k, v]) => `<tr><td style="color:#555">${escHtml(k)}:</td><td><strong>${escHtml(v)}</strong></td></tr>`).join("")}
+    </table>
+    <p>Ticketnummer: <strong>${escHtml(id)}</strong></p>
+    <p><a href="${escHtml(link)}" style="display:inline-block;padding:12px 20px;background:#6d7454;color:#fff;
+      text-decoration:none;border-radius:8px;font-weight:bold">Als erledigt melden</a></p>
+    <p>Vielen Dank!<br>${escHtml(CONFIG.SENDER_NAME)}</p>`;
+
+  try {
+    const replyTo = PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "";
+    MailApp.sendEmail({
+      to,
+      subject: `Klingelschild aktualisieren – ${plain(p.entrance, 60)}, Whg ${plain(p.wohnung, 60)} (${id})`,
+      body,
+      htmlBody,
+      name: CONFIG.SENDER_NAME,
+      replyTo: replyTo.split(",")[0].trim() || undefined,
+    });
+  } catch (err) {
+    console.error("Hausmeister-Mail fehlgeschlagen:", err);
+  }
+}
+
+/**
+ * Erledigt-Link aus der E-Mail. Erst eine Bestätigungsseite, dann (confirm=1) Status setzen –
+ * so lösen automatische Link-Prüfungen von E-Mail-Programmen nichts aus.
+ */
+function completeTicketPage(q) {
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.tickets.name);
+  const values = sheet.getDataRange().getValues();
+  const h = values[0];
+  const c = (name) => h.indexOf(name);
+  const rowIndex = values.findIndex((r, i) => i > 0 && r[c("ID")] === q.id);
+  const row = rowIndex > 0 ? values[rowIndex] : null;
+
+  if (!row || !q.t || String(row[c("Erledigt-Code")]) !== String(q.t)) {
+    return donePage("Link ungültig", "Dieser Link ist ungültig oder abgelaufen. Bitte wenden Sie sich an die Hausverwaltung.");
+  }
+  const what = `${row[c("Typ")]} · ${row[c("Aufgang")]}, Whg ${row[c("Wohnung")]} · Ticket ${q.id}`;
+
+  if (row[c("Status")] === "erledigt") {
+    return donePage("Bereits erledigt", `${what} ist bereits als erledigt gemeldet. Vielen Dank!`);
+  }
+  if (q.confirm !== "1") {
+    const url = `${doneUrl(q.id, q.t)}&confirm=1`;
+    return donePage("Auftrag erledigt?", `${what}`,
+      `<a class="btn" href="${escHtml(url)}" target="_top">Ja, als erledigt melden</a>`);
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    sheet.getRange(rowIndex + 1, c("Status") + 1).setValue("erledigt");
+    sheet.getRange(rowIndex + 1, c("Erledigt am") + 1).setValue(new Date());
+  } finally {
+    lock.releaseLock();
+  }
+  notify(`Erledigt: ${row[c("Typ")]} (${q.id})`, [what, "Vom Hausmeister über den Link in der E-Mail als erledigt gemeldet."]);
+  return donePage("Vielen Dank!", `${what} ist jetzt als erledigt eingetragen.`);
+}
+
+function donePage(title, text, action) {
+  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
+    <style>
+      body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f8f8f8;color:#151515}
+      .box{max-width:520px;margin:40px auto;padding:28px 22px;background:#fff;border-top:6px solid #6d7454;border-radius:8px}
+      .brand{font-weight:600;color:#6d7454;margin:0 0 12px}
+      h1{font-family:Georgia,serif;font-weight:400;color:#6d7454;margin:0 0 12px}
+      p{font-size:18px;line-height:1.45}
+      .btn{display:block;text-align:center;padding:16px;background:#6d7454;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:18px}
+    </style></head><body><div class="box">
+      <p class="brand">${escHtml(CONFIG.SENDER_NAME)}</p>
+      <h1>${escHtml(title)}</h1><p>${escHtml(text)}</p>${action || ""}
+    </div></body></html>`;
+  return HtmlService.createHtmlOutput(html)
+    .setTitle(title)
+    .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }

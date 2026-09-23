@@ -39,7 +39,28 @@ Fehlermeldungen des Backends (`error`) werden dem Mieter direkt angezeigt, sie s
 }
 ```
 
-## `submitMeterReading` (Wasserzähler)
+## `submitMeterReadings` (Wasserzähler, mehrere Zähler je Meldung)
+
+```jsonc
+{
+  "action": "submitMeterReadings",
+  "wohnung": "Whg 04",
+  "name": "Müller",
+  "ablesedatum": "2026-09-23",
+  "meters": [
+    { "raum": "Bad", "art": "Kalt", "zaehlernummer": "A1", "zaehlerstand": "12.5", "photo": { "name": "…", "mimeType": "image/jpeg", "data": "<Base64>" } },
+    { "raum": "Bad", "art": "Warm", "zaehlernummer": "A2", "zaehlerstand": "8.125", "photo": { … } }
+  ]
+}
+```
+Antwort: `{ "ok": true, "id": "E-…", "count": 2 }`. Alle Zeilen einer Meldung tragen dieselbe Erfassungs-ID.
+
+## Erledigt-Link (Hausmeister)
+
+`GET <API_URL>?action=done&id=T-…&t=<Erledigt-Code>` zeigt eine Bestätigungsseite; erst mit `&confirm=1`
+wird der Status auf `erledigt` gesetzt (Schutz vor automatischen Link-Prüfungen in E-Mail-Programmen).
+
+## `submitMeterReading` (veraltet, einzelner Zähler – wird weiter angenommen)
 
 ```jsonc
 {

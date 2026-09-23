@@ -99,6 +99,11 @@
 
     const back = $("#backBtn");
     back.hidden = !parent;
+    if (parent) {
+      const parentView = $(`.view[data-view="${parent}"]`);
+      $("#backLabel").textContent = parentView ? parentView.dataset.title : "Zurück";
+      back.setAttribute("aria-label", `Zurück zu ${$("#backLabel").textContent}`);
+    }
     back.onclick = () => { location.hash = parent; };
 
     currentView = viewName;
@@ -114,7 +119,7 @@
      ====================================================================== */
 
   const CONSENT_KEY = "mieterapp.consent";
-  const CONSENT_VERSION = "2026-09"; // bei Änderung der Hinweise hochzählen
+  const CONSENT_VERSION = "2026-09b"; // bei Änderung der Hinweise hochzählen
   let consentGiven = false;
 
   function hasConsent() {
@@ -334,50 +339,110 @@
   };
 
   // US 1.3 – Live-ÖPNV-Monitor
-  // Die kostenlosen transport.rest-Dienste sind nicht immer erreichbar. Deshalb werden
-  // mehrere nacheinander versucht; der zuletzt funktionierende wird zuerst genommen.
-  const transit = { timer: null, loading: false, preferred: 0 };
+  // Die kostenlosen transport.rest-Dienste sind oft überlastet. Strategie:
+  //  1. Der zuletzt funktionierende Dienst wird zuerst gefragt; antwortet er nicht
+  //     innerhalb von TRANSIT_HEDGE_SECONDS, werden die anderen parallel dazugenommen.
+  //  2. Die erste gültige Antwort gewinnt, die übrigen Anfragen werden abgebrochen.
+  //  3. Klappt nichts, werden die zuletzt geladenen Abfahrten angezeigt (mit Hinweis).
+  //  4. Nach Fehlschlägen wird seltener neu versucht (bis max. 5 Minuten).
+  const TRANSIT_CACHE_KEY = "mieterapp.departures";
+  const TRANSIT_HEDGE_SECONDS = 3;
+  const transit = { timer: null, loading: false, preferred: 0, failures: 0, nextTry: 0 };
 
-  async function loadDepartures() {
+  async function loadDepartures(force) {
     if (transit.loading) return;
+    if (!force && Date.now() < transit.nextTry) return;
     transit.loading = true;
     const status = $("#transitStatus");
     status.textContent = "Lade Abfahrten …";
-    status.classList.remove("is-error");
+    status.classList.remove("is-error", "is-warn");
 
     const apis = CFG.TRANSIT_APIS;
     const order = apis.map((_, i) => (transit.preferred + i) % apis.length);
+    const controllers = [];
     const problems = [];
+    let settled = false;
+    // Schlägt ein Dienst fehl, starten die übrigen sofort (statt erst nach der Wartezeit).
+    let kick;
+    const failedOnce = new Promise((res) => { kick = res; });
+
+    const attempt = (i, delayMs) => new Promise((resolve, reject) => {
+      const wait = delayMs ? Promise.race([new Promise((r) => setTimeout(r, delayMs)), failedOnce]) : Promise.resolve();
+      wait.then(async () => {
+        if (settled) return reject(new Error("nicht benötigt"));
+        const api = apis[i];
+        const ctrl = new AbortController();
+        controllers.push(ctrl);
+        try {
+          const stopId = await resolveStopId(api, ctrl.signal);
+          const data = await fetchJson(`${api}/stops/${encodeURIComponent(stopId)}/departures`
+            + `?duration=60&results=${CFG.TRANSIT_RESULTS}&remarks=false&language=de`, ctrl.signal);
+          // transport.rest v6 liefert { departures: [...] }, ältere Versionen ein Array.
+          resolve({ i, departures: Array.isArray(data) ? data : data.departures || [] });
+        } catch (err) {
+          if (!settled) {
+            console.warn(`ÖPNV über ${api} fehlgeschlagen:`, err);
+            problems.push(`${new URL(api).hostname.split(".")[1]}: ${err.message}`);
+          }
+          kick();
+          reject(err);
+        }
+      });
+    });
 
     try {
-      for (const i of order) {
-        const api = apis[i];
-        try {
-          const stopId = await resolveStopId(api);
-          const data = await fetchJson(`${api}/stops/${encodeURIComponent(stopId)}/departures`
-            + `?duration=60&results=${CFG.TRANSIT_RESULTS}&remarks=false&language=de`);
-          // transport.rest v6 liefert { departures: [...] }, ältere Versionen ein Array.
-          renderDepartures(Array.isArray(data) ? data : data.departures || []);
-          transit.preferred = i;
-          status.textContent = `Stand ${formatTime(new Date())} Uhr · aktualisiert alle ${CFG.TRANSIT_REFRESH_SECONDS} s`;
-          return;
-        } catch (err) {
-          console.warn(`ÖPNV über ${api} fehlgeschlagen:`, err);
-          problems.push(`${new URL(api).hostname.split(".")[1]}: ${err.message}`);
-        }
+      const result = await Promise.any(order.map((i, n) => attempt(i, n === 0 ? 0 : TRANSIT_HEDGE_SECONDS * 1000)));
+      settled = true;
+      controllers.forEach((c) => c.abort());
+      transit.preferred = result.i;
+      transit.failures = 0;
+      transit.nextTry = 0;
+      renderDepartures(result.departures);
+      try {
+        localStorage.setItem(TRANSIT_CACHE_KEY, JSON.stringify({ time: Date.now(), departures: result.departures }));
+      } catch (e) { /* egal */ }
+      status.textContent = `Stand ${formatTime(new Date())} Uhr · aktualisiert alle ${CFG.TRANSIT_REFRESH_SECONDS} s`;
+    } catch (err) {
+      settled = true;
+      transit.failures++;
+      const waitS = Math.min(300, CFG.TRANSIT_REFRESH_SECONDS * 2 ** (transit.failures - 1));
+      transit.nextTry = Date.now() + waitS * 1000;
+      const cached = readCachedDepartures();
+      if (cached) {
+        renderDepartures(cached.departures);
+        status.textContent = `Live-Daten gerade nicht erreichbar – Fahrplan vom ${formatTime(new Date(cached.time))} Uhr. `
+          + `Neuer Versuch in ${Math.round(waitS / 60) || 1} min.`;
+        status.classList.add("is-warn");
+      } else {
+        $("#departures").innerHTML = "";
+        status.textContent = "Abfahrten derzeit nicht verfügbar – der kostenlose Fahrplandienst antwortet nicht. "
+          + `Neuer Versuch in ${Math.round(waitS / 60) || 1} min. (${problems.join(" · ")})`;
+        status.classList.add("is-error");
       }
-      status.textContent = "Abfahrten derzeit nicht verfügbar – der kostenlose Fahrplandienst antwortet nicht. "
-        + "Neuer Versuch in Kürze. (" + problems.join(" · ") + ")";
-      status.classList.add("is-error");
     } finally {
       transit.loading = false;
     }
   }
 
+  /** Zuletzt geladene Abfahrten (max. 3 Stunden alt), nur noch künftige. */
+  function readCachedDepartures() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(TRANSIT_CACHE_KEY) || "null");
+      if (!cached || Date.now() - cached.time > 3 * 3600 * 1000) return null;
+      const now = Date.now() - 60 * 1000;
+      const departures = cached.departures.filter((d) => new Date(d.when || d.plannedWhen).getTime() >= now);
+      return departures.length ? { time: cached.time, departures } : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /** fetch mit Zeitlimit, damit die Anzeige nicht endlos „lädt“. */
-  async function fetchJson(url) {
+  async function fetchJson(url, outerSignal) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), CFG.TRANSIT_TIMEOUT_SECONDS * 1000);
+    const onOuterAbort = () => ctrl.abort();
+    if (outerSignal) outerSignal.addEventListener("abort", onOuterAbort);
     try {
       const res = await fetch(url, { headers: { Accept: "application/json" }, signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -388,6 +453,7 @@
       throw err;
     } finally {
       clearTimeout(timer);
+      if (outerSignal) outerSignal.removeEventListener("abort", onOuterAbort);
     }
   }
 
@@ -395,7 +461,7 @@
    * Haltestellen-ID ermitteln: fest konfiguriert (id) oder per Namenssuche (query).
    * Das Suchergebnis wird je Dienst im Browser gespeichert, damit nur einmal gesucht wird.
    */
-  async function resolveStopId(api) {
+  async function resolveStopId(api, signal) {
     const stop = OBJ.transitStop;
     if (stop.id) return stop.id;
 
@@ -406,7 +472,7 @@
     } catch (e) { /* Storage blockiert */ }
 
     const data = await fetchJson(`${api}/locations?query=${encodeURIComponent(stop.query)}`
-      + "&results=8&addresses=false&poi=false");
+      + "&results=8&addresses=false&poi=false", signal);
     const results = (Array.isArray(data) ? data : [])
       .filter((r) => r.type === "stop" || r.type === "station");
     const wanted = (stop.match || stop.query).toLowerCase();
@@ -453,7 +519,7 @@
 
   function startTransit() {
     stopTransit();
-    loadDepartures();
+    loadDepartures(true);
     transit.timer = setInterval(() => {
       if (document.visibilityState === "visible") loadDepartures();
     }, CFG.TRANSIT_REFRESH_SECONDS * 1000);
@@ -473,7 +539,7 @@
       link.href = OBJ.transitStop.infoUrl;
       link.hidden = false;
     }
-    $("#transitRefresh").addEventListener("click", loadDepartures);
+    $("#transitRefresh").addEventListener("click", () => loadDepartures(true));
     // Nach Rückkehr in die App sofort aktualisieren.
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && currentView === "oepnv" && hasConsent()) loadDepartures();
@@ -485,23 +551,126 @@
      ====================================================================== */
 
   // US 2.1 – Wasserzähler
-  function initWaterForm() {
-    $("#waterRoom").innerHTML = OBJ.waterRooms.map((r) => `<option>${esc(r)}</option>`).join("");
+  // Mehrere Zähler pro Meldung. Zählernummern, Raum und Art werden auf dem Gerät
+  // gemerkt, damit bei der nächsten Ablesung nur noch Stand und Foto nötig sind.
+  const METERS_KEY = "mieterapp.meters";
+  const MAX_METERS = 8;
+  let meterSeq = 0;
 
-    bindForm("#formWater", async (form) => {
+  function initWaterForm() {
+    const form = $("#formWater");
+    const list = $("#meterList");
+
+    const renumber = () => {
+      const cards = $$(".meter", list);
+      cards.forEach((c, i) => {
+        $(".meter__title", c).textContent = `Zähler ${i + 1}`;
+        $(".meter__remove", c).hidden = cards.length === 1;
+      });
+      $("#addMeter").hidden = cards.length >= MAX_METERS;
+      $("#waterSubmit").textContent = cards.length === 1
+        ? "Zählerstand senden" : `${cards.length} Zählerstände senden`;
+    };
+
+    const addMeter = (preset = {}) => {
+      const id = ++meterSeq;
+      list.insertAdjacentHTML("beforeend", `
+        <fieldset class="meter form-block" data-meter="${id}">
+          <div class="meter__head">
+            <legend class="form-block__title meter__title">Zähler</legend>
+            <button class="meter__remove" type="button" aria-label="Diesen Zähler entfernen">Entfernen</button>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span class="field__label">Raum *</span>
+              <select data-f="raum" required>
+                ${OBJ.waterRooms.map((r) => `<option${r === preset.raum ? " selected" : ""}>${esc(r)}</option>`).join("")}
+              </select>
+            </label>
+            <div class="field">
+              <span class="field__label">Art *</span>
+              <div class="segmented">
+                <label><input type="radio" name="art-${id}" value="Kalt" required${preset.art !== "Warm" ? " checked" : ""}><span>Kalt</span></label>
+                <label><input type="radio" name="art-${id}" value="Warm"${preset.art === "Warm" ? " checked" : ""}><span>Warm</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span class="field__label">Zählernummer *</span>
+              <input data-f="zaehlernummer" required autocomplete="off" value="${esc(preset.zaehlernummer || "")}" placeholder="auf dem Zähler">
+            </label>
+            <label class="field">
+              <span class="field__label">Stand (m³) *</span>
+              <input data-f="zaehlerstand" required inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,3})?" placeholder="123,456">
+            </label>
+          </div>
+          <label class="field">
+            <span class="field__label">Foto des Zählers *</span>
+            <input type="file" data-f="foto" accept="image/*" capture="environment" required>
+            <img class="photo-preview" alt="Vorschau" hidden>
+          </label>
+        </fieldset>`);
+      const card = list.lastElementChild;
+      const file = $('[data-f="foto"]', card);
+      const img = $(".photo-preview", card);
+      file.addEventListener("change", () => {
+        if (img.src) URL.revokeObjectURL(img.src);
+        if (!file.files[0]) { img.hidden = true; img.removeAttribute("src"); return; }
+        img.src = URL.createObjectURL(file.files[0]);
+        img.hidden = false;
+      });
+      $(".meter__remove", card).addEventListener("click", () => { card.remove(); renumber(); });
+      renumber();
+      return card;
+    };
+
+    const rebuild = () => {
+      list.innerHTML = "";
+      const saved = readJson(METERS_KEY);
+      const presets = saved && Array.isArray(saved.meters) && saved.meters.length ? saved.meters : [{}];
+      presets.slice(0, MAX_METERS).forEach((m) => addMeter(m));
+      $("#meterHint").hidden = !(saved && saved.meters && saved.meters.length);
+      const date = $("#waterDate");
+      date.max = toIsoDate(today());
+      date.value = toIsoDate(today());
+    };
+
+    $("#addMeter").addEventListener("click", () => {
+      const card = addMeter();
+      $('[data-f="zaehlernummer"]', card).focus();
+    });
+    form.addEventListener("app:reset", rebuild);
+    rebuild();
+
+    bindForm("#formWater", async () => {
       const f = form.elements;
+      const meters = [];
+      for (const card of $$(".meter", list)) {
+        meters.push({
+          raum: $('[data-f="raum"]', card).value,
+          art: $('input[type="radio"]:checked', card).value,
+          zaehlernummer: $('[data-f="zaehlernummer"]', card).value.trim(),
+          zaehlerstand: $('[data-f="zaehlerstand"]', card).value.trim().replace(",", "."),
+          photo: await readPhoto($('[data-f="foto"]', card).files[0]),
+        });
+      }
       return {
-        action: "submitMeterReading",
+        action: "submitMeterReadings",
         type: "Wasserzähler",
         wohnung: f.wohnung.value.trim(),
-        raum: f.raum.value,
-        art: form.querySelector('input[name="art"]:checked').value,
-        zaehlernummer: f.zaehlernummer.value.trim(),
-        zaehlerstand: f.zaehlerstand.value.trim().replace(",", "."),
         name: f.name.value.trim(),
-        photo: await readPhoto(f.foto.files[0]),
+        ablesedatum: f.ablesedatum.value,
+        meters,
       };
-    }, "Danke! Ihr Zählerstand wurde übermittelt.");
+    }, "Danke! Ihre Zählerstände wurden übermittelt.", null, (payload) => {
+      // Nach Erfolg: Zähler (ohne Stand/Foto) für die nächste Ablesung merken – nur wenn gewünscht
+      if (!form.elements.remember || !form.elements.remember.checked) return;
+      writeJson(METERS_KEY, {
+        wohnung: payload.wohnung,
+        meters: payload.meters.map(({ raum, art, zaehlernummer }) => ({ raum, art, zaehlernummer })),
+      });
+    });
   }
 
   // US 2.2 – Stromzähler via WhatsApp-Deep-Link
@@ -605,7 +774,7 @@
    * @param {string} successMsg     Text für die Erfolgsmeldung
    * @param {Function} [preValidate] zusätzliche Prüfung vor checkValidity()
    */
-  function bindForm(selector, buildPayload, successMsg, preValidate) {
+  function bindForm(selector, buildPayload, successMsg, preValidate, onSuccess) {
     const form = $(selector);
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -625,8 +794,11 @@
         payload.website = form.elements.website ? form.elements.website.value : ""; // Honeypot
         payload.submittedAt = new Date().toISOString();
         await postToBackend(payload);
+        rememberProfile(form);
+        if (onSuccess) onSuccess(payload);
         toast(successMsg, "ok");
         form.reset();
+        prefillProfile();
         form.classList.remove("was-validated");
         $$(".photo-preview", form).forEach((img) => { img.hidden = true; img.removeAttribute("src"); });
         form.dispatchEvent(new Event("app:reset"));
@@ -649,6 +821,55 @@
       firstInvalid.reportValidity();
     }
     return false;
+  }
+
+  // Wohnung und Name auf dem Gerät merken (nur wenn gewünscht) und in alle Formulare vorbelegen.
+  const PROFILE_KEY = "mieterapp.profile";
+
+  function initProfile() {
+    $$("form.form").forEach((form) => {
+      if (!form.elements.wohnung || form.id === "formPower") return;
+      const submit = form.querySelector('[type="submit"]');
+      submit.insertAdjacentHTML("beforebegin", `
+        <label class="remember">
+          <input type="checkbox" name="remember" checked>
+          <span>Wohnung und Name auf diesem Gerät merken</span>
+        </label>`);
+    });
+    prefillProfile();
+  }
+
+  function prefillProfile() {
+    const p = readJson(PROFILE_KEY);
+    if (!p) return;
+    $$("form.form").forEach((form) => {
+      ["wohnung", "name"].forEach((k) => {
+        const el = form.elements[k];
+        if (el && !el.value && p[k]) el.value = p[k];
+      });
+    });
+  }
+
+  function rememberProfile(form) {
+    const remember = form.elements.remember;
+    if (!remember) return;
+    if (!remember.checked) {
+      try { localStorage.removeItem(PROFILE_KEY); localStorage.removeItem(METERS_KEY); } catch (e) { /* egal */ }
+      return;
+    }
+    const prev = readJson(PROFILE_KEY) || {};
+    const next = {
+      wohnung: form.elements.wohnung ? form.elements.wohnung.value.trim() || prev.wohnung : prev.wohnung,
+      name: form.elements.name ? form.elements.name.value.trim() || prev.name : prev.name,
+    };
+    writeJson(PROFILE_KEY, next);
+  }
+
+  function readJson(key) {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; }
+  }
+  function writeJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* egal */ }
   }
 
   function initPhotoPreviews() {
@@ -676,6 +897,20 @@
    * den Apps Script nicht beantworten kann. Im Script: JSON.parse(e.postData.contents).
    */
   async function postToBackend(payload) {
+    try {
+      return await postJson(payload);
+    } catch (err) {
+      // Übergang: älteres Backend kennt die Mehrfach-Meldung noch nicht → Zähler einzeln senden.
+      if (payload.action === "submitMeterReadings" && err.userMessage === "Unbekannte Aktion") {
+        const { meters, ...common } = payload;
+        for (const m of meters) await postJson({ ...common, ...m, action: "submitMeterReading" });
+        return { ok: true };
+      }
+      throw err;
+    }
+  }
+
+  async function postJson(payload) {
     if (!hasConsent()) {
       const err = new Error("Keine Zustimmung");
       err.userMessage = "Bitte stimmen Sie zuerst den Datenschutzhinweisen zu.";
@@ -792,7 +1027,20 @@
       <details class="rule"${openFirst && i === 0 ? " open" : ""}>
         <summary>${esc(fill(r.title))}</summary>
         <p>${esc(fill(r.text))}</p>
+        ${r.actions ? `<div class="rule__actions">${r.actions.map(actionButton).join("")}</div>` : ""}
       </details>`).join("");
+  }
+
+  /** Direkt-Button (Anruf oder WhatsApp) für Verhaltensregeln. */
+  function actionButton(a) {
+    if (a.type === "tel") {
+      return `<a class="btn btn--primary btn--block" href="tel:${esc(a.phone)}">📞 ${esc(a.label)}</a>`;
+    }
+    if (a.type === "whatsapp") {
+      const url = `https://wa.me/${OBJ.whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(fill(a.text))}`;
+      return `<a class="btn btn--whatsapp btn--block" href="${esc(url)}" target="_blank" rel="noopener">💬 ${esc(a.label)}</a>`;
+    }
+    return "";
   }
 
   let toastTimer;
@@ -839,6 +1087,7 @@
     initBellForm();
     initDefectForm();
     initPhotoPreviews();
+    initProfile();
 
     initConsent();
     initRouter();

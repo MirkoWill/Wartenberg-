@@ -22,7 +22,7 @@ window.APP_CONFIG = {
     "https://v6.vbb.transport.rest",
     "https://v6.db.transport.rest",
   ],
-  TRANSIT_TIMEOUT_SECONDS: 8,
+  TRANSIT_TIMEOUT_SECONDS: 12,
   TRANSIT_REFRESH_SECONDS: 60,
   TRANSIT_RESULTS: 10,
 
@@ -38,12 +38,11 @@ window.APP_CONFIG = {
      ------------------------------------------------------------------ */
   SITE: {
     name: "WEG Wartenberger Dorfkrug",
-    mainWaterValve: "Ort bitte bei der Hausverwaltung erfragen",
 
     // Notfall-Dashboard (US 1.1)
     // Notfälle (Rohrbruch, Heizungsausfall …) laufen über den Hausmeister.
     emergencyContacts: [
-      { label: "Hausmeister", sub: "GS Schreier · 0151 28111111 · Notfälle: Wasser, Heizung, Strom", phone: "+4915128111111", icon: "🧰" },
+      { label: "Hausmeister-Notdienst", sub: "GS Schreier · 0179 4073564 · Wasser, Heizung, Strom", phone: "+491794073564", icon: "🧰" },
       { label: "Willbrandt und Kompagnon", sub: "Hausverwaltung · 030 99270747", phone: "+493099270747", icon: "🏢" },
       { label: "Schlüsseldienst Günther", sub: "Schlossmontage J. Günther GmbH · Mo, Mi, Fr 8–18 · Di, Do 8–16 Uhr", phone: "+49304237223", icon: "🔑" }, // Nummer laut Branchenverzeichnis – bitte prüfen
       { label: "Feuerwehr / Rettung", sub: "Lebensgefahr", phone: "112", icon: "🚒", danger: true },
@@ -52,8 +51,14 @@ window.APP_CONFIG = {
     emergencyRules: [
       {
         title: "Rohrbruch / Wasserschaden",
-        // {mainWaterValve} wird durch den Wert des jeweiligen Hauses ersetzt.
-        text: "Hauptwasserhahn schließen: {mainWaterValve}. Danach den Hausmeister anrufen.",
+        text: "Bitte sofort den Hausmeister-Notdienst anrufen und die Hausverwaltung per WhatsApp informieren. "
+          + "Den Hauptwasserhahn bitte nicht selbst suchen – der Zugang ist nur dem Hausmeister möglich. "
+          + "Bis Hilfe eintrifft: Elektrogeräte in der Nähe des Wassers nicht berühren und Wertsachen in Sicherheit bringen.",
+        // Direkt-Buttons unter dem Text ({label} = Adresse des Aufgangs)
+        actions: [
+          { type: "tel", label: "Hausmeister-Notdienst anrufen", phone: "+491794073564" },
+          { type: "whatsapp", label: "Hausverwaltung per WhatsApp", text: "Wasserschaden / Rohrbruch in {label}, Wohnung: " },
+        ],
       },
       {
         title: "Stromausfall",
@@ -182,7 +187,7 @@ window.APP_CONFIG = {
       id: "haus1",
       name: "Haus 1",
       address: "Dorfstr. 27, 13059 Berlin",
-      overrides: { mainWaterValve: "TODO Ort im Keller" }, // TODO
+      overrides: {},
       entrances: [
         { id: "dorf27", name: "Dorfstr. 27" },
       ],
@@ -191,7 +196,7 @@ window.APP_CONFIG = {
       id: "haus2",
       name: "Haus 2",
       address: "Lindenberger Str. 2 und 4, 13059 Berlin",
-      overrides: { mainWaterValve: "TODO Ort im Keller" }, // TODO
+      overrides: {},
       entrances: [
         { id: "lind2", name: "Lindenberger Str. 2" },
         { id: "lind4", name: "Lindenberger Str. 4" },
@@ -201,7 +206,7 @@ window.APP_CONFIG = {
       id: "haus3",
       name: "Haus 3",
       address: "Lindenberger Str. 6 und 8, 13059 Berlin",
-      overrides: { mainWaterValve: "TODO Ort im Keller" }, // TODO
+      overrides: {},
       entrances: [
         { id: "lind6", name: "Lindenberger Str. 6" },
         { id: "lind8", name: "Lindenberger Str. 8" },
