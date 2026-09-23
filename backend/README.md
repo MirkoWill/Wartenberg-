@@ -95,7 +95,7 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 
 ## Sicherheit & Datenschutz
 
-- **Zugangs-PIN:** Die App fragt einmal pro Gerät die PIN ab (3 Fehlversuche → 15 Minuten Sperre auf dem Gerät).
+- **Zugangs-PIN:** Die App fragt bei jedem Start (wie die Zustimmung) die PIN ab (3 Fehlversuche → 15 Minuten Sperre auf dem Gerät).
   Das Backend prüft die PIN bei jeder Meldung und Statusabfrage selbst; nach 30 Fehlversuchen in 15 Minuten
   (alle Geräte zusammen) nimmt es 15 Minuten lang keine PIN an. Der Erledigt-Link des Hausmeisters braucht keine PIN.
 - **Missbrauchsbremse:** höchstens 40 Meldungen pro Stunde und 10 Hausmeister-Mails je 6 Stunden (insgesamt).

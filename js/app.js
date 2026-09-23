@@ -218,15 +218,19 @@
     return consentGiven;
   }
 
-  /* ---------- Zugangs-PIN (einmal pro Gerät; 3 Fehlversuche → 15 Minuten Sperre) ---------- */
+  /* ---------- Zugangs-PIN (bei jedem App-Start wie die Zustimmung; 3 Fehlversuche → 15 Minuten Sperre) ---------- */
 
   const PIN_KEY = "mieterapp.pin";
   const PIN_LOCK_KEY = "mieterapp.pinlock";
   let pinTimer = null;
+  let sessionPin = null; // Ersatz, falls sessionStorage blockiert ist
+  localRemove(PIN_KEY); // ältere Version hat die PIN dauerhaft gespeichert
 
   /** Gespeicherte PIN, sofern sie zur aktuell gültigen PIN passt (sonst ""). */
   function storedPin() {
-    const saved = readJson(PIN_KEY);
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(PIN_KEY) || "null"); } catch (e) { /* blockiert */ }
+    if (!saved && sessionPin) saved = sessionPin;
     return saved && saved.hash === CFG.PIN_SHA256 ? String(saved.pin || "") : "";
   }
   function pinOk() { return !CFG.PIN_SHA256 || !!storedPin(); }
@@ -251,7 +255,8 @@
       return false;
     }
     if ((await sha256Hex(pin)) === CFG.PIN_SHA256) {
-      writeJson(PIN_KEY, { pin, hash: CFG.PIN_SHA256 });
+      sessionPin = { pin, hash: CFG.PIN_SHA256 };
+      try { sessionStorage.setItem(PIN_KEY, JSON.stringify(sessionPin)); } catch (e) { /* nur im Speicher */ }
       localRemove(PIN_LOCK_KEY);
       msg.textContent = "";
       return true;
@@ -303,7 +308,8 @@
 
   /** Backend meldet „PIN ungültig“ (z. B. nach PIN-Wechsel): neu abfragen. */
   function handlePinRejected() {
-    localRemove(PIN_KEY);
+    sessionPin = null;
+    try { sessionStorage.removeItem(PIN_KEY); } catch (e) { /* egal */ }
     consentGiven = false;
     try { sessionStorage.removeItem(CONSENT_KEY); } catch (e) { /* egal */ }
     $("#pinInput").value = "";
