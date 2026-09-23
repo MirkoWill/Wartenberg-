@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=16">
+  <link rel="stylesheet" href="css/style.css?v=17">
 </head>
 <body>
   <header class="app-header">
@@ -133,32 +133,58 @@
       <ul class="link-list link-list--more" id="documentList"></ul>
     </section>
 
-    <!-- ============ Hausordnung (Text folgt – derzeit Platzhalter) ============ -->
+    <!-- ============ Hausordnung (Stand 19.11.2012) ============ -->
     <section class="view legal" data-view="hausordnung" data-title="Hausordnung" data-parent="infos" hidden>
       <p class="notice i18n-note">Die Hausordnung ist nur auf Deutsch verfügbar.</p>
       <div data-no-i18n>
-      <p class="notice">Vorläufiger Platzhaltertext – die gültige Hausordnung wird in Kürze hier veröffentlicht.</p>
+      <p class="muted small">13059 Berlin, Lindenberger Straße 2–8 / Dorfstraße 24 · Stand: 19.11.2012</p>
 
-      <h2 class="section-title">1. Allgemeines</h2>
-      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
-        dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
-        commodo consequat.</p>
+      <h2 class="section-title">§ 1 Sauberkeit und Reinigung</h2>
+      <ol class="hausordnung">
+        <li>Der Mieter verpflichtet sich, die Mietsache und das gesamte Anwesen mit allen seinen Einrichtungen sorgsam, sauber und ordnungsgemäß zu behandeln und zu halten.</li>
+        <li>Müll und Abfallprodukte jeder Art dürfen nur in hierzu bestimmte Behälter gefüllt werden. In Wasch- und Spülbecken sowie Abortanlage dürfen Gegenstände, die zu einer Verstopfung führen könnten, nicht entleert werden. <a href="#infos">Hinweise zur Mülltrennung</a></li>
+        <li>Fußböden sind nach den entsprechenden Pflegevorschriften zu behandeln und sauber zu halten. Bei scharfkantigen oder spitzen Möbelfüßen sind Untersetzer zu verwenden.</li>
+        <li>Das Reinigen und Aufhängen von Gegenständen (z. B. Teppichen, Bettzeug, Kleidungsstücken, Wäsche u.s.w.) im Treppenhaus, auf den Balkonen, Terrassen und zu den Türen und Fenstern hinaus ist nicht gestattet. Der Vermieter bestimmt gegebenenfalls die hierfür geeignete Stelle und Zeit.</li>
+        <li>Brennstoffe (z. B. Holz, Heizöl, Benzin, Kohle u.s.w.) dürfen nicht innerhalb der Mieträume u. Kellerabteile, sondern nur an den vom Vermieter bestimmten Stellen gelagert und zerkleinert werden.</li>
+        <li>Die Mietsache ist von allem Ungeziefer frei zu halten. Bei Verdacht auf Ungeziefer kann der Vermieter eine Untersuchung der Mietsache vornehmen und gegebenenfalls Desinfektion der Mietsache zu Lasten des Mieters durchführen lassen. Bei etwaigem Auftreten von Ungeziefer sind Schadenersatz- und Mietminderungsansprüche gegen den Vermieter ausgeschlossen.</li>
+      </ol>
 
-      <h2 class="section-title">2. Ruhezeiten</h2>
-      <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+      <h2 class="section-title">§ 2 Ordnung und Sicherheit</h2>
+      <ol class="hausordnung">
+        <li>Das Aufstellen und Lagern von Gegenständen jeder Art (z. B. Waren, Brennstoffe, Verpackungen, Fahrzeuge, Kinderwagen, Schlitten, Roller u.s.w.) außerhalb der Mieträume <strong>ist nicht gestattet</strong>. Die Kosten für den Abtransport unerlaubt abgestellter Gegenstände hat der Mieter zu tragen. Fahrräder und Mopeds dürfen in den Mieträumen nicht eingestellt werden.</li>
+        <li>Keller dürfen mit offenem Licht nicht betreten und nicht zur Aufbewahrung von leicht entzündbaren Gegenständen benutzt werden.</li>
+        <li>Haus-, Hof-, Garten- und Garagentüren sind nachts abzusperren, Keller- und Treppenhausfenster zu schließen. Kellertüren sind immer verschlossen zu halten.</li>
+        <li>Tiere (z. B. Hunde, Katzen u.s.w.) dürfen nur mit schriftlicher Genehmigung gehalten werden. Diese Zustimmung kann der Vermieter jederzeit widerrufen. Der Mieter haftet für alle durch Tierhaltung entstehenden Schäden. Hunde sind an der Leine zu nehmen und dürfen Kinderspielplätze nicht betreten.</li>
+        <li>Der Mieter hat die unbefugte Benutzung von Hauseinrichtungen durch nicht zu seinem Haushalt gehörigen Personen zu verhindern.</li>
+        <li>Für Namensschilder sind einheitlich festgelegte Formen zu verwenden. <a href="#klingel">Klingelschild beantragen</a></li>
+        <li>Antennen dürfen nicht straßenseitig und nur von einem Fachmann angebracht werden. Soweit eine Gemeinschaftsantenne vorhanden ist, ist die Errichtung von Privatantennen ausgeschlossen. Das Anbringen von Markisen, Jalousien und dergleichen bedarf der schriftlichen Zustimmung des Vermieters.</li>
+        <li>Balkone, Loggien und Terrassen dürfen nicht für Abstellzwecke genutzt werden. Abläufe auf Balkonen, Loggien und Terrassen muss der Mieter von Verstopfungen freihalten. Blumenkästen dürfen nur innerhalb von Balkonbrüstungen oder Geländern angebracht werden. Grillen auf Balkonen etc. ist nicht erlaubt.</li>
+        <li>Bei längerer Abwesenheit ist der Mieter verpflichtet, beim zuständigen Hausmeister oder einem Mitbewohner einen Wohnungsschlüssel zu hinterlegen. In dringenden Fällen ist der Vermieter berechtigt, bei Abwesenheit des Mieters die Mieträume auf Kosten des Mieters öffnen zu lassen, sofern die Schlüssel dem Vermieter nicht zur Verfügung standen.</li>
+        <li>Nutzer der Tiefgarage haben diese nur zum Zweck der Abstellung ihres Fahrzeuges auf dem von ihm gemieteten Platz zu nutzen. Reinigungsarbeiten am Fahrzeug im Bereich der Tiefgarage und auf dem Gelände der WEG sind verboten. In der Tiefgarage ist das Lagern von Gegenständen verboten.</li>
+      </ol>
 
-      <h2 class="section-title">3. Treppenhaus und Gemeinschaftsflächen</h2>
-      <p>Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra,
-        est eros bibendum elit, nec luctus magna felis sollicitudin mauris.</p>
+      <h2 class="section-title">§ 3 Hausgemeinschaft und Hausruhe</h2>
+      <ol class="hausordnung">
+        <li>Der Mieter verpflichtet sich zu größter Rücksichtnahme auf die übrigen Hausbewohner und zur Unterlassung jeglicher Störung und Belästigung, insbesondere in der Zeit von <strong>22 Uhr bis 8 Uhr</strong>.</li>
+        <li>Musik und der Betrieb von Tongeräten (Radio, Tonbänder, Stereoanlagen, Fernseher u.s.w.) darf nur in Zimmerlautstärke ausgeübt werden. Der Betrieb von Tongeräten jeglicher Art auf Balkonen, Loggien und Terrassen ist nicht gestattet.</li>
+        <li>Kinderspielplätze dürfen nicht in der Zeit von <strong>12 Uhr bis 14 Uhr</strong> und <strong>nach 19 Uhr</strong> benutzt werden. Die Erziehungsberechtigten haften für das Verhalten der ihnen anvertrauten Kinder und Jugendlichen sowie deren Besucher.</li>
+      </ol>
 
-      <h2 class="section-title">4. Abfall</h2>
-      <p>Integer in mauris eu nibh euismod gravida. Duis ac tellus et risus vulputate vehicula. Donec lobortis risus
-        a elit. Etiam tempor. <a href="#infos">Hinweise zur Mülltrennung</a></p>
+      <h2 class="section-title">§ 4 Heizung und Warmwasser</h2>
+      <ol class="hausordnung">
+        <li>Die Heizperiode dauert vom 1. Oktober bis 30. April. Außerhalb dieses Zeitraumes hat der Mieter keinen Anspruch auf Beheizung, doch kann der Vermieter die Heizung in Betrieb nehmen.</li>
+        <li>Während der Heizperiode sind Türen und Fenster gut geschlossen zu halten. Lüften ist auf das Notwendigste zu beschränken.</li>
+        <li>Bei Frostgefahr dürfen Heizkörper nicht abgestellt werden, alle übrigen Wasserleitungs- und Abflussrohre der Mietsache sind gegebenenfalls zur Verhütung des Einfrierens angemessen zu schützen. Der Mieter haftet für jeden unmittelbaren Schaden, der durch das Einfrieren der Heizungs- und sanitären Installationen seiner Mietsache entsteht.</li>
+        <li>Die Heizungsversorgung wird mindestens von 7 Uhr bis 22 Uhr in Betrieb gehalten. Eine Haftung für eine bestimmte Temperatur wird vom Vermieter nicht übernommen.</li>
+        <li>Eine Gewähr für ununterbrochene Beheizung und Warmwasserversorgung während des vereinbarten Zeitraumes kann der Vermieter nicht übernehmen. Dies gilt besonders für Beschränkungen der Brennstofflieferungen, Störungen der Anlage u.s.w.</li>
+      </ol>
 
-      <h2 class="section-title">5. Sicherheit</h2>
-      <p>Ut ullamcorper, ligula eu tempor congue, eros est euismod turpis, id tincidunt sapien risus a quam.
-        Maecenas fermentum consequat mi. Donec fermentum. Pellentesque malesuada nulla a mi.</p>
+      <h2 class="section-title">§ 5 Sonstige Bestimmungen</h2>
+      <p>Zusätzliche Schilder müssen vom Vermieter genehmigt werden. Die Hausordnung ist wesentlicher Bestandteil
+        des Mietvertrages.</p>
+      <p>Der Vermieter kann die Hausordnung durch zusätzliche Vorschriften erweitern oder abändern. Durch Bekanntgabe
+        an den Mieter werden diese Vorschriften verbindlicher Bestandteil der Hausordnung.</p>
+      <p class="muted">Berlin, den 19.11.2012</p>
       </div>
     </section>
 
@@ -550,8 +576,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=16"></script>
-  <script src="js/i18n.js?v=16"></script>
-  <script src="js/app.js?v=16"></script>
+  <script src="js/config.js?v=17"></script>
+  <script src="js/i18n.js?v=17"></script>
+  <script src="js/app.js?v=17"></script>
 </body>
 </html>

@@ -527,6 +527,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--c-primary); outl
 
 /* ---------- Rechtliches ---------- */
 .legal p { margin: 0 0 14px; }
+.hausordnung { margin: 0 0 8px; padding-left: 24px; }
+.hausordnung li { margin-bottom: 10px; line-height: 1.5; }
+.hausordnung li::marker { color: var(--c-primary); font-weight: 600; }
 .legal .section-title { font-size: 22px; margin-top: 26px; }
 .legal .rule + .rule { margin-top: 8px; }
 .app-footer__legal { margin-top: 14px; }
