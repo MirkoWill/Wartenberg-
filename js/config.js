@@ -43,7 +43,7 @@ window.APP_CONFIG = {
     // Notfall-Dashboard (US 1.1)
     // Notfälle (Rohrbruch, Heizungsausfall …) laufen über den Hausmeister.
     emergencyContacts: [
-      { label: "Hausmeister", sub: "Notfälle: Wasser, Heizung, Strom", phone: "+4930000000001", icon: "🧰" }, // TODO Telefonnummer
+      { label: "Hausmeister", sub: "GS Schreier · 0151 28111111 · Notfälle: Wasser, Heizung, Strom", phone: "+4915128111111", icon: "🧰" },
       { label: "Willbrandt und Kompagnon", sub: "Hausverwaltung · 030 99270747", phone: "+493099270747", icon: "🏢" },
       { label: "Schlüsseldienst Günther", sub: "Schlossmontage J. Günther GmbH · Mo, Mi, Fr 8–18 · Di, Do 8–16 Uhr", phone: "+49304237223", icon: "🔑" }, // Nummer laut Branchenverzeichnis – bitte prüfen
       { label: "Feuerwehr / Rettung", sub: "Lebensgefahr", phone: "112", icon: "🚒", danger: true },
@@ -65,11 +65,6 @@ window.APP_CONFIG = {
       },
     ],
 
-    // Abfall- & Hauskalender (US 1.2) – öffentliche iCal-Adresse des Google Kalenders.
-    // Google Kalender → Einstellungen → "Öffentliche Adresse im iCal-Format".
-    calendarIcsUrl: "https://calendar.google.com/calendar/ical/TODO%40group.calendar.google.com/public/basic.ics", // TODO
-    calendarWebUrl: "", // optional: Link zur Web-Ansicht des Kalenders
-
     // Live-ÖPNV (US 1.3) – Bus 256, 893, N56.
     // Ohne "id" sucht die App die Haltestelle beim ersten Aufruf über "query" und merkt sich die ID.
     // Die gefundene ID steht in der Browser-Konsole und kann hier als id: "900…" fest eingetragen werden.
@@ -80,18 +75,95 @@ window.APP_CONFIG = {
       infoUrl: "https://www.bvg.de/en/connections/station-overview/dorfstr-lindenberger-str",
     },
 
-    // Kiez-Guide & Dokumente (US 1.4)
+    // Abfall (US 1.2) – Termine der BSR für die Wohnanlage.
+    // Neue Termine: .ics bei bsr.de herunterladen und die Datei in assets/ ersetzen.
+    waste: {
+      icsUrl: "assets/abfuhrkalender-2026.ics",
+      pdfUrl: "assets/abfuhrkalender-2026.pdf",
+      bulkyUrl: "https://www.bsr.de/sperrmuell-abholung-buchen",
+      sortingUrl: "https://www.bsr.de/abfallarten",
+      // Zuordnung Kalendereintrag → Anzeige (Stichwort im SUMMARY der .ics)
+      types: [
+        { match: "Hausmüll", label: "Hausmüll", bin: "graue Tonne", color: "#5b6770" },
+        { match: "Biogut", label: "Biogut", bin: "braune Tonne", color: "#7a3b2e" },
+        { match: "Wertstoffe", label: "Wertstoffe", bin: "gelbe Tonne", color: "#f2c200" },
+      ],
+    },
+
+    // Mülltrennung (Kurzfassung, maßgeblich sind die Angaben der BSR)
+    wasteGuide: [
+      {
+        title: "Wertstofftonne (gelb)",
+        yes: "Verpackungen aus Kunststoff, Metall und Verbundstoff: Joghurtbecher, Folien, Konservendosen, Getränkekartons, Alufolie. In Berlin auch Gegenstände aus Kunststoff oder Metall, die keine Verpackung sind, z. B. Plastikspielzeug, Kochtöpfe, Werkzeug.",
+        no: "Elektrogeräte, Batterien, Papier, Glas, Essensreste.",
+        tip: "Verpackungen nur löffelrein entleeren, nicht ausspülen. Deckel und Becher getrennt einwerfen.",
+      },
+      {
+        title: "Biogut (braune Tonne)",
+        yes: "Obst- und Gemüsereste, Speisereste (auch gekocht), Kaffeesatz und Filter, Teebeutel, Eierschalen, Schnittblumen.",
+        no: "Plastiktüten – auch keine „kompostierbaren“ Bioplastikbeutel –, Katzenstreu, Windeln, Asche.",
+        tip: "Zum Einwickeln Zeitungspapier oder Papiertüten verwenden.",
+      },
+      {
+        title: "Papier (blaue Tonne)",
+        yes: "Zeitungen, Zeitschriften, Kartons (flach gefaltet), Papiertüten, Schreibpapier.",
+        no: "Verschmutztes oder beschichtetes Papier, Kassenbons, Tapeten, Fotos, Getränkekartons (→ Wertstoffe).",
+      },
+      {
+        title: "Glas (Glascontainer)",
+        yes: "Flaschen und Gläser, getrennt nach Weiß, Braun und Grün. Andere Farben zu Grün.",
+        no: "Trinkgläser, Porzellan, Keramik, Fensterglas, Spiegel, Glühbirnen. Deckel gehören in die Wertstofftonne.",
+        tip: "Bitte nur werktags zwischen 7 und 20 Uhr einwerfen.",
+      },
+      {
+        title: "Hausmüll (graue Tonne)",
+        yes: "Hygieneartikel, Windeln, Staubsaugerbeutel, Kehricht, Zigarettenkippen, Katzenstreu, kleine Mengen Porzellan und Keramik.",
+        no: "Wertstoffe, Bioabfall, Elektrogeräte, Batterien, Farben und andere Schadstoffe.",
+      },
+      {
+        title: "Sonderfälle",
+        yes: "Elektrogeräte und Batterien: Rückgabe im Handel oder auf dem BSR-Recyclinghof. Farben, Lacke, Chemikalien: Schadstoffsammelstelle der BSR. Möbel und große Gegenstände: Sperrmüll (siehe oben).",
+      },
+    ],
+
+    // Hausordnung als eigene Seite (#hausordnung) – Text folgt, derzeit Platzhalter.
+
+    // Kiez-Guide (US 1.4)
+    kiez: [
+      {
+        group: "Supermärkte",
+        icon: "🛒",
+        places: [
+          { name: "ALDI Nord", address: "Dorfstraße 22, 13059 Berlin", note: "mit DHL Packstation 508" },
+          { name: "REWE", address: "Ernst-Barlach-Straße 19, 13059 Berlin" },
+          { name: "Penny", address: "Rostocker Str. 1, 13059 Berlin" },
+        ],
+      },
+      {
+        group: "Apotheke",
+        icon: "💊",
+        places: [
+          { name: "Amsel-Apotheke", address: "Rostocker Str. 15, 13059 Berlin" },
+        ],
+      },
+      {
+        group: "Pakete",
+        icon: "📦",
+        places: [
+          { name: "Fair Kauf", address: "Dorfstraße 25, 13059 Berlin", note: "Paketshop" },
+          { name: "DHL Packstation 508", address: "Dorfstraße 22, 13059 Berlin", note: "bei ALDI Nord" },
+        ],
+      },
+    ],
+
+    // Dokumente zum Herunterladen
     documents: [
-      { label: "Hausordnung", sub: "PDF", url: "https://drive.google.com/TODO", icon: "📄" }, // TODO
-      { label: "Mülltrennung", sub: "PDF", url: "https://drive.google.com/TODO", icon: "♻️" }, // TODO
+      { label: "Abfuhrkalender 2026", sub: "PDF der BSR", url: "assets/abfuhrkalender-2026.pdf", icon: "🗓️" },
       { label: "Visitenkarte Willbrandt und Kompagnon", sub: "Kontakt speichern (.vcf)", url: "assets/hausverwaltung.vcf", icon: "👤" },
     ],
-    kiezTips: [
-      { title: "Supermarkt", text: "TODO – Name, Adresse, Öffnungszeiten" },
-      { title: "Hausarzt", text: "TODO – Praxis, Telefon" },
-      { title: "Paketshop", text: "TODO – Adresse" },
-    ],
-    pharmacyIframeUrl: "https://www.aponet.de/apotheke/notdienstsuche",
+
+    // Apotheken-Notdienst, Postleitzahl 13059 vorausgewählt
+    pharmacyUrl: "https://www.aponet.de/notdienstsuche/13059-Berlin",
 
     // Stromzähler per WhatsApp (US 2.2) – internationales Format ohne "+" und ohne Leerzeichen.
     whatsappNumber: "493099270747",

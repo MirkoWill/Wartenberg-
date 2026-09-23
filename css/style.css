@@ -592,3 +592,54 @@ body.has-modal { overflow: hidden; }
   margin: 0 auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
 }
+
+/* ---------- Infos: Sprungmarken, Abfall, Kiez ---------- */
+.jump { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.jump a {
+  padding: 8px 14px;
+  border: 1.5px solid var(--c-primary);
+  border-radius: 999px;
+  color: var(--c-primary);
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: none;
+}
+.section-title[id] { scroll-margin-top: 76px; }
+.subsection-title { margin: 22px 0 10px; font-size: 18px; font-weight: 700; color: var(--c-heading); }
+
+.pickups { list-style: none; margin: 4px 0 16px; padding: 0; }
+.pickup { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--c-border); }
+.pickup:last-child { border-bottom: 0; }
+.pickup__dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .15); }
+.pickup__what strong { display: block; color: var(--c-heading); }
+.pickup__what .muted { font-size: 15px; }
+.pickup__when { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+.rule__body { padding: 0 16px 6px; }
+.rule__body p { padding: 0; margin: 0 0 10px; }
+.yes { color: var(--c-ok); }
+.no { color: var(--c-danger); }
+
+.place-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.place {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+.place__body { flex: 1; min-width: 0; }
+.place__name { display: block; font-weight: 700; color: var(--c-heading); }
+.place__addr { display: block; font-size: 15px; color: var(--c-muted); }
+
+.link-list--more { margin-top: 10px; }
+.link-item--page::after { content: "›"; font-size: 24px; }
+.notice {
+  padding: 12px 14px;
+  background: var(--c-lime);
+  color: #151515;
+  border-radius: var(--radius);
+  font-weight: 600;
+}

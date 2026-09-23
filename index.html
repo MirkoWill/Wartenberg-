@@ -63,27 +63,86 @@
       <a class="btn btn--ghost btn--block transit-info" id="transitInfo" href="#" target="_blank" rel="noopener" hidden>Fahrplan bei der BVG ansehen</a>
     </section>
 
-    <!-- ============ EPIC 1 – US 1.2 + 1.4: Kalender, Dokumente, Kiez ============ -->
+    <!-- ============ EPIC 1 – US 1.2 + 1.4: Abfall, Hausordnung, Kiez, Apotheke ============ -->
     <section class="view" data-view="infos" data-title="Infos" hidden>
-      <div class="card card--accent">
-        <h2 class="card__title">📅 Abfall- &amp; Hauskalender</h2>
-        <p>Müllabfuhr, Treppenhausreinigung und Termine der Wohnanlage direkt im eigenen Handy-Kalender.</p>
-        <a class="btn btn--primary btn--block" id="calendarSubscribe" href="#">Kalender abonnieren</a>
-        <a class="btn btn--ghost btn--block" id="calendarDownload" href="#" download>Als .ics-Datei herunterladen</a>
-        <a class="link small" id="calendarWeb" href="#" target="_blank" rel="noopener" hidden>Kalender im Browser ansehen</a>
+      <nav class="jump" aria-label="Themen auf dieser Seite">
+        <a href="#infos" data-jump="abfall">Abfall</a>
+        <a href="#infos" data-jump="kiez">Kiez</a>
+        <a href="#infos" data-jump="apotheke">Apotheke</a>
+        <a href="#hausordnung">Hausordnung</a>
+      </nav>
+
+      <!-- Abfall -->
+      <h2 class="section-title" id="abfall">Abfall</h2>
+      <div class="card">
+        <h3 class="card__title">Nächste Abholungen</h3>
+        <ul class="pickups" id="pickupList"><li class="muted">Lade Termine …</li></ul>
+        <a class="btn btn--primary btn--block" id="wasteSubscribe" href="#">Termine in den Kalender übernehmen</a>
+        <a class="btn btn--ghost btn--block" id="wastePdf" href="#" target="_blank" rel="noopener">Abfuhrkalender 2026 (PDF)</a>
       </div>
 
-      <h2 class="section-title">Dokumente</h2>
-      <ul class="link-list" id="documentList"></ul>
+      <div class="card">
+        <h3 class="card__title">Sperrmüll</h3>
+        <p>Möbel, Matratzen und andere große Gegenstände holt die BSR gegen Gebühr ab. Den Termin buchen Sie direkt online.</p>
+        <a class="btn btn--primary btn--block" id="bulkyLink" href="#" target="_blank" rel="noopener">Sperrmüll-Abholung bei der BSR buchen</a>
+      </div>
 
-      <h2 class="section-title">Kiez-Guide</h2>
-      <div class="rules" id="kiezList"></div>
+      <h3 class="subsection-title">Richtig trennen – was gehört wohin?</h3>
+      <div class="rules" id="wasteGuide"></div>
+      <a class="link small" id="sortingLink" href="#" target="_blank" rel="noopener">Alle Abfallarten von A bis Z bei der BSR</a>
 
-      <h2 class="section-title">Apotheken-Notdienst</h2>
+      <!-- Kiez -->
+      <h2 class="section-title" id="kiez">Kiez-Guide</h2>
+      <div id="kiezList"></div>
+
+      <!-- Apotheken-Notdienst -->
+      <h2 class="section-title" id="apotheke">Apotheken-Notdienst</h2>
+      <p class="muted small">Notdienst-Apotheken rund um 13059 Berlin, tagesaktuell von aponet.de.</p>
       <div class="card iframe-card">
-        <iframe id="pharmacyFrame" title="Apotheken-Notdienst" loading="lazy" referrerpolicy="no-referrer"></iframe>
+        <iframe id="pharmacyFrame" title="Apotheken-Notdienst 13059 Berlin" loading="lazy" referrerpolicy="no-referrer"></iframe>
         <a class="btn btn--ghost btn--block" id="pharmacyLink" href="#" target="_blank" rel="noopener">In neuem Fenster öffnen</a>
       </div>
+
+      <!-- Dokumente -->
+      <h2 class="section-title">Dokumente</h2>
+      <ul class="link-list">
+        <li>
+          <a class="link-item link-item--page" href="#hausordnung">
+            <span class="link-item__icon" aria-hidden="true">📘</span>
+            <span class="link-item__body">
+              <span class="link-item__label">Hausordnung</span>
+              <span class="link-item__sub">Direkt in der App lesen</span>
+            </span>
+          </a>
+        </li>
+      </ul>
+      <ul class="link-list link-list--more" id="documentList"></ul>
+    </section>
+
+    <!-- ============ Hausordnung (Text folgt – derzeit Platzhalter) ============ -->
+    <section class="view legal" data-view="hausordnung" data-title="Hausordnung" data-parent="infos" hidden>
+      <p class="notice">Vorläufiger Platzhaltertext – die gültige Hausordnung wird in Kürze hier veröffentlicht.</p>
+
+      <h2 class="section-title">1. Allgemeines</h2>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
+        dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.</p>
+
+      <h2 class="section-title">2. Ruhezeiten</h2>
+      <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+      <h2 class="section-title">3. Treppenhaus und Gemeinschaftsflächen</h2>
+      <p>Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra,
+        est eros bibendum elit, nec luctus magna felis sollicitudin mauris.</p>
+
+      <h2 class="section-title">4. Abfall</h2>
+      <p>Integer in mauris eu nibh euismod gravida. Duis ac tellus et risus vulputate vehicula. Donec lobortis risus
+        a elit. Etiam tempor. <a href="#infos">Hinweise zur Mülltrennung</a></p>
+
+      <h2 class="section-title">5. Sicherheit</h2>
+      <p>Ut ullamcorper, ligula eu tempor congue, eros est euismod turpis, id tincidunt sapien risus a quam.
+        Maecenas fermentum consequat mi. Donec fermentum. Pellentesque malesuada nulla a mi.</p>
     </section>
 
     <!-- ============ EPIC 2: Service-Übersicht ============ -->
@@ -302,8 +361,7 @@
           werden Ihre Eingaben, ggf. ein Foto sowie die gewählte Adresse an Google übermittelt und in unserem
           Google-Workspace-Konto (Google Tabellen / Google Drive) gespeichert (Google Ireland Limited, Gordon House,
           Barrow Street, Dublin 4, Irland; Muttergesellschaft Google LLC, USA). Fotos werden nicht öffentlich
-          freigegeben. Auch beim Öffnen von Dokumenten (PDF) und beim Abonnieren des Hauskalenders werden Daten
-          an Google übermittelt.</p>
+          freigegeben.</p>
       </details>
       <details class="rule">
         <summary>Abfahrtszeiten – transport.rest</summary>
@@ -322,6 +380,12 @@
         <p>Die Funktion „Zugang Stromzähler“ öffnet WhatsApp mit einem vorausgefüllten Text (WhatsApp Ireland
           Limited bzw. Meta Platforms, Inc., USA). Die Nachricht wird erst gesendet, wenn Sie dies in WhatsApp selbst
           bestätigen. Telefonnummern werden über die Telefon-App Ihres Geräts angerufen.</p>
+      </details>
+      <details class="rule">
+        <summary>Links zu externen Angeboten</summary>
+        <p>Die App enthält Links, z. B. zur Berliner Stadtreinigung (Sperrmüll, Abfallarten), zur BVG und zu
+          Google Maps (Kartenansicht im Kiez-Guide). Erst wenn Sie einen solchen Link antippen, wird die jeweilige
+          Seite aufgerufen; dabei gelten die Datenschutzbestimmungen des jeweiligen Anbieters.</p>
       </details>
       <details class="rule">
         <summary>Speicherung auf Ihrem Gerät</summary>
