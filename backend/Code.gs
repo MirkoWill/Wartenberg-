@@ -49,7 +49,7 @@ function setup() {
   Object.values(CONFIG.SHEETS).forEach((def) => {
     const sheet = ss.getSheetByName(def.name) || ss.insertSheet(def.name);
     sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers])
-      .setFontWeight("bold").setBackground("#e4f0f2");
+      .setFontWeight("bold").setBackground("#eef0e6");
     sheet.setFrozenRows(1);
   });
 
