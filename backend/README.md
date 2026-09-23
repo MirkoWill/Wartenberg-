@@ -70,6 +70,24 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 - **Fotos** liegen im privaten Drive-Ordner und sind **nicht öffentlich**; der Link in der Tabelle
   funktioniert nur für Sie bzw. für Personen, mit denen Sie den Ordner teilen.
 
+## Fehlersuche: Es kommen keine E-Mails an
+
+1. **Aktuellen Code eingespielt?** Benachrichtigungen bei Zählermeldungen gibt es erst ab der Version mit der
+   Funktion `testMail`. Sonst: Code ersetzen, speichern, **neue Version bereitstellen** (siehe oben).
+2. **testMail ausführen:** Im Editor oben die Funktion **testMail** wählen → **▷ Ausführen** → unten erscheint
+   das Ausführungsprotokoll.
+   - „NOTIFY_EMAIL ist NICHT gesetzt“ → Script-Eigenschaft fehlt oder ist falsch geschrieben
+     (exakt `NOTIFY_EMAIL`, Großbuchstaben, Unterstrich).
+   - „Testmail an … verschickt“ → Postfach prüfen, auch **Spam**, **„Alle Nachrichten“** und **„Gesendet“**.
+   - Fehlermeldung zu Berechtigungen → einmal **Berechtigungen prüfen → Zulassen** (wie bei der Einrichtung).
+3. **Empfänger = Absender?** Das Script sendet von dem Konto, dem die Tabelle gehört (info@willbrandt-kompagnon.de).
+   Mails an genau diese Adresse zeigt Gmail oft nur unter „Gesendet“. Besser eine andere Adresse eintragen,
+   z. B. service@willbrandt-kompagnon.de.
+4. **Welche Aktionen senden eine Mail?** Techniker-Termin, Klingelschild, Mängelmeldung, Wasserzähler und
+   „Erledigt“-Meldungen des Hausmeisters. Die Stromzähler-Anfrage läuft über WhatsApp und sendet keine Mail.
+5. **Protokoll ansehen:** Im Apps-Script-Editor links **Ausführungen** (Uhr-Symbol) – dort stehen Fehler wie
+   „E-Mail fehlgeschlagen: …“ mit Grund.
+
 ## Sicherheit & Datenschutz
 
 - Eingaben werden serverseitig geprüft (Pflichtfelder, Werktags-Regel, Bildtyp, max. 6 MB).
