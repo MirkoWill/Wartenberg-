@@ -83,5 +83,4 @@ Nach Änderungen an Dateien `CACHE_VERSION` in `sw.js` hochzählen, damit Nutzer
 - Ort des Hauptwasserhahns je Haus und weitere Verhaltensregeln
 - Jährlich: neuen Abfuhrkalender (.ics + PDF) von bsr.de in `assets/` ablegen und in `js/config.js` verlinken
 - Optional: VBB-Haltestellen-ID fest eintragen (wird sonst automatisch per Name gesucht)
-- Text der Hausordnung (derzeit Platzhalter in `index.html`)
 - `API_URL` der Apps-Script-Web-App (Einrichtung: `backend/README.md`)
