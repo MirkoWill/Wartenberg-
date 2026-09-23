@@ -22,6 +22,7 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 | US 2.2 Stromzähler | `#strom` | WhatsApp-Deep-Link `wa.me` mit vorausgefülltem Text |
 | US 2.3 Elektroraum | `#elektro` | Datum ≥ 2 Werktage, Sa/So werden abgelehnt und geleert |
 | US 2.4 Klingelschild / Mangel | `#klingel`, `#mangel` | POST ans Backend, Mangel mit optionalem Foto |
+| Rechtliches | `#impressum`, `#datenschutz` | Impressum, Datenschutzerklärung; Zustimmungsdialog bei jedem App-Start (Sitzung). Vor der Zustimmung werden keine externen Dienste geladen; bei Ablehnung Kontaktdaten und Notrufnummern |
 
 ## Struktur
 

@@ -73,9 +73,11 @@
      ====================================================================== */
 
   const DEFAULT_VIEW = "notfall";
+  const LEGAL_VIEWS = ["impressum", "datenschutz"]; // immer erreichbar, auch ohne Zustimmung
   const viewEnterHooks = {};
   const viewLeaveHooks = {};
   let currentView = null;
+  let lastAppView = DEFAULT_VIEW;
 
   function showView(name) {
     const view = $(`.view[data-view="${name}"]`) || $(`.view[data-view="${DEFAULT_VIEW}"]`);
@@ -100,8 +102,74 @@
     back.onclick = () => { location.hash = parent; };
 
     currentView = viewName;
+    if (!LEGAL_VIEWS.includes(viewName)) lastAppView = viewName;
     window.scrollTo(0, 0);
-    if (viewEnterHooks[viewName]) viewEnterHooks[viewName]();
+    updateConsentUi();
+    // Externe Dienste (Abfahrten, aponet) erst nach Zustimmung laden.
+    if (hasConsent() && viewEnterHooks[viewName]) viewEnterHooks[viewName]();
+  }
+
+  /* ======================================================================
+     Datenschutz-Zustimmung – bei jedem App-Start (gilt für die Sitzung)
+     ====================================================================== */
+
+  const CONSENT_KEY = "mieterapp.consent";
+  const CONSENT_VERSION = "2026-09"; // bei Änderung der Hinweise hochzählen
+  let consentGiven = false;
+
+  function hasConsent() {
+    if (consentGiven) return true;
+    try { consentGiven = sessionStorage.getItem(CONSENT_KEY) === CONSENT_VERSION; } catch (e) { /* blockiert */ }
+    return consentGiven;
+  }
+
+  function updateConsentUi() {
+    const needed = !hasConsent();
+    const onLegalPage = LEGAL_VIEWS.includes(currentView);
+    const dialog = $("#consent");
+    const wasHidden = dialog.hidden;
+    dialog.hidden = !needed || onLegalPage;
+    $("#consentReturn").hidden = !needed || !onLegalPage;
+    document.body.classList.toggle("has-modal", !dialog.hidden);
+    if (wasHidden && !dialog.hidden) {
+      showConsentStep("ask");
+      $("#consentTitle").focus();
+    }
+  }
+
+  function showConsentStep(step) {
+    $("#consentAsk").hidden = step !== "ask";
+    $("#consentDeclined").hidden = step !== "declined";
+    $("#consent").scrollTop = 0;
+  }
+
+  function initConsent() {
+    const check = $("#consentCheck");
+    const accept = $("#consentAccept");
+    $("#consentTitle").tabIndex = -1;
+    check.addEventListener("change", () => { accept.disabled = !check.checked; });
+
+    accept.addEventListener("click", () => {
+      if (!check.checked) return;
+      consentGiven = true;
+      try { sessionStorage.setItem(CONSENT_KEY, CONSENT_VERSION); } catch (e) { /* nur für diese Seite */ }
+      updateConsentUi();
+      if (viewEnterHooks[currentView]) viewEnterHooks[currentView]();
+    });
+    $("#consentDecline").addEventListener("click", () => showConsentStep("declined"));
+    $("#consentBack").addEventListener("click", () => showConsentStep("ask"));
+    $("#consentReturn").addEventListener("click", (e) => {
+      e.preventDefault();
+      location.hash = lastAppView;
+    });
+    // Links zu Impressum/Datenschutz im Dialog: Dialog ausblenden, Seite zeigen.
+    $$("#consent a[href^='#']").forEach((a) => a.addEventListener("click", () => {
+      $("#consent").hidden = true;
+    }));
+
+    $("#consentEmergency").innerHTML = contactItems(
+      OBJ.emergencyContacts.filter((c) => c.danger || /hausmeister/i.test(c.label))
+    );
   }
 
   function initRouter() {
@@ -135,7 +203,12 @@
 
   // US 1.1 – Notfall-Dashboard
   function renderEmergency() {
-    $("#emergencyList").innerHTML = OBJ.emergencyContacts.map((c) => `
+    $("#emergencyList").innerHTML = contactItems(OBJ.emergencyContacts);
+    $("#emergencyRules").innerHTML = renderAccordion(OBJ.emergencyRules, true);
+  }
+
+  function contactItems(list) {
+    return list.map((c) => `
       <li>
         <a class="contact${c.danger ? " contact--danger" : ""}" href="tel:${esc(c.phone.replace(/[^\d+]/g, ""))}">
           <span class="contact__icon" aria-hidden="true">${esc(c.icon || "📞")}</span>
@@ -146,8 +219,6 @@
           <span class="contact__call" aria-hidden="true">📞</span>
         </a>
       </li>`).join("");
-
-    $("#emergencyRules").innerHTML = renderAccordion(OBJ.emergencyRules, true);
   }
 
   // US 1.2 – Kalender abonnieren
@@ -330,7 +401,7 @@
     $("#transitRefresh").addEventListener("click", loadDepartures);
     // Nach Rückkehr in die App sofort aktualisieren.
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && currentView === "oepnv") loadDepartures();
+      if (document.visibilityState === "visible" && currentView === "oepnv" && hasConsent()) loadDepartures();
     });
   }
 
@@ -530,6 +601,11 @@
    * den Apps Script nicht beantworten kann. Im Script: JSON.parse(e.postData.contents).
    */
   async function postToBackend(payload) {
+    if (!hasConsent()) {
+      const err = new Error("Keine Zustimmung");
+      err.userMessage = "Bitte stimmen Sie zuerst den Datenschutzhinweisen zu.";
+      throw err;
+    }
     if (!CFG.API_URL) {
       console.info("[Demo-Modus] POST-Payload:", payload);
       await new Promise((r) => setTimeout(r, 600));
@@ -689,6 +765,7 @@
     initDefectForm();
     initPhotoPreviews();
 
+    initConsent();
     initRouter();
 
     if ("serviceWorker" in navigator) {
