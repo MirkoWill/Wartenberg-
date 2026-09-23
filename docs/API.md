@@ -92,3 +92,10 @@ Das Backend ermittelt die Hausmeister-ID aus dem Token; ein mitgeschicktes `user
 Auftragsliste: `GET <API_URL>?action=getTasks&token=…` →
 `{ "ok": true, "tasks": [{ "id", "type", "status", "house", "entrance", "wohnung", "date", "details", "ort" }] }`
 (alle Tickets, deren Status nicht `erledigt` ist, sortiert nach Termin).
+
+## Status und Aktuelles (GET)
+
+- `GET <API_URL>?action=status&ids=T-…,E-…` → `{ ok, items: [{ id, kind, type, status, created, done?, count? }] }`
+  (max. 20 IDs, nur Art/Status/Datum, keine personenbezogenen Daten)
+- `GET <API_URL>?action=news&obj=lind6` → `{ ok, items: [{ title, text, important, from, to }] }`
+  (aktive Einträge aus dem Blatt „Aktuelles“, gefiltert nach Zeitraum und Aufgang)

@@ -22,6 +22,9 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 | US 2.2 Stromzähler | `#strom` | WhatsApp-Deep-Link `wa.me` mit vorausgefülltem Text |
 | US 2.3 Elektroraum | `#elektro` | Datum ≥ 2 Werktage, Sa/So werden abgelehnt und geleert |
 | US 2.4 Klingelschild / Mangel | `#klingel`, `#mangel` | POST ans Backend, Mangel mit optionalem Foto |
+| Meine Meldungen | `#meldungen` | Ticket-/Erfassungsnummern werden auf dem Gerät gemerkt, Status per `action=status` |
+| Aktuelles | `#notfall` (oben) | Hinweise aus dem Blatt „Aktuelles“, je Aufgang filterbar |
+| Mehrsprachigkeit | Kopfzeile, Zustimmung | DE, EN, RU, UK, CS – Wörterbuch in `js/i18n.js` (Schlüssel = deutscher Text); Impressum/Datenschutz/Hausordnung nur Deutsch |
 | Rechtliches | `#impressum`, `#datenschutz` | Impressum, Datenschutzerklärung; Zustimmungsdialog bei jedem App-Start (Sitzung). Vor der Zustimmung werden keine externen Dienste geladen; bei Ablehnung Kontaktdaten und Notrufnummern |
 
 ## Struktur

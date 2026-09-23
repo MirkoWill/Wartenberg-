@@ -6,13 +6,22 @@
    ========================================================================== */
 
 /* ---------- Schriften (lokal eingebunden, keine Verbindung zu Google) ---------- */
-@font-face { font-family: "Playfair Display"; font-weight: 400; font-display: swap; src: url("../fonts/playfair-display-latin-400-normal.woff2") format("woff2"); }
-@font-face { font-family: "Playfair Display"; font-weight: 600; font-display: swap; src: url("../fonts/playfair-display-latin-600-normal.woff2") format("woff2"); }
-@font-face { font-family: "Source Sans 3"; font-weight: 400; font-display: swap; src: url("../fonts/source-sans-3-latin-400-normal.woff2") format("woff2"); }
-@font-face { font-family: "Source Sans 3"; font-weight: 600; font-display: swap; src: url("../fonts/source-sans-3-latin-600-normal.woff2") format("woff2"); }
-@font-face { font-family: "Source Sans 3"; font-weight: 700; font-display: swap; src: url("../fonts/source-sans-3-latin-700-normal.woff2") format("woff2"); }
-@font-face { font-family: "Oswald"; font-weight: 400; font-display: swap; src: url("../fonts/oswald-latin-400-normal.woff2") format("woff2"); }
-@font-face { font-family: "Oswald"; font-weight: 600; font-display: swap; src: url("../fonts/oswald-latin-600-normal.woff2") format("woff2"); }
+/* Zusatz-Zeichensätze (Tschechisch, Kyrillisch) lädt der Browser nur bei Bedarf (unicode-range). */
+@font-face { font-family: "Playfair Display"; font-weight: 400; font-display: swap; src: url("../fonts/playfair-display-latin-400-normal.woff2") format("woff2"); unicode-range: ; }
+@font-face { font-family: "Playfair Display"; font-weight: 600; font-display: swap; src: url("../fonts/playfair-display-latin-600-normal.woff2") format("woff2"); unicode-range: ; }
+@font-face { font-family: "Playfair Display"; font-weight: 400; font-display: swap; src: url("../fonts/playfair-display-latin-ext-400-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Playfair Display"; font-weight: 400; font-display: swap; src: url("../fonts/playfair-display-cyrillic-400-normal.woff2") format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: "Source Sans 3"; font-weight: 400; font-display: swap; src: url("../fonts/source-sans-3-latin-400-normal.woff2") format("woff2"); unicode-range: ; }
+@font-face { font-family: "Source Sans 3"; font-weight: 400; font-display: swap; src: url("../fonts/source-sans-3-latin-ext-400-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Source Sans 3"; font-weight: 400; font-display: swap; src: url("../fonts/source-sans-3-cyrillic-400-normal.woff2") format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: "Source Sans 3"; font-weight: 600; font-display: swap; src: url("../fonts/source-sans-3-latin-600-normal.woff2") format("woff2"); unicode-range: ; }
+@font-face { font-family: "Source Sans 3"; font-weight: 600; font-display: swap; src: url("../fonts/source-sans-3-latin-ext-600-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Source Sans 3"; font-weight: 600; font-display: swap; src: url("../fonts/source-sans-3-cyrillic-600-normal.woff2") format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: "Source Sans 3"; font-weight: 700; font-display: swap; src: url("../fonts/source-sans-3-latin-700-normal.woff2") format("woff2"); unicode-range: ; }
+@font-face { font-family: "Source Sans 3"; font-weight: 700; font-display: swap; src: url("../fonts/source-sans-3-latin-ext-700-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Source Sans 3"; font-weight: 700; font-display: swap; src: url("../fonts/source-sans-3-cyrillic-700-normal.woff2") format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: "Oswald"; font-weight: 400; font-display: swap; src: url("../fonts/oswald-latin-400-normal.woff2") format("woff2"); unicode-range: ; }
+@font-face { font-family: "Oswald"; font-weight: 600; font-display: swap; src: url("../fonts/oswald-latin-600-normal.woff2") format("woff2"); unicode-range: ; }
 
 /* Farben von willbrandt-kompagnon.de */
 :root {
@@ -713,3 +722,89 @@ body.has-modal { overflow: hidden; }
 .meter__head legend { width: auto; }
 input[type="date"] { min-width: 0; max-width: 100%; }
 .field-row > * { min-width: 0; }
+
+/* ---------- Sprachwahl ---------- */
+.hero__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.lang { margin-left: auto; }
+.lang__btn {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid rgba(227, 242, 179, .5);
+  border-radius: 999px;
+  color: var(--c-lime);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+.lang__btn::-webkit-details-marker { display: none; }
+.lang[open] { flex-basis: 100%; }
+.lang[open] .lang__btn { display: inline-block; margin-left: auto; }
+.lang[open] summary { text-align: right; }
+.lang__menu { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+.lang__opt {
+  padding: 8px 14px;
+  border: 1.5px solid var(--c-lime);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-lime);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lang__opt.is-active { background: var(--c-lime); color: #151515; }
+.consent__langs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.consent__langs .lang__opt { border-color: var(--c-primary); color: var(--c-primary); font-size: 15px; padding: 6px 12px; }
+.consent__langs .lang__opt.is-active { background: var(--c-primary); color: var(--c-primary-ink); }
+body.lang-de .i18n-note { display: none; }
+
+/* ---------- Aktuelles ---------- */
+.news { margin-bottom: 22px; }
+.news__heading { margin: 0 0 10px; font-family: var(--font-serif); font-weight: 400; font-size: 26px; color: var(--c-primary); }
+.news__item {
+  padding: 14px 16px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-left: 4px solid var(--c-primary);
+  border-radius: var(--radius);
+}
+.news__item + .news__item { margin-top: 10px; }
+.news__item--important { border-color: var(--c-danger); border-left-color: var(--c-danger); background: var(--c-danger-soft); }
+.news__flag {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--c-danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.news__title { margin: 0 0 4px; font-size: 19px; color: var(--c-heading); }
+.news__text { margin: 0; white-space: pre-line; }
+.news__date { margin: 6px 0 0; font-size: 14px; color: var(--c-muted); }
+
+/* ---------- Meine Meldungen ---------- */
+.status-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; }
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+.status-item__body { flex: 1; min-width: 0; }
+.status-item__type { display: block; font-weight: 700; color: var(--c-heading); }
+.status-item__meta { display: block; font-size: 14px; color: var(--c-muted); font-variant-numeric: tabular-nums; }
+.badge { flex: none; padding: 4px 10px; border-radius: 999px; font-size: 14px; font-weight: 700; background: var(--c-primary-soft); color: var(--c-heading); }
+.badge--offen, .badge--eingegangen { background: #fff1c7; color: #6b4d00; }
+.badge--in-Arbeit { background: #dbe9f7; color: #16426b; }
+.badge--erledigt, .badge--geprüft { background: #dcefd2; color: #2c5a17; }
+.badge--unbekannt { background: var(--c-danger-soft); color: var(--c-danger); }
+.status-lookup { margin-top: 28px; }
+.tile--status { border-top-color: var(--c-heading); }
