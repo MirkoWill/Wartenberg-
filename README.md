@@ -15,9 +15,9 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 | Story | Ansicht | Umsetzung |
 |---|---|---|
 | US 1.1 Notfall-Dashboard | `#notfall` | Klickbare `tel:`-Links, aufklappbare Verhaltensregeln |
-| US 1.2 Hauskalender | `#infos` | `webcal://`-Abo und `.ics`-Download des Google Kalenders |
+| US 1.2 Abfallkalender | `#infos` | Nächste Abholungen aus der BSR-`.ics` (`assets/abfuhrkalender-2026.ics`), Kalender-Abo per `webcal://`, PDF, Sperrmüll-Buchung, Trennhilfe |
 | US 1.3 Live-ÖPNV | `#oepnv` | transport.rest (VBB), Verspätung rot/grün, Auto-Refresh 60 s (nur solange sichtbar) |
-| US 1.4 Kiez & Dokumente | `#infos` | Drive-PDF-Links, `.vcf`-Visitenkarte, aponet-iFrame mit Fallback-Link |
+| US 1.4 Kiez & Dokumente | `#infos`, `#hausordnung` | Supermärkte, Apotheke, Pakete mit Kartenlink; Hausordnung als Seite; `.vcf`-Visitenkarte; aponet-Notdienst mit PLZ 13059 |
 | US 2.1 Wasserzähler | `#wasser` | Formular + Kamera-Foto → verkleinert, Base64, POST |
 | US 2.2 Stromzähler | `#strom` | WhatsApp-Deep-Link `wa.me` mit vorausgefülltem Text |
 | US 2.3 Elektroraum | `#elektro` | Datum ≥ 2 Werktage, Sa/So werden abgelehnt und geleert |
@@ -76,9 +76,8 @@ Nach Änderungen an Dateien `CACHE_VERSION` in `sw.js` hochzählen, damit Nutzer
 
 ## Offene Platzhalter (`TODO` in `js/config.js`, `assets/hausverwaltung.vcf`)
 
-- Telefonnummer des Hausmeisters (Notfälle)
 - Ort des Hauptwasserhahns je Haus und weitere Verhaltensregeln
-- Öffentliche iCal-Adresse des Google Kalenders
+- Jährlich: neuen Abfuhrkalender (.ics + PDF) von bsr.de in `assets/` ablegen und in `js/config.js` verlinken
 - Optional: VBB-Haltestellen-ID fest eintragen (wird sonst automatisch per Name gesucht)
-- Google-Drive-Links (Hausordnung usw.) und Kiez-Tipps
+- Text der Hausordnung (derzeit Platzhalter in `index.html`)
 - `API_URL` der Apps-Script-Web-App (Einrichtung: `backend/README.md`)

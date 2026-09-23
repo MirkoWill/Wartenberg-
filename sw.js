@@ -3,7 +3,7 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v8";
+const CACHE_VERSION = "mieterapp-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./assets/hausverwaltung.vcf",
+  "./assets/abfuhrkalender-2026.ics",
   "./fonts/playfair-display-latin-400-normal.woff2",
   "./fonts/playfair-display-latin-600-normal.woff2",
   "./fonts/source-sans-3-latin-400-normal.woff2",

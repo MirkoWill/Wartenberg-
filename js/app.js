@@ -204,7 +204,7 @@
   // US 1.1 – Notfall-Dashboard
   function renderEmergency() {
     $("#emergencyList").innerHTML = contactItems(OBJ.emergencyContacts);
-    $("#emergencyRules").innerHTML = renderAccordion(OBJ.emergencyRules, true);
+    $("#emergencyRules").innerHTML = renderAccordion(OBJ.emergencyRules, false);
   }
 
   function contactItems(list) {
@@ -222,19 +222,75 @@
   }
 
   // US 1.2 – Kalender abonnieren
-  function renderCalendar() {
-    const ics = OBJ.calendarIcsUrl;
-    const webcal = ics.replace(/^https?:\/\//, "webcal://");
-    $("#calendarSubscribe").href = webcal;
-    $("#calendarDownload").href = ics;
-    if (OBJ.calendarWebUrl) {
-      const web = $("#calendarWeb");
-      web.href = OBJ.calendarWebUrl;
-      web.hidden = false;
+  // US 1.2 – Abfall: nächste Abholungen aus der BSR-.ics, Kalender-Abo, Sperrmüll, Trennhilfe
+  function renderWaste() {
+    const w = OBJ.waste;
+    const icsAbs = new URL(w.icsUrl, location.href).href;
+    // webcal:// öffnet auf iPhone und vielen Android-Geräten direkt das Kalender-Abo.
+    $("#wasteSubscribe").href = icsAbs.replace(/^https?:\/\//, "webcal://");
+    $("#wastePdf").href = w.pdfUrl;
+    $("#bulkyLink").href = w.bulkyUrl;
+    $("#sortingLink").href = w.sortingUrl;
+
+    $("#wasteGuide").innerHTML = OBJ.wasteGuide.map((g) => `
+      <details class="rule">
+        <summary>${esc(g.title)}</summary>
+        <div class="rule__body">
+          ${g.no ? `<p><strong class="yes">Ja:</strong> ${esc(g.yes)}</p><p><strong class="no">Nein:</strong> ${esc(g.no)}</p>` : `<p>${esc(g.yes)}</p>`}
+          ${g.tip ? `<p class="muted">Tipp: ${esc(g.tip)}</p>` : ""}
+        </div>
+      </details>`).join("");
+  }
+
+  let pickupsLoaded = false;
+  async function loadPickups() {
+    if (pickupsLoaded) return;
+    const list = $("#pickupList");
+    try {
+      const res = await fetch(OBJ.waste.icsUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const events = parseIcsDates(await res.text());
+      const start = today();
+      const upcoming = events.filter((e) => e.date >= start).sort((a, b) => a.date - b.date);
+      pickupsLoaded = true;
+      if (!upcoming.length) {
+        list.innerHTML = `<li class="muted">Keine weiteren Termine hinterlegt. Bitte Abfuhrkalender der BSR prüfen.</li>`;
+        return;
+      }
+      list.innerHTML = upcoming.slice(0, 6).map((e) => {
+        const type = OBJ.waste.types.find((t) => e.summary.includes(t.match)) || { label: e.summary, bin: "", color: "#999" };
+        return `
+          <li class="pickup">
+            <span class="pickup__dot" style="background:${esc(type.color)}" aria-hidden="true"></span>
+            <span class="pickup__what"><strong>${esc(type.label)}</strong><span class="muted">${esc(type.bin)}</span></span>
+            <span class="pickup__when">${esc(relativeDay(e.date))}</span>
+          </li>`;
+      }).join("");
+    } catch (err) {
+      console.error("Abfuhrkalender:", err);
+      list.innerHTML = `<li class="muted">Termine konnten nicht geladen werden. Bitte das PDF öffnen.</li>`;
     }
   }
 
-  // US 1.4 – Dokumente, Kiez-Guide, Apotheken-Notdienst
+  /** Liest ganztägige Termine (DTSTART;VALUE=DATE) und SUMMARY aus einer .ics-Datei. */
+  function parseIcsDates(text) {
+    const unfolded = text.replace(/\r?\n[ \t]/g, "");
+    return unfolded.split("BEGIN:VEVENT").slice(1).map((block) => {
+      const d = /DTSTART[^:]*:(\d{4})(\d{2})(\d{2})/.exec(block);
+      const sum = /SUMMARY[^:]*:(.*)/.exec(block);
+      return d ? { date: new Date(+d[1], d[2] - 1, +d[3]), summary: sum ? sum[1].trim() : "" } : null;
+    }).filter(Boolean);
+  }
+
+  function relativeDay(date) {
+    const diff = Math.round((date - today()) / 86400000);
+    const label = date.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+    if (diff === 0) return `Heute · ${label}`;
+    if (diff === 1) return `Morgen · ${label}`;
+    return label;
+  }
+
+  // US 1.4 – Kiez-Guide, Dokumente, Apotheken-Notdienst
   function renderInfos() {
     $("#documentList").innerHTML = OBJ.documents.map((d) => `
       <li>
@@ -247,15 +303,34 @@
         </a>
       </li>`).join("");
 
-    $("#kiezList").innerHTML = renderAccordion(OBJ.kiezTips, false);
+    $("#kiezList").innerHTML = OBJ.kiez.map((g) => `
+      <h3 class="subsection-title"><span aria-hidden="true">${esc(g.icon)}</span> ${esc(g.group)}</h3>
+      <ul class="place-list">
+        ${g.places.map((pl) => `
+          <li class="place">
+            <span class="place__body">
+              <span class="place__name">${esc(pl.name)}</span>
+              <span class="place__addr">${esc(pl.address)}${pl.note ? ` · ${esc(pl.note)}` : ""}</span>
+            </span>
+            <a class="btn btn--ghost btn--small" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pl.name + ", " + pl.address)}"
+               target="_blank" rel="noopener" aria-label="${esc(pl.name)} auf der Karte zeigen">Karte</a>
+          </li>`).join("")}
+      </ul>`).join("");
 
-    $("#pharmacyLink").href = OBJ.pharmacyIframeUrl;
+    $("#pharmacyLink").href = OBJ.pharmacyUrl;
+
+    // Sprungmarken oben auf der Seite
+    $$(".jump a[data-jump]").forEach((a) => a.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById(a.dataset.jump).scrollIntoView({ behavior: "smooth" });
+    }));
   }
 
-  // iFrame erst beim ersten Öffnen der Infos-Seite laden (spart Datenvolumen).
+  // Termine und iFrame erst beim Öffnen der Infos-Seite laden (spart Datenvolumen).
   viewEnterHooks.infos = () => {
+    loadPickups();
     const frame = $("#pharmacyFrame");
-    if (!frame.src) frame.src = OBJ.pharmacyIframeUrl;
+    if (!frame.src) frame.src = OBJ.pharmacyUrl;
   };
 
   // US 1.3 – Live-ÖPNV-Monitor
@@ -754,7 +829,7 @@
 
     renderEntrancePicker();
     renderEmergency();
-    renderCalendar();
+    renderWaste();
     renderInfos();
     initTransit();
 
