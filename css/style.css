@@ -643,3 +643,73 @@ body.has-modal { overflow: hidden; }
   border-radius: var(--radius);
   font-weight: 600;
 }
+
+/* ---------- Zurück-Button (Pill mit Ziel) ---------- */
+.back-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 14px 6px 8px;
+  border: 1.5px solid var(--c-primary);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-primary);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.back-btn:active { background: var(--c-primary-soft); }
+.back-btn:not([hidden]) + .brand { margin-left: auto; font-size: 18px; }
+
+/* ---------- Direkt-Buttons in Verhaltensregeln ---------- */
+.rule__actions { padding: 0 16px 16px; }
+#transitStatus.is-warn { color: var(--c-heading); font-weight: 600; }
+
+/* ---------- Wasserzähler: Anleitung, Blöcke, Zählerkarten ---------- */
+.steps {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  background: var(--c-lime);
+  color: #151515;
+  border-radius: var(--radius);
+}
+.steps__title { margin: 0 0 6px; font-weight: 700; font-size: 17px; }
+.steps ol { margin: 0; padding-left: 22px; }
+.steps li { margin-bottom: 4px; }
+.form-block {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.form-block__title { padding: 0; font-family: var(--font-serif); font-size: 20px; color: var(--c-primary); }
+.meter { border-left: 4px solid var(--c-primary); }
+#meterList { display: grid; gap: 12px; }
+.meter__head { display: flex; justify-content: space-between; align-items: center; }
+.meter__head legend { float: left; }
+.meter__remove {
+  border: 0;
+  background: none;
+  color: var(--c-danger);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px 0;
+}
+.remember { display: flex; align-items: center; gap: 10px; font-size: 16px; cursor: pointer; }
+.remember input { width: 22px; height: 22px; min-height: 0; padding: 0; appearance: auto; accent-color: var(--c-primary); flex: none; }
+.form-block > legend, .meter__head legend { float: left; width: 100%; margin: 0; }
+.form-block > legend + * { clear: both; }
+.meter__head { clear: both; }
+.meter__head legend { width: auto; }
+input[type="date"] { min-width: 0; max-width: 100%; }
+.field-row > * { min-width: 0; }
