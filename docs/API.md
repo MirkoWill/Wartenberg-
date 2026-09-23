@@ -49,7 +49,8 @@ Fehlermeldungen des Backends (`error`) werden dem Mieter direkt angezeigt, sie s
   "ablesedatum": "2026-09-23",
   "meters": [
     { "raum": "Bad", "art": "Kalt", "zaehlernummer": "A1", "zaehlerstand": "12.5", "photo": { "name": "…", "mimeType": "image/jpeg", "data": "<Base64>" } },
-    { "raum": "Bad", "art": "Warm", "zaehlernummer": "A2", "zaehlerstand": "8.125", "photo": { … } }
+    { "raum": "Bad", "art": "Warm", "zaehlernummer": "A2", "zaehlerstand": "8.125", "photo": { … } },
+    { "raum": "Flur", "art": "Heizung", "einheit": "MWh", "zaehlernummer": "H1", "zaehlerstand": "4.321", "photo": { … } }
   ]
 }
 ```
@@ -68,7 +69,8 @@ wird der Status auf `erledigt` gesetzt (Schutz vor automatischen Link-Prüfungen
   "type": "Wasserzähler",
   "wohnung": "Whg 04",
   "raum": "Bad",
-  "art": "Kalt",                  // "Kalt" | "Warm"
+  "art": "Kalt",                  // "Kalt" | "Warm" | "Heizung"
+  "einheit": "m³",                // Wasser: "m³"; Heizung: "kWh" | "MWh" (Standard kWh)
   "zaehlernummer": "WZ-123",
   "zaehlerstand": "123.456",      // Komma wird zu Punkt normalisiert
   "name": "Müller",

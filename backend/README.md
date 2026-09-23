@@ -69,7 +69,8 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
   (*eingegangen*, bzw. *geprüft*, sobald alle Zähler der Meldung in *Zählerstände* abgehakt sind).
 - **Tickets:** Spalte *Status* per Auswahl auf `in Arbeit` / `erledigt` setzen. Alles, was nicht `erledigt` ist,
   erscheint später in der Auftragsliste des Hausmeisters.
-- **Zählerstände:** Spalte *Geprüft* nach Kontrolle des Fotos abhaken.
+- **Zählerstände:** Spalte *Geprüft* nach Kontrolle des Fotos abhaken. Art *Kalt*/*Warm* (Wasser, m³) oder
+  *Heizung* (Spalte *Einheit*: kWh oder MWh). Nach dem Update einmal **setup** ausführen (neue Spalte *Einheit*).
 - **Fotos** liegen im privaten Drive-Ordner und sind **nicht öffentlich**; der Link in der Tabelle
   funktioniert nur für Sie bzw. für Personen, mit denen Sie den Ordner teilen.
 

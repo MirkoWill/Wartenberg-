@@ -68,6 +68,19 @@ window.APP_CONFIG = {
           { type: "tel", label: "Hausmeister-Notdienst anrufen", phone: "+491794073564" },
           { type: "whatsapp", label: "Hausverwaltung per WhatsApp", text: "Wasserschaden / Rohrbruch in {label}, Wohnung: " },
         ],
+        // Anleitung: Wasser in der eigenen Wohnung abstellen (mit Grafik Hebel/Hahn)
+        guide: {
+          title: "Wasser in Ihrer Wohnung abstellen",
+          figure: "valves",
+          steps: [
+            { label: "Bad:", text: "Die Absperrhähne sitzen direkt neben den Wasserzählern, oft hinter einer Revisionsklappe." },
+            { label: "Küche:", text: "Unter der Spüle bei den Wasserzählern – meist mit Hebel." },
+            { label: "Schließen:", text: "Kalt und warm schließen. Drehgriff im Uhrzeigersinn zudrehen, Hebel quer zum Rohr stellen. Nicht mit Gewalt drehen." },
+            { label: "Heizungswasser?", text: "Tritt Wasser an Heizkörper oder Heizungsrohr aus: Hebel am Heizungszulauf im Kasten im Flur quer stellen." },
+            { label: "Strom:", text: "Steht Wasser bei Steckdosen oder Geräten, die Sicherung im Sicherungskasten ausschalten." },
+            { label: "Wasser von oben?", text: "Dann hilft Ihr Hahn nicht – sofort den Hausmeister-Notdienst anrufen und beim Nachbarn klingeln." },
+          ],
+        },
       },
       {
         title: "Stromausfall",
@@ -206,7 +219,7 @@ window.APP_CONFIG = {
     whatsappNumber: "493099270747",
 
     // Auswahl im Wasserzähler-Formular (US 2.1)
-    waterRooms: ["Bad", "Küche", "Gäste-WC", "Sonstiges"],
+    waterRooms: ["Bad", "Küche", "Gäste-WC", "Flur", "Sonstiges"],
   },
 
   /* ------------------------------------------------------------------

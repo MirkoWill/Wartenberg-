@@ -406,7 +406,7 @@
     $("#statusList").innerHTML = list.map((t) => {
       const st = statusById[t.id];
       const status = st ? st.status : null;
-      const type = (st && st.type) || t.type || (t.id[0] === "E" ? "Wasserzähler" : "Meldung");
+      const type = (st && st.type) || t.type || (t.id[0] === "E" ? "Zählerstände" : "Meldung");
       const date = new Date((st && st.created) || t.date);
       return `
         <li class="status-item">
@@ -877,7 +877,7 @@
      4. EPIC 2 – Formulare, Zähler & Services
      ====================================================================== */
 
-  // US 2.1 – Wasserzähler
+  // US 2.1 – Zählerstände (Wasser kalt/warm und Heizung)
   // Mehrere Zähler pro Meldung. Zählernummern, Raum und Art werden auf dem Gerät
   // gemerkt, damit bei der nächsten Ablesung nur noch Stand und Foto nötig sind.
   const METERS_KEY = "mieterapp.meters";
@@ -907,6 +907,12 @@
             <legend class="form-block__title meter__title">Zähler</legend>
             <button class="meter__remove" type="button" aria-label="Diesen Zähler entfernen">Entfernen</button>
           </div>
+          <div class="field">
+            <span class="field__label">Art *</span>
+            <div class="segmented segmented--3">
+              ${["Kalt", "Warm", "Heizung"].map((a, i) => `<label><input type="radio" name="art-${id}" value="${a}"${i ? "" : " required"}${(preset.art || "Kalt") === a ? " checked" : ""}><span>${a}</span></label>`).join("")}
+            </div>
+          </div>
           <div class="field-row">
             <label class="field">
               <span class="field__label">Raum *</span>
@@ -914,24 +920,20 @@
                 ${OBJ.waterRooms.map((r) => `<option value="${esc(r)}"${r === preset.raum ? " selected" : ""}>${esc(t_(r))}</option>`).join("")}
               </select>
             </label>
-            <div class="field">
-              <span class="field__label">Art *</span>
-              <div class="segmented">
-                <label><input type="radio" name="art-${id}" value="Kalt" required${preset.art !== "Warm" ? " checked" : ""}><span>Kalt</span></label>
-                <label><input type="radio" name="art-${id}" value="Warm"${preset.art === "Warm" ? " checked" : ""}><span>Warm</span></label>
-              </div>
-            </div>
-          </div>
-          <div class="field-row">
             <label class="field">
               <span class="field__label">Zählernummer *</span>
               <input data-f="zaehlernummer" required autocomplete="off" value="${esc(preset.zaehlernummer || "")}" placeholder="auf dem Zähler">
             </label>
-            <label class="field">
-              <span class="field__label">Stand (m³) *</span>
-              <input data-f="zaehlerstand" required inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,3})?" placeholder="123,456">
-            </label>
           </div>
+          <label class="field">
+            <span class="field__label"><span data-unit-label>Stand (m³)</span> *</span>
+            <span class="stand">
+              <input data-f="zaehlerstand" required inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,3})?" placeholder="123,456">
+              <select data-f="einheit" aria-label="Einheit" hidden>
+                ${["kWh", "MWh"].map((u) => `<option${u === preset.einheit ? " selected" : ""}>${u}</option>`).join("")}
+              </select>
+            </span>
+          </label>
           <label class="field">
             <span class="field__label">Foto des Zählers *</span>
             <input type="file" data-f="foto" accept="image/*" capture="environment" required>
@@ -948,6 +950,19 @@
         img.hidden = false;
       });
       $(".meter__remove", card).addEventListener("click", () => { card.remove(); renumber(); });
+
+      // Heizungszähler: Einheit kWh/MWh wählbar, Raum meist Flur.
+      const unitSel = $('[data-f="einheit"]', card);
+      const unitLabel = $("[data-unit-label]", card);
+      const syncArt = (userChange) => {
+        const heat = $('input[type="radio"]:checked', card).value === "Heizung";
+        unitSel.hidden = !heat;
+        unitLabel.textContent = heat ? t_("Stand") : t_("Stand (m³)");
+        const room = $('[data-f="raum"]', card);
+        if (userChange && heat && room.value !== "Flur" && OBJ.waterRooms.includes("Flur")) room.value = "Flur";
+      };
+      $$('input[type="radio"]', card).forEach((r) => r.addEventListener("change", () => syncArt(true)));
+      syncArt(false);
       renumber();
       return card;
     };
@@ -977,6 +992,7 @@
         meters.push({
           raum: $('[data-f="raum"]', card).value,
           art: $('input[type="radio"]:checked', card).value,
+          einheit: $('input[type="radio"]:checked', card).value === "Heizung" ? $('[data-f="einheit"]', card).value : "m³",
           zaehlernummer: $('[data-f="zaehlernummer"]', card).value.trim(),
           zaehlerstand: $('[data-f="zaehlerstand"]', card).value.trim().replace(",", "."),
           photo: await readPhoto($('[data-f="foto"]', card).files[0]),
@@ -984,7 +1000,7 @@
       }
       return {
         action: "submitMeterReadings",
-        type: "Wasserzähler",
+        type: "Zählerstände",
         wohnung: f.wohnung.value.trim(),
         name: f.name.value.trim(),
         ablesedatum: f.ablesedatum.value,
@@ -995,7 +1011,7 @@
       if (!form.elements.remember || !form.elements.remember.checked) return;
       writeJson(METERS_KEY, {
         wohnung: payload.wohnung,
-        meters: payload.meters.map(({ raum, art, zaehlernummer }) => ({ raum, art, zaehlernummer })),
+        meters: payload.meters.map(({ raum, art, einheit, zaehlernummer }) => ({ raum, art, einheit, zaehlernummer })),
       });
     });
   }
@@ -1365,8 +1381,57 @@
         <summary>${esc(fill(r.title))}</summary>
         <p>${esc(fill(r.text))}</p>
         ${r.actions ? `<div class="rule__actions">${r.actions.map(actionButton).join("")}</div>` : ""}
+        ${r.guide ? renderGuide(r.guide) : ""}
       </details>`).join("");
   }
+
+  /** Schritt-für-Schritt-Anleitung innerhalb einer Verhaltensregel. */
+  function renderGuide(g) {
+    return `
+      <div class="guide">
+        <h3 class="guide__title">${esc(g.title)}</h3>
+        ${g.figure && FIGURES[g.figure] ? FIGURES[g.figure] : ""}
+        <ol class="guide__steps">
+          ${g.steps.map((s) => `<li><strong>${esc(s.label)}</strong> <span>${esc(s.text)}</span></li>`).join("")}
+        </ol>
+      </div>`;
+  }
+
+  // Einfache Grafiken (inline SVG, Farben über CSS). Texte werden wie der Rest übersetzt.
+  const FIGURES = {
+    valves: `
+      <div class="valves" role="img" aria-label="Hebel: längs zum Rohr offen, quer zum Rohr zu. Drehgriff: im Uhrzeigersinn zudrehen.">
+        <figure class="valve">
+          <svg viewBox="0 0 120 70" aria-hidden="true">
+            <rect class="v-pipe" x="4" y="42" width="112" height="12" rx="3"/>
+            <circle class="v-body" cx="60" cy="48" r="11"/>
+            <rect class="v-lever v-ok" x="55" y="43.5" width="54" height="9" rx="4.5"/>
+            <circle class="v-hub" cx="60" cy="48" r="4"/>
+          </svg>
+          <figcaption><span class="tag tag--ok">offen</span> Hebel längs</figcaption>
+        </figure>
+        <figure class="valve">
+          <svg viewBox="0 0 120 70" aria-hidden="true">
+            <rect class="v-pipe" x="4" y="42" width="112" height="12" rx="3"/>
+            <circle class="v-body" cx="60" cy="48" r="11"/>
+            <rect class="v-lever v-stop" x="55.5" y="2" width="9" height="46" rx="4.5"/>
+            <circle class="v-hub" cx="60" cy="48" r="4"/>
+          </svg>
+          <figcaption><span class="tag tag--stop">zu</span> Hebel quer</figcaption>
+        </figure>
+        <figure class="valve">
+          <svg viewBox="0 0 120 70" aria-hidden="true">
+            <rect class="v-pipe" x="4" y="54" width="112" height="12" rx="3"/>
+            <rect class="v-body" x="56" y="36" width="8" height="20"/>
+            <circle class="v-wheel" cx="60" cy="34" r="14"/>
+            <circle class="v-hub" cx="60" cy="34" r="4"/>
+            <path class="v-arrow" d="M 38 26 A 23 23 0 0 1 82 26"/>
+            <path class="v-arrowhead" d="M 86 30 l -10 -1 l 7 -8 z"/>
+          </svg>
+          <figcaption><span class="tag tag--stop">zu</span> Drehgriff im Uhrzeigersinn</figcaption>
+        </figure>
+      </div>`,
+  };
 
   /** Direkt-Button (Anruf oder WhatsApp) für Verhaltensregeln. */
   function actionButton(a) {
