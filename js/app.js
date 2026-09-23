@@ -16,6 +16,94 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   /* ======================================================================
+     0. Sprache (Deutsch = Quelle; Übersetzungen in js/i18n.js)
+     ====================================================================== */
+
+  const I18N = window.I18N || { LANGS: [{ code: "de", label: "Deutsch", locale: "de-DE" }], T: {} };
+  const LANG_KEY = "mieterapp.lang";
+  const LANG = (() => {
+    const codes = I18N.LANGS.map((l) => l.code);
+    try {
+      const saved = localStorage.getItem(LANG_KEY);
+      if (codes.includes(saved)) return saved;
+    } catch (e) { /* egal */ }
+    const browser = (navigator.languages || [navigator.language || "de"]).map((l) => String(l).slice(0, 2).toLowerCase());
+    return browser.find((l) => codes.includes(l)) || "de";
+  })();
+  const LANG_INDEX = I18N.LANGS.findIndex((l) => l.code === LANG) - 1; // -1 = Deutsch
+  const LOCALE = () => (I18N.LANGS.find((l) => l.code === LANG) || {}).locale || "de-DE";
+  const norm = (text) => String(text).replace(/\s+/g, " ").trim();
+
+  /** Übersetzt einen deutschen Text; {name}-Platzhalter werden danach ersetzt. */
+  function t_(de, vars) {
+    let out = de;
+    if (LANG_INDEX >= 0) {
+      const entry = I18N.T[norm(de)];
+      if (entry && entry[LANG_INDEX]) out = entry[LANG_INDEX];
+    }
+    if (vars) out = out.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+    return out;
+  }
+
+  /** Übersetzt Textknoten und Attribute unterhalb von root (außer in [data-no-i18n]). */
+  function translateDom(root) {
+    if (LANG_INDEX < 0 || !root) return;
+    const skip = (el) => el && el.closest && el.closest("[data-no-i18n], script, style");
+    if (root.nodeType === 3) {
+      if (!skip(root.parentElement)) translateText(root);
+      return;
+    }
+    if (root.nodeType !== 1 || skip(root)) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((n) => { if (!skip(n.parentElement)) translateText(n); });
+    [root, ...root.querySelectorAll("[placeholder],[aria-label],[title],[alt],[data-title]")].forEach((el) => {
+      if (skip(el)) return;
+      ["placeholder", "aria-label", "title", "alt"].forEach((a) => {
+        if (el.hasAttribute && el.hasAttribute(a)) {
+          const v = el.getAttribute(a);
+          const tr = t_(v);
+          if (tr !== v) el.setAttribute(a, tr);
+        }
+      });
+    });
+  }
+
+  function translateText(node) {
+    const raw = node.nodeValue;
+    const key = norm(raw);
+    if (!key || !/[A-Za-zÄÖÜäöüß]/.test(key)) return;
+    const tr = t_(key);
+    if (tr !== key) node.nodeValue = raw.replace(raw.trim(), tr);
+  }
+
+  /** Später eingefügte Inhalte (Listen, Hinweise, Zählerkarten …) automatisch übersetzen. */
+  function watchTranslations() {
+    if (LANG_INDEX < 0) return;
+    new MutationObserver((muts) => muts.forEach((m) => m.addedNodes.forEach(translateDom)))
+      .observe(document.body, { childList: true, subtree: true });
+  }
+
+  function initLanguage() {
+    document.documentElement.lang = LANG;
+    document.body.classList.toggle("lang-de", LANG === "de");
+    $("#langCode").textContent = LANG.toUpperCase();
+    $$(".lang-options").forEach((box) => {
+      box.innerHTML = I18N.LANGS.map((l) => `
+        <button type="button" class="lang__opt${l.code === LANG ? " is-active" : ""}" data-lang="${l.code}" lang="${l.code}"
+          ${l.code === LANG ? 'aria-current="true"' : ""}>${esc(l.label)}</button>`).join("");
+    });
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest(".lang__opt");
+      if (!btn) return;
+      if (btn.dataset.lang === LANG) { $("#langMenu").open = false; return; }
+      try { localStorage.setItem(LANG_KEY, btn.dataset.lang); } catch (e2) { /* egal */ }
+      location.reload();
+    });
+  }
+
+  /* ======================================================================
      1. Objekt (Haus) bestimmen
      ====================================================================== */
 
@@ -87,8 +175,8 @@
     if (currentView && viewLeaveHooks[currentView]) viewLeaveHooks[currentView]();
 
     $$(".view").forEach((v) => { v.hidden = v !== view; });
-    $("#viewTitle").textContent = view.dataset.title;
-    document.title = `${view.dataset.title} · ${OBJ.label}`;
+    $("#viewTitle").textContent = t_(view.dataset.title);
+    document.title = `${t_(view.dataset.title)} · ${OBJ.label}`;
 
     const parent = view.dataset.parent;
     const activeTab = parent || viewName;
@@ -101,8 +189,8 @@
     back.hidden = !parent;
     if (parent) {
       const parentView = $(`.view[data-view="${parent}"]`);
-      $("#backLabel").textContent = parentView ? parentView.dataset.title : "Zurück";
-      back.setAttribute("aria-label", `Zurück zu ${$("#backLabel").textContent}`);
+      $("#backLabel").textContent = t_(parentView ? parentView.dataset.title : "Zurück");
+      back.setAttribute("aria-label", t_("Zurück zu {ziel}", { ziel: $("#backLabel").textContent }));
     }
     back.onclick = () => { location.hash = parent; };
 
@@ -176,6 +264,116 @@
       OBJ.emergencyContacts.filter((c) => c.danger || /hausmeister/i.test(c.label))
     );
   }
+
+  /* ======================================================================
+     Meine Meldungen – Nummern auf dem Gerät merken, Status beim Backend abfragen
+     ====================================================================== */
+
+  const TICKETS_KEY = "mieterapp.tickets";
+  const STATUS_LABEL = {
+    offen: "offen", "in Arbeit": "in Arbeit", erledigt: "erledigt",
+    eingegangen: "eingegangen", "geprüft": "geprüft", unbekannt: "nicht gefunden",
+  };
+
+  function rememberTicket(id, type) {
+    const list = (readJson(TICKETS_KEY) || []).filter((t) => t.id !== id);
+    list.unshift({ id, type: type || "", date: new Date().toISOString() });
+    writeJson(TICKETS_KEY, list.slice(0, 20));
+  }
+
+  function renderStatusList(statusById = {}) {
+    const list = readJson(TICKETS_KEY) || [];
+    $("#statusEmpty").hidden = list.length > 0;
+    $("#statusRefresh").hidden = !list.length;
+    $("#statusList").innerHTML = list.map((t) => {
+      const st = statusById[t.id];
+      const status = st ? st.status : null;
+      const type = (st && st.type) || t.type || (t.id[0] === "E" ? "Wasserzähler" : "Meldung");
+      const date = new Date((st && st.created) || t.date);
+      return `
+        <li class="status-item">
+          <span class="status-item__body">
+            <span class="status-item__type">${esc(t_(type))}</span>
+            <span class="status-item__meta">${esc(t.id)} · ${esc(formatDate(date))}${st && st.count ? ` · ${esc(t_("Zähler: {n}", { n: st.count }))}` : ""}</span>
+          </span>
+          <span class="badge badge--${esc((status || "loading").replace(/\s/g, "-"))}">
+            ${esc(status ? t_(STATUS_LABEL[status] || status) : "…")}
+          </span>
+        </li>`;
+    }).join("");
+  }
+
+  async function loadStatus() {
+    const list = readJson(TICKETS_KEY) || [];
+    renderStatusList();
+    if (!list.length || !CFG.API_URL) return;
+    try {
+      const url = `${CFG.API_URL}?action=status&ids=${encodeURIComponent(list.map((t) => t.id).join(","))}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const byId = {};
+      (data.items || []).forEach((i) => { byId[i.id] = i; });
+      renderStatusList(byId);
+    } catch (err) {
+      console.error("Status:", err);
+      toast(t_("Status konnte nicht geladen werden."), "error");
+    }
+  }
+
+  function initStatus() {
+    $("#statusRefresh").addEventListener("click", loadStatus);
+    $("#statusLookup").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const form = e.currentTarget;
+      if (!validate(form)) return;
+      rememberTicket(form.elements.id.value.trim().toUpperCase(), "");
+      form.reset();
+      form.classList.remove("was-validated");
+      loadStatus();
+    });
+    viewEnterHooks.meldungen = loadStatus;
+    renderStatusList();
+  }
+
+  /* ======================================================================
+     Aktuelles – Hinweise der Verwaltung (Blatt „Aktuelles“) auf der Startseite
+     ====================================================================== */
+
+  const NEWS_KEY = "mieterapp.news";
+  let newsLoadedAt = 0;
+
+  function renderNews(items) {
+    const box = $("#newsBox");
+    if (!items || !items.length) { box.hidden = true; box.innerHTML = ""; return; }
+    box.hidden = false;
+    box.innerHTML = `
+      <h2 class="news__heading">${esc(t_("Aktuelles"))}</h2>
+      ${items.map((n) => `
+        <article class="news__item${n.important ? " news__item--important" : ""}">
+          ${n.important ? `<span class="news__flag">${esc(t_("Wichtig"))}</span>` : ""}
+          ${n.title ? `<h3 class="news__title">${esc(n.title)}</h3>` : ""}
+          ${n.text ? `<p class="news__text">${esc(n.text)}</p>` : ""}
+          ${n.to ? `<p class="news__date">${esc(t_("bis"))} ${esc(formatDate(parseIsoDate(n.to)))}</p>` : ""}
+        </article>`).join("")}`;
+  }
+
+  async function loadNews() {
+    // Höchstens alle 5 Minuten neu laden; bis dahin gespeicherten Stand zeigen.
+    const cached = readJson(NEWS_KEY);
+    if (cached && cached.obj === OBJ.key) renderNews(cached.items);
+    if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
+    try {
+      const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}`);
+      const data = await res.json();
+      if (!data.ok) return;
+      newsLoadedAt = Date.now();
+      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items });
+      renderNews(data.items);
+    } catch (err) {
+      console.warn("Aktuelles:", err);
+    }
+  }
+  viewEnterHooks.notfall = loadNews;
 
   function initRouter() {
     // Ohne bekannten Aufgang zuerst die Auswahl zeigen.
@@ -259,7 +457,7 @@
       const upcoming = events.filter((e) => e.date >= start).sort((a, b) => a.date - b.date);
       pickupsLoaded = true;
       if (!upcoming.length) {
-        list.innerHTML = `<li class="muted">Keine weiteren Termine hinterlegt. Bitte Abfuhrkalender der BSR prüfen.</li>`;
+        list.innerHTML = `<li class="muted">${esc(t_("Keine weiteren Termine hinterlegt. Bitte Abfuhrkalender der BSR prüfen."))}</li>`;
         return;
       }
       list.innerHTML = upcoming.slice(0, 6).map((e) => {
@@ -273,7 +471,7 @@
       }).join("");
     } catch (err) {
       console.error("Abfuhrkalender:", err);
-      list.innerHTML = `<li class="muted">Termine konnten nicht geladen werden. Bitte das PDF öffnen.</li>`;
+      list.innerHTML = `<li class="muted">${esc(t_("Termine konnten nicht geladen werden. Bitte das PDF öffnen."))}</li>`;
     }
   }
 
@@ -289,9 +487,9 @@
 
   function relativeDay(date) {
     const diff = Math.round((date - today()) / 86400000);
-    const label = date.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
-    if (diff === 0) return `Heute · ${label}`;
-    if (diff === 1) return `Morgen · ${label}`;
+    const label = date.toLocaleDateString(LOCALE(), { weekday: "short", day: "2-digit", month: "2-digit" });
+    if (diff === 0) return `${t_("Heute")} · ${label}`;
+    if (diff === 1) return `${t_("Morgen")} · ${label}`;
     return label;
   }
 
@@ -318,7 +516,7 @@
               <span class="place__addr">${esc(pl.address)}${pl.note ? ` · ${esc(pl.note)}` : ""}</span>
             </span>
             <a class="btn btn--ghost btn--small" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pl.name + ", " + pl.address)}"
-               target="_blank" rel="noopener" aria-label="${esc(pl.name)} auf der Karte zeigen">Karte</a>
+               target="_blank" rel="noopener" aria-label="${esc(t_("{name} auf der Karte zeigen", { name: pl.name }))}">Karte</a>
           </li>`).join("")}
       </ul>`).join("");
 
@@ -354,7 +552,7 @@
     if (!force && Date.now() < transit.nextTry) return;
     transit.loading = true;
     const status = $("#transitStatus");
-    status.textContent = "Lade Abfahrten …";
+    status.textContent = t_("Lade Abfahrten …");
     status.classList.remove("is-error", "is-warn");
 
     const apis = CFG.TRANSIT_APIS;
@@ -401,7 +599,7 @@
       try {
         localStorage.setItem(TRANSIT_CACHE_KEY, JSON.stringify({ time: Date.now(), departures: result.departures }));
       } catch (e) { /* egal */ }
-      status.textContent = `Stand ${formatTime(new Date())} Uhr · aktualisiert alle ${CFG.TRANSIT_REFRESH_SECONDS} s`;
+      status.textContent = t_("Stand {zeit} Uhr · aktualisiert alle {s} s", { zeit: formatTime(new Date()), s: CFG.TRANSIT_REFRESH_SECONDS });
     } catch (err) {
       settled = true;
       transit.failures++;
@@ -410,13 +608,13 @@
       const cached = readCachedDepartures();
       if (cached) {
         renderDepartures(cached.departures);
-        status.textContent = `Live-Daten gerade nicht erreichbar – Fahrplan vom ${formatTime(new Date(cached.time))} Uhr. `
-          + `Neuer Versuch in ${Math.round(waitS / 60) || 1} min.`;
+        status.textContent = t_("Live-Daten gerade nicht erreichbar – Fahrplan vom {zeit} Uhr.", { zeit: formatTime(new Date(cached.time)) })
+          + " " + t_("Neuer Versuch in {n} min.", { n: Math.round(waitS / 60) || 1 });
         status.classList.add("is-warn");
       } else {
         $("#departures").innerHTML = "";
-        status.textContent = "Abfahrten derzeit nicht verfügbar – der kostenlose Fahrplandienst antwortet nicht. "
-          + `Neuer Versuch in ${Math.round(waitS / 60) || 1} min. (${problems.join(" · ")})`;
+        status.textContent = t_("Abfahrten derzeit nicht verfügbar – der kostenlose Fahrplandienst antwortet nicht.")
+          + " " + t_("Neuer Versuch in {n} min.", { n: Math.round(waitS / 60) || 1 }) + ` (${problems.join(" · ")})`;
         status.classList.add("is-error");
       }
     } finally {
@@ -487,7 +685,7 @@
   function renderDepartures(list) {
     const ul = $("#departures");
     if (!list.length) {
-      ul.innerHTML = `<li class="card muted">Keine Abfahrten in der nächsten Stunde.</li>`;
+      ul.innerHTML = `<li class="card muted">${esc(t_("Keine Abfahrten in der nächsten Stunde."))}</li>`;
       return;
     }
     ul.innerHTML = list.map((d) => {
@@ -496,7 +694,7 @@
       let delayHtml = "";
       if (d.cancelled) delayHtml = `<span class="departure__delay delay--late">fällt aus</span>`;
       else if (delayMin === null) delayHtml = `<span class="departure__delay muted">Plan</span>`;
-      else if (delayMin > 0) delayHtml = `<span class="departure__delay delay--late">+${delayMin} min</span>`;
+      else if (delayMin > 0) delayHtml = `<span class="departure__delay delay--late">+${delayMin} ${esc(t_("min"))}</span>`;
       else delayHtml = `<span class="departure__delay delay--ok">pünktlich</span>`;
 
       const inMin = Math.max(0, Math.round((new Date(d.when || d.plannedWhen) - Date.now()) / 60000));
@@ -507,7 +705,7 @@
         <li class="departure${d.cancelled ? " departure--cancelled" : ""}">
           <span class="departure__line" data-product="${esc(line.product || "")}">${esc(line.name || "?")}</span>
           <span class="departure__dir">${esc(d.direction || "")}
-            <span class="departure__meta">in ${inMin} min${platform}</span>
+            <span class="departure__meta">${esc(t_("in {n} min", { n: inMin }))}${platform}</span>
           </span>
           <span class="departure__time">
             <span class="departure__planned">${formatTime(planned)}</span>
@@ -564,12 +762,12 @@
     const renumber = () => {
       const cards = $$(".meter", list);
       cards.forEach((c, i) => {
-        $(".meter__title", c).textContent = `Zähler ${i + 1}`;
+        $(".meter__title", c).textContent = t_("Zähler {n}", { n: i + 1 });
         $(".meter__remove", c).hidden = cards.length === 1;
       });
       $("#addMeter").hidden = cards.length >= MAX_METERS;
       $("#waterSubmit").textContent = cards.length === 1
-        ? "Zählerstand senden" : `${cards.length} Zählerstände senden`;
+        ? t_("Zählerstand senden") : t_("{n} Zählerstände senden", { n: cards.length });
     };
 
     const addMeter = (preset = {}) => {
@@ -584,7 +782,7 @@
             <label class="field">
               <span class="field__label">Raum *</span>
               <select data-f="raum" required>
-                ${OBJ.waterRooms.map((r) => `<option${r === preset.raum ? " selected" : ""}>${esc(r)}</option>`).join("")}
+                ${OBJ.waterRooms.map((r) => `<option value="${esc(r)}"${r === preset.raum ? " selected" : ""}>${esc(t_(r))}</option>`).join("")}
               </select>
             </label>
             <div class="field">
@@ -697,7 +895,7 @@
     const refreshMin = () => {
       minDate = addWorkdays(today(), 2);
       input.min = toIsoDate(minDate);
-      defaultHint = `Frühester Termin: ${formatDateLong(minDate)}. Keine Wochenenden.`;
+      defaultHint = t_("Frühester Termin: {datum}. Keine Wochenenden.", { datum: formatDateLong(minDate) });
       if (!input.value) { hint.textContent = defaultHint; hint.classList.remove("is-error"); }
     };
     refreshMin();
@@ -707,7 +905,7 @@
     const check = () => {
       const msg = validateWorkday(input.value, minDate);
       input.setCustomValidity(msg);
-      hint.textContent = msg || (input.value ? `Gewählt: ${formatDateLong(parseIsoDate(input.value))}` : defaultHint);
+      hint.textContent = msg || (input.value ? t_("Gewählt: {datum}", { datum: formatDateLong(parseIsoDate(input.value)) }) : defaultHint);
       hint.classList.toggle("is-error", !!msg);
       return !msg;
     };
@@ -717,7 +915,7 @@
       if (!check() && input.value) {
         const msg = input.validationMessage;
         input.value = "";
-        input.setCustomValidity("Bitte einen Termin wählen.");
+        input.setCustomValidity(t_("Bitte einen Termin wählen."));
         hint.textContent = msg;
       }
     });
@@ -784,7 +982,7 @@
       const btn = form.querySelector('[type="submit"]');
       const label = btn.textContent;
       btn.disabled = true;
-      btn.textContent = "Wird gesendet …";
+      btn.textContent = t_("Wird gesendet …");
 
       try {
         const payload = await buildPayload(form);
@@ -793,10 +991,11 @@
         payload.entrance = OBJ.entranceName || "";
         payload.website = form.elements.website ? form.elements.website.value : ""; // Honeypot
         payload.submittedAt = new Date().toISOString();
-        await postToBackend(payload);
+        const res = (await postToBackend(payload)) || {};
         rememberProfile(form);
         if (onSuccess) onSuccess(payload);
-        toast(successMsg, "ok");
+        if (res.id) rememberTicket(res.id, payload.type);
+        toast(res.id ? `${t_(successMsg)} ${t_("Nr.")} ${res.id}` : t_(successMsg), "ok", res.id ? 7000 : 0);
         form.reset();
         prefillProfile();
         form.classList.remove("was-validated");
@@ -804,7 +1003,7 @@
         form.dispatchEvent(new Event("app:reset"));
       } catch (err) {
         console.error(err);
-        toast(err.userMessage || "Senden fehlgeschlagen. Bitte Internetverbindung prüfen und erneut versuchen.", "error");
+        toast(t_(err.userMessage || "Senden fehlgeschlagen. Bitte Internetverbindung prüfen und erneut versuchen."), "error");
       } finally {
         btn.disabled = false;
         btn.textContent = label;
@@ -1002,19 +1201,22 @@
 
   /** Liefert "" wenn gültig, sonst eine Fehlermeldung. */
   function validateWorkday(value, minDate) {
-    if (!value) return "Bitte einen Termin wählen.";
+    if (!value) return t_("Bitte einen Termin wählen.");
     const date = parseIsoDate(value);
-    if (isNaN(date)) return "Ungültiges Datum.";
-    if (isWeekend(date)) return "Am Wochenende ist kein Zugang möglich. Bitte Mo–Fr wählen.";
-    if (date < minDate) return `Frühestens ab ${formatDateLong(minDate)} möglich (2 Werktage Vorlauf).`;
+    if (isNaN(date)) return t_("Ungültiges Datum.");
+    if (isWeekend(date)) return t_("Am Wochenende ist kein Zugang möglich. Bitte Mo–Fr wählen.");
+    if (date < minDate) return t_("Frühestens ab {datum} möglich (2 Werktage Vorlauf).", { datum: formatDateLong(minDate) });
     return "";
   }
 
+  function formatDate(d) {
+    return d.toLocaleDateString(LOCALE(), { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
   function formatDateLong(d) {
-    return d.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+    return d.toLocaleDateString(LOCALE(), { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
   }
   function formatTime(d) {
-    return d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString(LOCALE(), { hour: "2-digit", minute: "2-digit" });
   }
   function formatPhone(p) {
     return p.replace(/^\+49/, "0");
@@ -1044,13 +1246,13 @@
   }
 
   let toastTimer;
-  function toast(msg, kind) {
+  function toast(msg, kind, duration) {
     const el = $("#toast");
     el.textContent = (kind === "ok" ? "✓ " : "") + msg;
     el.className = `toast${kind ? " toast--" + kind : ""}`;
     el.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.hidden = true; }, 4500);
+    toastTimer = setTimeout(() => { el.hidden = true; }, duration || 4500);
   }
 
   function esc(s) {
@@ -1064,7 +1266,7 @@
      ====================================================================== */
 
   function init() {
-    $("#objectName").textContent = OBJ.key ? OBJ.label : "Bitte Adresse wählen";
+    $("#objectName").textContent = OBJ.key ? OBJ.label : t_("Bitte Adresse wählen");
     $("#demoBanner").hidden = !!CFG.API_URL;
     $("#siteName").textContent = CFG.SITE.name;
     const provider = $("#providerLink");
@@ -1080,10 +1282,11 @@
     [
       renderEntrancePicker, renderEmergency, renderWaste, renderInfos, initTransit,
       initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
-      initPhotoPreviews, initProfile, initConsent,
+      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage,
     ].forEach((step) => {
       try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); }
     });
+    try { translateDom(document.body); watchTranslations(); } catch (err) { console.error("Übersetzung:", err); }
     initRouter();
 
     if ("serviceWorker" in navigator) {

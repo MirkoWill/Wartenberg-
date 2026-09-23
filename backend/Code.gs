@@ -32,6 +32,11 @@ const CONFIG = {
       headers: ["Haus", "Aufgang", "Wohnung", "Ablesedatum", "Raum", "Art", "Zählernummer",
         "Zählerstand (m³)", "Foto", "Name", "Eingang", "Erfassungs-ID", "Geprüft"],
     },
+    // Hinweise für die App-Startseite, von der Verwaltung gepflegt.
+    news: {
+      name: "Aktuelles",
+      headers: ["Aktiv", "Von", "Bis", "Titel", "Text", "Wichtig", "Nur für Aufgang-IDs"],
+    },
     cleaning: {
       name: "Reinigung",
       headers: ["Zeitpunkt (Scan)", "Bereich-Token", "Hausmeister", "Eingang Server"],
@@ -83,6 +88,7 @@ function setup() {
   const leer = ss.getSheetByName("Tabellenblatt1") || ss.getSheetByName("Sheet1");
   if (leer && leer.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(leer);
 
+  setupNewsSheet();
   rebuildMeterOverview();
   Logger.log("Einrichtung abgeschlossen. Foto-Ordner: %s", props.getProperty("PHOTO_FOLDER_ID"));
 }
@@ -131,6 +137,8 @@ function doGet(e) {
     const q = (e && e.parameter) || {};
     if (q.action === "getTasks") return json(getTasks(q.token));
     if (q.action === "done") return completeTicketPage(q);
+    if (q.action === "status") return json(getStatus(q.ids));
+    if (q.action === "news") return json(getNews(q.obj));
     return json({ ok: true, service: "mieter-app", time: new Date().toISOString() });
   } catch (err) {
     if (!err.userMessage) console.error(err);
@@ -350,6 +358,95 @@ function getTasks(token) {
     .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
 
   return { ok: true, tasks };
+}
+
+/* ==========================================================================
+   Status von Meldungen (für „Meine Meldungen“ in der App)
+   Gibt bewusst nur Art, Status und Datum zurück – keine persönlichen Daten.
+   ========================================================================== */
+
+function getStatus(idsParam) {
+  const ids = String(idsParam || "").split(",").map((x) => x.trim().toUpperCase())
+    .filter((x) => /^[TE]-\d{6}-[A-Z0-9]{4}$/.test(x)).slice(0, 20);
+  if (!ids.length) return { ok: true, items: [] };
+  const ss = getSpreadsheet();
+  const iso = (d) => (d instanceof Date ? d.toISOString() : "");
+
+  const tickets = ss.getSheetByName(CONFIG.SHEETS.tickets.name).getDataRange().getValues();
+  const th = tickets.shift();
+  const tc = (n) => th.indexOf(n);
+  const meters = ss.getSheetByName(CONFIG.SHEETS.meter.name).getDataRange().getValues();
+  const mh = meters.shift();
+  const mc = (n) => mh.indexOf(n);
+
+  const items = ids.map((id) => {
+    if (id[0] === "T") {
+      const r = tickets.find((row) => row[tc("ID")] === id);
+      if (!r) return { id, status: "unbekannt" };
+      return {
+        id, kind: "ticket", type: r[tc("Typ")], status: r[tc("Status")] || "offen",
+        created: iso(r[tc("Eingang")]), done: iso(r[tc("Erledigt am")]),
+      };
+    }
+    const rows = meters.filter((row) => mc("Erfassungs-ID") >= 0 && row[mc("Erfassungs-ID")] === id);
+    if (!rows.length) return { id, status: "unbekannt" };
+    const checked = rows.every((row) => row[mc("Geprüft")] === true);
+    return {
+      id, kind: "meter", type: "Wasserzähler", count: rows.length,
+      status: checked ? "geprüft" : "eingegangen", created: iso(rows[0][mc("Eingang")]),
+    };
+  });
+  return { ok: true, items };
+}
+
+/* ==========================================================================
+   Aktuelles / Schwarzes Brett – Pflege im Blatt „Aktuelles“
+   ========================================================================== */
+
+function setupNewsSheet() {
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.news.name);
+  if (!sheet) return;
+  const rules = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  sheet.getRange(2, 1, 200, 1).setDataValidation(rules);
+  sheet.getRange(2, 6, 200, 1).setDataValidation(rules);
+  sheet.getRange(2, 2, 200, 2).setNumberFormat("dd.MM.yyyy");
+  if (sheet.getLastRow() < 2) {
+    sheet.getRange(2, 1, 1, 7).setValues([[
+      false, new Date(), "", "Beispiel: Wasser abgestellt",
+      "Am Mittwoch von 9 bis 12 Uhr ist wegen Wartungsarbeiten das Wasser abgestellt.", false, "",
+    ]]);
+  }
+}
+
+function getNews(obj) {
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.news.name);
+  if (!sheet) return { ok: true, items: [] };
+  const values = sheet.getDataRange().getValues();
+  const h = values.shift() || [];
+  const c = (n) => h.indexOf(n);
+  const [ty, tm, td] = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd").split("-").map(Number);
+  const today = new Date(ty, tm - 1, td);
+  const day = (d) => (d instanceof Date ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : null);
+  const ymd = (d) => (d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd") : "");
+  const object = String(obj || "").trim();
+
+  const items = values
+    .filter((r) => r[c("Aktiv")] === true && String(r[c("Titel")] || r[c("Text")]).trim())
+    .filter((r) => {
+      const from = day(r[c("Von")]);
+      const to = day(r[c("Bis")]);
+      return (!from || from <= today) && (!to || to >= today);
+    })
+    .filter((r) => {
+      const only = String(r[c("Nur für Aufgang-IDs")] || "").split(/[,;\s]+/).filter(Boolean);
+      return !only.length || only.indexOf(object) !== -1;
+    })
+    .map((r) => ({
+      title: plain(r[c("Titel")], 120), text: plain(r[c("Text")], 1000),
+      important: r[c("Wichtig")] === true, from: ymd(r[c("Von")]), to: ymd(r[c("Bis")]),
+    }))
+    .sort((a, b) => (b.important - a.important) || b.from.localeCompare(a.from));
+  return { ok: true, items: items.slice(0, 10) };
 }
 
 /* ==========================================================================

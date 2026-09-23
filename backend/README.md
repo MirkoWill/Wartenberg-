@@ -58,6 +58,12 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 - **Klingelschild:** Jeder Antrag geht automatisch per E-Mail an den Hausmeister (`HAUSMEISTER_EMAIL`, Standard
   info@gs-schreier.de) – mit Ticketnummer und einem Link „Als erledigt melden“. Nach Bestätigung steht im Blatt
   **Tickets** der Status `erledigt` samt Datum, und Sie erhalten eine Info-Mail (`NOTIFY_EMAIL`).
+- **Aktuelles:** Hinweise für die Startseite der App. Eine Zeile je Hinweis: *Aktiv* anhaken, optional *Von*/*Bis*
+  (sonst unbegrenzt), *Titel* und *Text*; *Wichtig* hebt den Hinweis rot hervor. In *Nur für Aufgang-IDs* können
+  Aufgänge eingetragen werden (z. B. `lind6, lind8`), leer = alle. Die App aktualisiert höchstens alle 5 Minuten.
+  Hinweise erscheinen in der eingegebenen Sprache (nicht automatisch übersetzt).
+- **Meine Meldungen:** Mieter sehen in der App den Status ihrer Tickets (Spalte *Status*) und Zählermeldungen
+  (*eingegangen*, bzw. *geprüft*, sobald alle Zähler der Meldung in *Zählerstände* abgehakt sind).
 - **Tickets:** Spalte *Status* per Auswahl auf `in Arbeit` / `erledigt` setzen. Alles, was nicht `erledigt` ist,
   erscheint später in der Auftragsliste des Hausmeisters.
 - **Zählerstände:** Spalte *Geprüft* nach Kontrolle des Fotos abhaken.

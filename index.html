@@ -14,7 +14,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=11">
+  <link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body>
   <header class="app-header">
@@ -31,7 +31,13 @@
   <!-- Titelband im Stil der Website (dunkel, schräge Kante) -->
   <div class="hero">
     <div class="hero__inner">
-      <a class="hero__eyebrow" href="#aufgang" title="Adresse wechseln"><span id="objectName">Wohnanlage</span> <span aria-hidden="true">▾</span></a>
+      <div class="hero__top">
+        <a class="hero__eyebrow" href="#aufgang" title="Adresse wechseln"><span id="objectName">Wohnanlage</span> <span aria-hidden="true">▾</span></a>
+        <details class="lang" id="langMenu">
+          <summary class="lang__btn" aria-label="Sprache wählen"><span aria-hidden="true">🌐</span> <span id="langCode">DE</span></summary>
+          <div class="lang__menu lang-options"></div>
+        </details>
+      </div>
       <h1 class="hero__title" id="viewTitle">Notfall</h1>
     </div>
   </div>
@@ -46,6 +52,7 @@
 
     <!-- ============ EPIC 1 – US 1.1: Notfall ============ -->
     <section class="view" data-view="notfall" data-title="Notfall">
+      <div class="news" id="newsBox" hidden></div>
       <p class="lead">Im Notfall einfach antippen – der Anruf startet sofort.</p>
       <ul class="contact-list" id="emergencyList"></ul>
 
@@ -125,6 +132,8 @@
 
     <!-- ============ Hausordnung (Text folgt – derzeit Platzhalter) ============ -->
     <section class="view legal" data-view="hausordnung" data-title="Hausordnung" data-parent="infos" hidden>
+      <p class="notice i18n-note">Die Hausordnung ist nur auf Deutsch verfügbar.</p>
+      <div data-no-i18n>
       <p class="notice">Vorläufiger Platzhaltertext – die gültige Hausordnung wird in Kürze hier veröffentlicht.</p>
 
       <h2 class="section-title">1. Allgemeines</h2>
@@ -147,6 +156,7 @@
       <h2 class="section-title">5. Sicherheit</h2>
       <p>Ut ullamcorper, ligula eu tempor congue, eros est euismod turpis, id tincidunt sapien risus a quam.
         Maecenas fermentum consequat mi. Donec fermentum. Pellentesque malesuada nulla a mi.</p>
+      </div>
     </section>
 
     <!-- ============ EPIC 2: Service-Übersicht ============ -->
@@ -158,6 +168,7 @@
         <a class="tile" href="#elektro"><span class="tile__icon">🔧</span><span class="tile__label">Techniker anmelden</span></a>
         <a class="tile" href="#klingel"><span class="tile__icon">🔔</span><span class="tile__label">Klingelschild</span></a>
         <a class="tile" href="#mangel"><span class="tile__icon">🛠️</span><span class="tile__label">Mangel melden</span></a>
+        <a class="tile tile--status" href="#meldungen"><span class="tile__icon">📋</span><span class="tile__label">Meine Meldungen</span></a>
       </div>
     </section>
 
@@ -196,6 +207,23 @@
         <button class="btn btn--ghost btn--block" id="addMeter" type="button">+ Weiteren Zähler hinzufügen</button>
 
         <button class="btn btn--primary btn--block" type="submit" id="waterSubmit">Zählerstand senden</button>
+      </form>
+    </section>
+
+    <!-- ============ Meine Meldungen (Status) ============ -->
+    <section class="view" data-view="meldungen" data-title="Meine Meldungen" data-parent="services" hidden>
+      <p class="lead">Hier sehen Sie den Bearbeitungsstand Ihrer Meldungen von diesem Gerät.</p>
+      <ul class="status-list" id="statusList"></ul>
+      <p class="muted small" id="statusEmpty" hidden>Noch keine Meldungen auf diesem Gerät.</p>
+      <button class="btn btn--ghost btn--block" id="statusRefresh" type="button">Status aktualisieren</button>
+
+      <form class="form status-lookup" id="statusLookup" novalidate>
+        <label class="field">
+          <span class="field__label">Meldung von einem anderen Gerät hinzufügen</span>
+          <input name="id" required placeholder="z. B. T-260923-AB12" autocomplete="off" autocapitalize="characters"
+            pattern="\s*[TtEe]-\d{6}-[A-Za-z0-9]{4}\s*">
+        </label>
+        <button class="btn btn--primary btn--block" type="submit">Hinzufügen</button>
       </form>
     </section>
 
@@ -272,13 +300,13 @@
           <span class="field__label">Wo? *</span>
           <select name="ort" required>
             <option value="">Bitte wählen</option>
-            <option>Treppenhaus / Flur</option>
-            <option>Keller</option>
-            <option>Waschküche</option>
-            <option>Tiefgarage</option>
-            <option>Aufzug</option>
-            <option>Außenbereich / Müllplatz</option>
-            <option>Sonstiges</option>
+            <option value="Treppenhaus / Flur">Treppenhaus / Flur</option>
+            <option value="Keller">Keller</option>
+            <option value="Waschküche">Waschküche</option>
+            <option value="Tiefgarage">Tiefgarage</option>
+            <option value="Aufzug">Aufzug</option>
+            <option value="Außenbereich / Müllplatz">Außenbereich / Müllplatz</option>
+            <option value="Sonstiges">Sonstiges</option>
           </select>
         </label>
         <label class="field">
@@ -307,6 +335,8 @@
 
     <!-- ============ Impressum ============ -->
     <section class="view legal" data-view="impressum" data-title="Impressum" hidden>
+      <p class="notice i18n-note">Diese Seite ist nur auf Deutsch verfügbar. Rechtlich maßgeblich ist die deutsche Fassung.</p>
+      <div data-no-i18n>
       <h2 class="section-title">Angaben gemäß § 5 DDG</h2>
       <p>
         <strong>Willbrandt und Kompagnon</strong><br>
@@ -328,10 +358,13 @@
       <p>Diese App ist ein Serviceangebot für die Bewohnerinnen und Bewohner der WEG Wartenberger Dorfkrug.
         Für die Inhalte verlinkter externer Seiten sind ausschließlich deren Betreiber verantwortlich.</p>
       <p><a href="#datenschutz">Zur Datenschutzerklärung</a></p>
+      </div>
     </section>
 
     <!-- ============ Datenschutzerklärung ============ -->
     <section class="view legal" data-view="datenschutz" data-title="Datenschutz" hidden>
+      <p class="notice i18n-note">Diese Seite ist nur auf Deutsch verfügbar. Rechtlich maßgeblich ist die deutsche Fassung.</p>
+      <div data-no-i18n>
       <p class="lead">Stand: September 2026</p>
 
       <h2 class="section-title">1. Verantwortlicher</h2>
@@ -395,8 +428,10 @@
       </details>
       <details class="rule">
         <summary>Speicherung auf Ihrem Gerät</summary>
-        <p>Die App speichert im Browser Ihres Geräts die gewählte Adresse, die Kennung der Haltestelle, die zuletzt
-          geladenen Abfahrten und – für die Dauer der Sitzung – Ihre Zustimmung zu diesen Hinweisen. Wenn Sie
+        <p>Die App speichert im Browser Ihres Geräts die gewählte Adresse und Sprache, die Kennung der Haltestelle, die
+          zuletzt geladenen Abfahrten und Hinweise, die Nummern Ihrer Meldungen (für „Meine Meldungen“) und – für die
+          Dauer der Sitzung – Ihre Zustimmung zu diesen Hinweisen. Für „Meine Meldungen“ fragt die App bei unserem
+          Google-Konto nur Art, Status und Datum Ihrer Meldungen ab. Wenn Sie
           „Wohnung und Name auf diesem Gerät merken“ angehakt lassen, werden außerdem Wohnung, Name und Ihre
           Zählernummern gespeichert, damit Sie diese nicht erneut eingeben müssen. Diese Angaben verlassen Ihr Gerät
           nur, wenn Sie ein Formular absenden. Entfernen Sie den Haken beim nächsten Absenden, werden sie gelöscht.
@@ -432,6 +467,7 @@
       <p>Bitte geben Sie in Formularen nur die Angaben an, die für Ihr Anliegen erforderlich sind, und
         fotografieren Sie möglichst keine Personen.</p>
       <p><a href="#impressum">Zum Impressum</a></p>
+      </div>
     </section>
   </main>
 
@@ -456,6 +492,7 @@
   <div class="consent" id="consent" role="dialog" aria-modal="true" aria-labelledby="consentTitle" hidden>
     <div class="consent__box">
       <div class="consent__step" id="consentAsk">
+        <div class="consent__langs lang-options" aria-label="Sprache wählen"></div>
         <p class="consent__brand">Willbrandt <strong>und Kompagnon</strong></p>
         <h2 class="consent__title" id="consentTitle">Bevor es losgeht</h2>
         <p>Diese App ist ein freiwilliges Serviceangebot für die Bewohnerinnen und Bewohner der
@@ -503,7 +540,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=11"></script>
-  <script src="js/app.js?v=11"></script>
+  <script src="js/config.js?v=13"></script>
+  <script src="js/i18n.js?v=13"></script>
+  <script src="js/app.js?v=13"></script>
 </body>
 </html>
