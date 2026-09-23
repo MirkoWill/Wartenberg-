@@ -14,7 +14,7 @@
 window.APP_CONFIG = {
   // URL der veröffentlichten Google-Apps-Script-Web-App (endet auf /exec).
   // Leer lassen = Demo-Modus: Formulare werden nur simuliert (Konsole).
-  API_URL: "", // TODO nach Einrichtung von backend/Code.gs eintragen
+  API_URL: "https://script.google.com/macros/s/AKfycbzhN3ZvHKkXgBEyHddQNgCMd7rGNDpnvLdrS82Q8XO-MC8r4UFhDQnJWVnGtTygYcrd/exec",
 
   // transport.rest-Dienste für Abfahrten, werden der Reihe nach versucht (kostenlos, ohne Gewähr).
   TRANSIT_APIS: [
