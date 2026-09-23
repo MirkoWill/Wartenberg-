@@ -118,14 +118,16 @@
    * Ist kein Aufgang bekannt, nur SITE (key = null) – die App zeigt dann die Auswahl.
    */
   function resolveObject() {
-    const fromUrl = new URLSearchParams(location.search).get("obj");
+    // Umbenannte Aufgänge (alte Links/gespeicherte Auswahl weiter gültig).
+    const alias = (id) => ({ dorf27: "dorf24" }[id] || id);
+    const fromUrl = alias(new URLSearchParams(location.search).get("obj"));
     const known = (id) => ENTRANCES.some((e) => e.id === id);
     let key = known(fromUrl) ? fromUrl : null;
 
     // Beim Start vom Homescreen fehlt der Parameter evtl. – letzten Aufgang merken.
     try {
+      if (!key) key = alias(localStorage.getItem(OBJ_STORAGE_KEY));
       if (key) localStorage.setItem(OBJ_STORAGE_KEY, key);
-      else key = localStorage.getItem(OBJ_STORAGE_KEY);
     } catch (e) { /* Storage blockiert – egal */ }
 
     const entrance = ENTRANCES.find((e) => e.id === key);

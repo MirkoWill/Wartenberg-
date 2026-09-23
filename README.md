@@ -62,7 +62,7 @@ Jeder Aufgang bekommt einen eigenen QR-Code am Aushang:
 
 | Haus | Aufgang | QR-Code-Link |
 |---|---|---|
-| Haus 1 | Dorfstr. 27 | `https://mirkowill.github.io/Wartenberg-/?obj=dorf27` |
+| Haus 1 | Dorfstr. 24 | `https://mirkowill.github.io/Wartenberg-/?obj=dorf24` |
 | Haus 2 | Lindenberger Str. 2 | `https://mirkowill.github.io/Wartenberg-/?obj=lind2` |
 | Haus 2 | Lindenberger Str. 4 | `https://mirkowill.github.io/Wartenberg-/?obj=lind4` |
 | Haus 3 | Lindenberger Str. 6 | `https://mirkowill.github.io/Wartenberg-/?obj=lind6` |

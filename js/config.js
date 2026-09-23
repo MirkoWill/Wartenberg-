@@ -138,7 +138,7 @@ window.APP_CONFIG = {
       },
     ],
 
-    // Hausordnung als eigene Seite (#hausordnung) – Text folgt, derzeit Platzhalter.
+    // Hausordnung als eigene Seite (#hausordnung), Text direkt in index.html.
 
     // Kiez-Guide (US 1.4)
     kiez: [
@@ -193,10 +193,10 @@ window.APP_CONFIG = {
     {
       id: "haus1",
       name: "Haus 1",
-      address: "Dorfstr. 27, 13059 Berlin",
+      address: "Dorfstr. 24, 13059 Berlin",
       overrides: {},
       entrances: [
-        { id: "dorf27", name: "Dorfstr. 27" },
+        { id: "dorf24", name: "Dorfstr. 24" },
       ],
     },
     {
