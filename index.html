@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=35">
+  <link rel="stylesheet" href="css/style.css?v=36">
 </head>
 <body>
   <header class="app-header">
@@ -66,7 +66,7 @@
     </section>
 
     <!-- ============ EPIC 1 – US 1.3: Live-ÖPNV ============ -->
-    <section class="view" data-view="oepnv" data-title="Abfahrten" hidden>
+    <section class="view" data-view="oepnv" data-title="Abfahrten" data-parent="infos" hidden>
       <div class="card transit-head">
         <div>
           <div class="muted small">Haltestelle</div>
@@ -81,6 +81,15 @@
 
     <!-- ============ EPIC 1 – US 1.2 + 1.4: Abfall, Hausordnung, Kiez, Apotheke ============ -->
     <section class="view" data-view="infos" data-title="Infos" hidden>
+      <a class="card transit-link" href="#oepnv">
+        <span class="transit-link__icon" aria-hidden="true">🚌</span>
+        <span class="transit-link__body">
+          <span class="transit-link__title">Abfahrten</span>
+          <span class="transit-link__sub">Live ab Dorfstr./Lindenberger Str. · Bus 256, 893, N56</span>
+        </span>
+        <span class="transit-link__go" aria-hidden="true">›</span>
+      </a>
+
       <nav class="jump" aria-label="Themen auf dieser Seite">
         <a href="#infos" data-jump="abfall">Abfall</a>
         <a href="#infos" data-jump="kiez">Kiez</a>
@@ -375,7 +384,7 @@
     </section>
 
     <!-- ============ Meine Meldungen (Status) ============ -->
-    <section class="view" data-view="meldungen" data-title="Meine Meldungen" data-parent="services" hidden>
+    <section class="view" data-view="meldungen" data-title="Meine Meldungen" hidden>
       <p class="lead">Hier sehen Sie den Bearbeitungsstand Ihrer Meldungen von diesem Gerät.</p>
       <ul class="status-list" id="statusList"></ul>
       <p class="muted small" id="statusEmpty" hidden>Noch keine Meldungen auf diesem Gerät.</p>
@@ -652,7 +661,7 @@
     <a class="tabbar__item" href="#notfall" data-tab="notfall"><span aria-hidden="true">🚨</span>Notfall</a>
     <a class="tabbar__item" href="#services" data-tab="services"><span aria-hidden="true">🧰</span>Services</a>
     <a class="tabbar__item" href="#infos" data-tab="infos"><span aria-hidden="true">📄</span>Infos</a>
-    <a class="tabbar__item" href="#oepnv" data-tab="oepnv"><span aria-hidden="true">🚆</span>Abfahrten</a>
+    <a class="tabbar__item" href="#meldungen" data-tab="meldungen"><span aria-hidden="true">📋</span>Meldungen</a>
     <a class="tabbar__item" href="#hausmeister" data-tab="hausmeister" id="staffTab" hidden><span aria-hidden="true">🧹</span>Hausmeister</a>
   </nav>
 
@@ -721,8 +730,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=35"></script>
-  <script src="js/i18n.js?v=35"></script>
-  <script src="js/app.js?v=35"></script>
+  <script src="js/config.js?v=36"></script>
+  <script src="js/i18n.js?v=36"></script>
+  <script src="js/app.js?v=36"></script>
 </body>
 </html>
