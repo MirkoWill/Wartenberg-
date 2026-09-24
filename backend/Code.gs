@@ -1440,6 +1440,17 @@ function residentCareInfo(object) {
  * Fehlersuche Kalender: im Editor „kalenderTest“ auswählen → Ausführen → Ausführungsprotokoll ansehen.
  * Prüft Konto, Kalender-ID, Schreibrecht (Test-Termin wird angelegt und sofort gelöscht) und das Blatt „Reinigungsplan“.
  */
+/** Im Editor ausführen, wenn kein Wetter erscheint: zeigt Abruf-Ergebnis oder Fehler im Protokoll. */
+function wetterTest() {
+  CacheService.getScriptCache().remove("weather");
+  try {
+    const w = getWeather();
+    Logger.log("OK – %s Tage, %s Warnung(en): %s", w.days.length, w.alerts.length, JSON.stringify(w.days));
+  } catch (err) {
+    Logger.log("FEHLER beim Wetterabruf: %s", err && err.message);
+  }
+}
+
 function kalenderTest() {
   const log = (label, value) => Logger.log(`${label}: ${value}`);
   try { log("1. Google-Konto des Scripts", Session.getEffectiveUser().getEmail() || "(nicht ermittelbar)"); } catch (e) { log("1. Google-Konto", "Fehler " + e.message); }
