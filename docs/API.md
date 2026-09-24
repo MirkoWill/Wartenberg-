@@ -122,7 +122,7 @@ Ungültiger/gesperrter Token: `{ "ok": false, "code": "staff", "error": "…" }`
 | `completeTask` | `{ token, id }` | `{ ok }` – setzt Status „erledigt“ (Tickets `T-…` oder Mängel `M-…`) |
 | `submitStaffDefect` | `{ token, ort, beschreibung, dringend, photo? }` | `{ id: "M-…" }` |
 
-QR-Code-Inhalt: `https://mirkowill.github.io/Wartenberg-/?scan=CODE#hausmeister` (der Scanner akzeptiert auch nur `CODE`).
+QR-Code-Inhalt: `https://app.willbrandt-kompagnon.de/?scan=CODE#hausmeister` (der Scanner akzeptiert auch nur `CODE`).
 
 `GET ?action=news` liefert zusätzlich `care: { last: [{ ort, activity, time }], next: [{ activity, ort, from, to }] }`.
 

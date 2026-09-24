@@ -166,9 +166,17 @@ check('Unbekannte Art abgelehnt', !post({ ...base, action: 'submitMeterReadings'
 ctx.setup();
 const staff = sheets['Mitarbeiter'].grid;
 check('Mitarbeiter: 007, 008, 001, 100–119 ohne Namen', staff.length === 24 && staff[1][0] === '007' && staff[1][1] === 'Verwaltung' && staff[2][0] === '008' && staff[2][1] === 'Verwaltung' && staff[3][0] === '001' && staff[4][0] === '100' && staff[23][0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
-check('Links mit Token', /^https:\/\/mirkowill\.github\.io\/Wartenberg-\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[4][4]), staff[4][4]);
+check('Links mit Token', /^https:\/\/app\.willbrandt-kompagnon\.de\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[4][4]), staff[4][4]);
 ctx.setup();
 check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 24);
+{ // Blatt mit 007/001 aus alter Version + leere Kästchen bis Zeile 40 → 008 direkt unter die letzte Nummer
+  const g = sheets['Mitarbeiter'].grid; const saved = g.map((r) => r.slice());
+  const i8 = g.findIndex((r) => r[0] === '008'); g.splice(i8, 1);
+  while (g.length < 40) g.push(['', '', false, '', '']);
+  ctx.ensureStaffLinks();
+  check('008 wird direkt unter die letzte Nummer geschrieben (nicht hinter leere Kästchen)', g[23][0] === '008' && g[23][1] === 'Verwaltung' && g[23][2] === true && /hm=/.test(g[23][4]), g.slice(22, 25).map((r) => r[0]));
+  g.length = 0; saved.forEach((r) => g.push(r));
+}
 check('QR-Orte vorbelegt (21)', sheets['QR-Orte'].grid.length === 22 && sheets['QR-Orte'].grid.some((r) => r[1] === 'Raum Hebeanlage Lindenberger Str. 8'));
 check('Kein Keller Lind 8', !sheets['QR-Orte'].grid.some((r) => r[0] === 'KE_LIND8'));
 check('Tätigkeiten inkl. Fensterreinigung', sheets['Tätigkeiten'].grid.some((r) => r[0] === 'Fensterreinigung Aufgang'));

@@ -68,11 +68,11 @@ Jeder Aufgang bekommt einen eigenen QR-Code am Aushang:
 
 | Haus | Aufgang | QR-Code-Link |
 |---|---|---|
-| Haus 1 | Dorfstr. 24 | `https://mirkowill.github.io/Wartenberg-/?obj=dorf24` |
-| Haus 2 | Lindenberger Str. 2 | `https://mirkowill.github.io/Wartenberg-/?obj=lind2` |
-| Haus 2 | Lindenberger Str. 4 | `https://mirkowill.github.io/Wartenberg-/?obj=lind4` |
-| Haus 3 | Lindenberger Str. 6 | `https://mirkowill.github.io/Wartenberg-/?obj=lind6` |
-| Haus 3 | Lindenberger Str. 8 | `https://mirkowill.github.io/Wartenberg-/?obj=lind8` |
+| Haus 1 | Dorfstr. 24 | `https://app.willbrandt-kompagnon.de/?obj=dorf24` |
+| Haus 2 | Lindenberger Str. 2 | `https://app.willbrandt-kompagnon.de/?obj=lind2` |
+| Haus 2 | Lindenberger Str. 4 | `https://app.willbrandt-kompagnon.de/?obj=lind4` |
+| Haus 3 | Lindenberger Str. 6 | `https://app.willbrandt-kompagnon.de/?obj=lind6` |
+| Haus 3 | Lindenberger Str. 8 | `https://app.willbrandt-kompagnon.de/?obj=lind8` |
 
 Der gewählte Aufgang wird gemerkt, auch nach dem Start vom Homescreen. Ohne Link zeigt die App eine
 Auswahl; über den Aufgangsnamen oben in der Kopfzeile lässt er sich jederzeit wechseln.

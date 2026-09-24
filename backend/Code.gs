@@ -102,7 +102,7 @@ const CONFIG = {
   SITE_NAME: "WEG Wartenberger Dorfkrug",
   SENDER_NAME: "Willbrandt und Kompagnon",
   // Adresse der App (für die persönlichen Links der Mitarbeiter und die QR-Codes).
-  APP_URL: "https://mirkowill.github.io/Wartenberg-/",
+  APP_URL: "https://app.willbrandt-kompagnon.de/",
   // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
   CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
   // Mitarbeiternummern: feste Nummern plus STAFF_LINKS Nummern ab STAFF_FIRST_NR.
@@ -1053,7 +1053,11 @@ function ensureStaffLinks() {
   // So öffnet ein versehentlich weitergegebener, noch unbenutzter Link nichts.
   for (let i = numbered.length; i < CONFIG.STAFF_LINKS; i++) add.push([String(next++), "Hausmeister", false]);
   if (!add.length) return;
-  sheet.getRange(sheet.getLastRow() + 1, 1, add.length, 5).setValues(add.map(([nr, role, active]) => {
+  // Hinter die letzte Zeile mit Nummer schreiben – nicht getLastRow(): leere Kästchen in „Aktiv“ zählen dort als belegt.
+  const colA = sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), 1).getValues();
+  let lastUsed = colA.length;
+  while (lastUsed > 1 && String(colA[lastUsed - 1][0]).trim() === "") lastUsed--;
+  sheet.getRange(lastUsed + 1, 1, add.length, 5).setValues(add.map(([nr, role, active]) => {
     const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
     return [nr, role, active !== false, token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
   }));
@@ -1440,6 +1444,17 @@ function residentCareInfo(object) {
  * Fehlersuche Kalender: im Editor „kalenderTest“ auswählen → Ausführen → Ausführungsprotokoll ansehen.
  * Prüft Konto, Kalender-ID, Schreibrecht (Test-Termin wird angelegt und sofort gelöscht) und das Blatt „Reinigungsplan“.
  */
+/** Im Editor ausführen, wenn kein Wetter erscheint: zeigt Abruf-Ergebnis oder Fehler im Protokoll. */
+function wetterTest() {
+  CacheService.getScriptCache().remove("weather");
+  try {
+    const w = getWeather();
+    Logger.log("OK – %s Tage, %s Warnung(en): %s", w.days.length, w.alerts.length, JSON.stringify(w.days));
+  } catch (err) {
+    Logger.log("FEHLER beim Wetterabruf: %s", err && err.message);
+  }
+}
+
 function kalenderTest() {
   const log = (label, value) => Logger.log(`${label}: ${value}`);
   try { log("1. Google-Konto des Scripts", Session.getEffectiveUser().getEmail() || "(nicht ermittelbar)"); } catch (e) { log("1. Google-Konto", "Fehler " + e.message); }
