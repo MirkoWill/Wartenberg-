@@ -9,7 +9,7 @@
  * Script-Eigenschaften (Projekteinstellungen → Script-Eigenschaften):
  *   NOTIFY_EMAIL        optional, E-Mail(s) für Benachrichtigungen, kommagetrennt
  *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Aufträge an den Hausmeister)
- *   HAUSMEISTER_TOKENS  optional (Epic 3), JSON: {"geheimer-token": "hm_becker"}
+ *   CALENDAR_ID         optional, Kalender für den Reinigungsplan (sonst Suche nach CONFIG.CALENDAR_NAME)
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
  *   APP_PIN             optional, Zugangs-PIN der App (Standard: CONFIG.APP_PIN). Bei Änderung auch
  *                       PIN_SHA256 in js/config.js anpassen.
@@ -39,9 +39,32 @@ const CONFIG = {
       name: "Aktuelles",
       headers: ["Aktiv", "Von", "Bis", "Titel", "Text", "Wichtig", "Nur für Aufgang-IDs"],
     },
+    // Epic 3 – Hausmeister-Portal
     cleaning: {
       name: "Reinigung",
-      headers: ["Zeitpunkt (Scan)", "Bereich-Token", "Hausmeister", "Eingang Server"],
+      headers: ["Zeitpunkt (Scan)", "Ort-Code", "Mitarbeiter-Nr", "Eingang Server", "Ort", "Tätigkeit",
+        "Mitarbeiter", "Notiz", "Foto", "Aufgang-ID", "Erfassung"],
+    },
+    staff: {
+      name: "Mitarbeiter",
+      headers: ["Nr", "Name", "Rolle", "Aktiv", "Token", "Persönlicher Link"],
+    },
+    areas: {
+      name: "QR-Orte",
+      headers: ["Code", "Ort", "Bereich", "Aufgang-ID", "Standard-Tätigkeit", "Für Bewohner anzeigen", "Aktiv"],
+    },
+    activities: {
+      name: "Tätigkeiten",
+      headers: ["Tätigkeit", "Aktiv"],
+    },
+    staffDefects: {
+      name: "Mängel Hausmeister",
+      headers: ["ID", "Eingang", "Erfasst von", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
+        "Status", "Erledigt am", "Notiz Verwaltung"],
+    },
+    plan: {
+      name: "Reinigungsplan",
+      headers: ["Datum", "Bis", "Tätigkeit", "Ort", "Bemerkung", "Kalender-ID"],
     },
   },
   TICKET_TYPES: ["Elektroraum", "Klingelschild", "Mangel"],
@@ -57,6 +80,11 @@ const CONFIG = {
   METER_UNITS: { Kalt: ["m³"], Warm: ["m³"], Heizung: ["kWh", "MWh"] },
   SITE_NAME: "WEG Wartenberger Dorfkrug",
   SENDER_NAME: "Willbrandt und Kompagnon",
+  // Adresse der App (für die persönlichen Links der Mitarbeiter und die QR-Codes).
+  APP_URL: "https://mirkowill.github.io/Wartenberg-/",
+  // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
+  CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
+  STAFF_LINKS: 20,
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
   // Adresse dieser Web-App (für den Erledigt-Link in E-Mails). Leer = automatisch ermitteln.
@@ -102,6 +130,7 @@ function setup() {
   if (leer && leer.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(leer);
 
   setupNewsSheet();
+  setupPortalSheets();
   rebuildMeterOverview();
   Logger.log("Einrichtung abgeschlossen. Foto-Ordner: %s", props.getProperty("PHOTO_FOLDER_ID"));
 }
@@ -111,6 +140,10 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Mieter-App")
     .addItem("Zähler-Übersicht aktualisieren", "rebuildMeterOverview")
+    .addSeparator()
+    .addItem("Reinigungsplan → Kalender übertragen", "syncPlanToCalendar")
+    .addItem("Reinigungsplan heute prüfen (Test)", "checkPlanFulfilment")
+    .addItem("Mitarbeiter-Links ergänzen", "ensureStaffLinks")
     .addToUi();
 }
 
@@ -127,8 +160,11 @@ function doPost(e) {
     if (raw.length > CONFIG.LIMITS.maxRequestBytes) throw userError("Anfrage zu groß");
     const p = JSON.parse(raw);
 
-    // Hausmeister-Aktion hat eigenen Zugang (Token), alles andere braucht die App-PIN.
-    if (p.action === "logCleaning") return json(logCleaning(p));
+    // Hausmeister-Portal hat eigenen Zugang (persönlicher Token), alles andere braucht die App-PIN.
+    if (STAFF_ACTIONS[p.action]) {
+      const user = authStaff(p.token);
+      return json(STAFF_ACTIONS[p.action](p, user));
+    }
     requirePin(p.pin);
 
     // Honeypot: Nur Bots füllen das unsichtbare Feld aus. Still "Erfolg" melden.
@@ -154,7 +190,7 @@ function doPost(e) {
 function doGet(e) {
   try {
     const q = (e && e.parameter) || {};
-    if (q.action === "getTasks") return json(getTasks(q.token));
+    if (q.action === "getTasks") return json(getTasks({}, authStaff(q.token)));
     if (q.action === "done") return completeTicketPage(q);
     if (q.action === "status") { requirePin(q.pin); return json(getStatus(q.ids)); }
     if (q.action === "news") { requirePin(q.pin); return json(getNews(q.obj)); }
@@ -345,47 +381,6 @@ function rebuildMeterOverview() {
   out.autoResizeColumns(1, def.headers.length);
 }
 
-/** US 3.2 – Reinigungsnachweis per QR-Scan (Frontend folgt in Epic 3) */
-function logCleaning(p) {
-  const user = authHausmeister(p.token);
-  const areaToken = str(p.areaToken, 80);
-  if (!/^[A-Z0-9_\-]+$/i.test(areaToken)) throw userError("Ungültiger QR-Code");
-
-  const scanned = new Date(p.timestamp);
-  appendRow(CONFIG.SHEETS.cleaning.name, [
-    isNaN(scanned) ? "" : scanned, areaToken, user, new Date(),
-  ]);
-  return { ok: true };
-}
-
-/** US 3.3 – offene Aufträge (read-only) */
-function getTasks(token) {
-  authHausmeister(token);
-  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.tickets.name);
-  const values = sheet.getDataRange().getValues();
-  const h = values.shift();
-  const col = (name) => h.indexOf(name);
-
-  const tasks = values
-    .filter((r) => r[col("Status")] && r[col("Status")] !== "erledigt")
-    .map((r) => ({
-      id: r[col("ID")],
-      type: r[col("Typ")],
-      status: r[col("Status")],
-      house: r[col("Haus")],
-      entrance: r[col("Aufgang")],
-      wohnung: r[col("Wohnung")],
-      date: r[col("Termin")] instanceof Date
-        ? Utilities.formatDate(r[col("Termin")], CONFIG.TIMEZONE, "yyyy-MM-dd")
-        : String(r[col("Termin")] || ""),
-      details: r[col("Details")],
-      ort: r[col("Ort")],
-    }))
-    .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
-
-  return { ok: true, tasks };
-}
-
 /* ==========================================================================
    Status von Meldungen (für „Meine Meldungen“ in der App)
    Gibt bewusst nur Art, Status und Datum zurück – keine persönlichen Daten.
@@ -472,7 +467,9 @@ function getNews(obj) {
       important: r[c("Wichtig")] === true, from: ymd(r[c("Von")]), to: ymd(r[c("Bis")]),
     }))
     .sort((a, b) => (b.important - a.important) || b.from.localeCompare(a.from));
-  return { ok: true, items: items.slice(0, 10) };
+  let care = null;
+  try { care = residentCareInfo(object); } catch (err) { console.error("Reinigungsinfo:", err); }
+  return { ok: true, items: items.slice(0, 10), care };
 }
 
 /* ==========================================================================
@@ -643,16 +640,6 @@ function checkWorkdayDate(isoDate) {
   return "";
 }
 
-/** Hausmeister-Token prüfen (Epic 3). Gibt die Hausmeister-ID zurück. */
-function authHausmeister(token) {
-  const raw = PropertiesService.getScriptProperties().getProperty("HAUSMEISTER_TOKENS") || "{}";
-  let tokens;
-  try { tokens = JSON.parse(raw); } catch (e) { tokens = {}; }
-  const user = token && Object.prototype.hasOwnProperty.call(tokens, token) ? tokens[token] : null;
-  if (!user) throw userError("Nicht berechtigt");
-  return user;
-}
-
 /** Optionale E-Mail an die Verwaltung. Fehler hier dürfen den Antrag nicht scheitern lassen. */
 function notify(subject, lines) {
   const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
@@ -820,4 +807,392 @@ function donePage(title, text, action) {
   return HtmlService.createHtmlOutput(html)
     .setTitle(title)
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
+}
+
+/* ==========================================================================
+   Epic 3 – Hausmeister-Portal
+   Zugang über persönliche Links (Blatt „Mitarbeiter“), QR-Orte, Tätigkeitsnachweise,
+   Auftragsliste, Mängel, Reinigungsplan mit Google-Kalender und täglicher Kontrolle.
+   ========================================================================== */
+
+const STAFF_ACTIONS = {
+  hmLogin: (p, user) => staffLogin(user),
+  logCleaning: (p, user) => logCleaning(p, user),
+  getTasks: (p, user) => getTasks(p, user),
+  completeTask: (p, user) => completeTask(p, user),
+  submitStaffDefect: (p, user) => submitStaffDefect(p, user),
+};
+
+const DEFAULT_ACTIVITIES = [
+  "Treppenhausreinigung", "Fensterreinigung Aufgang", "Reinigung", "Kontrollgang", "Winterdienst",
+  "Gartenpflege", "Reinigung Regenabflüsse", "Müllplatzreinigung", "Schnitt Bepflanzung", "Reparatur / Wartung",
+];
+
+// [Code, Ort, Bereich, Aufgang-ID, Standard-Tätigkeit, Für Bewohner anzeigen]
+const DEFAULT_AREAS = [
+  ["TH_DORF24", "Treppenhaus Dorfstr. 24", "Aufgang", "dorf24", "Treppenhausreinigung", true],
+  ["TH_LIND2", "Treppenhaus Lindenberger Str. 2", "Aufgang", "lind2", "Treppenhausreinigung", true],
+  ["TH_LIND4", "Treppenhaus Lindenberger Str. 4", "Aufgang", "lind4", "Treppenhausreinigung", true],
+  ["TH_LIND6", "Treppenhaus Lindenberger Str. 6", "Aufgang", "lind6", "Treppenhausreinigung", true],
+  ["TH_LIND8", "Treppenhaus Lindenberger Str. 8", "Aufgang", "lind8", "Treppenhausreinigung", true],
+  ["KE_DORF24", "Kellerbereich Dorfstr. 24", "Keller", "dorf24", "Reinigung", true],
+  ["KE_LIND2", "Kellerbereich Lindenberger Str. 2", "Keller", "lind2", "Reinigung", true],
+  ["KE_LIND4", "Kellerbereich Lindenberger Str. 4", "Keller", "lind4", "Reinigung", true],
+  ["KE_LIND6", "Kellerbereich Lindenberger Str. 6", "Keller", "lind6", "Reinigung", true],
+  ["WK_LIND4", "Waschküche Lindenberger Str. 4", "Waschküche", "lind4", "Reinigung", true],
+  ["WK_LIND6", "Waschküche Lindenberger Str. 6", "Waschküche", "lind6", "Reinigung", true],
+  ["MUELL", "Müllplatz (außen)", "Außen", "", "Müllplatzreinigung", true],
+  ["HOF", "Innenhof", "Außen", "", "Gartenpflege", true],
+  ["TG", "Tiefgarage", "Tiefgarage", "", "Reinigung", true],
+  ["REGEN", "Regenabflüsse Gehwege", "Außen", "", "Reinigung Regenabflüsse", false],
+  ["ER_LIND2", "Elektroraum Lindenberger Str. 2", "Technik", "lind2", "Kontrollgang", false],
+  ["ER_LIND6", "Elektroraum Lindenberger Str. 6", "Technik", "lind6", "Kontrollgang", false],
+  ["HZ_LIND2", "Heizungsraum Lindenberger Str. 2", "Technik", "lind2", "Kontrollgang", false],
+  ["FH_LIND2", "Raum Fettabscheider und Hebeanlage Lindenberger Str. 2", "Technik", "lind2", "Kontrollgang", false],
+  ["GW_LIND2", "Gaszähler und Hauptwasser-Raum Lindenberger Str. 2", "Technik", "lind2", "Kontrollgang", false],
+  ["HA_LIND8", "Raum Hebeanlage Lindenberger Str. 8", "Technik", "lind8", "Kontrollgang", false],
+];
+
+const PLAN_TAG = "[Mieter-App Reinigungsplan]";
+
+/** Legt die Portal-Blätter an und füllt sie beim ersten Mal mit Startwerten. */
+function setupPortalSheets() {
+  const ss = getSpreadsheet();
+  const checkbox = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+
+  const areas = ss.getSheetByName(CONFIG.SHEETS.areas.name);
+  if (areas.getLastRow() < 2) {
+    areas.getRange(2, 1, DEFAULT_AREAS.length, 7).setValues(DEFAULT_AREAS.map((a) => a.concat([true])));
+  }
+  areas.getRange(2, 6, 300, 2).setDataValidation(checkbox);
+
+  const acts = ss.getSheetByName(CONFIG.SHEETS.activities.name);
+  if (acts.getLastRow() < 2) {
+    acts.getRange(2, 1, DEFAULT_ACTIVITIES.length, 2).setValues(DEFAULT_ACTIVITIES.map((a) => [a, true]));
+  }
+  acts.getRange(2, 2, 200, 1).setDataValidation(checkbox);
+
+  const defects = ss.getSheetByName(CONFIG.SHEETS.staffDefects.name);
+  const stCol = CONFIG.SHEETS.staffDefects.headers.indexOf("Status") + 1;
+  defects.getRange(2, stCol, defects.getMaxRows() - 1, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.STATUS_VALUES, true).build());
+
+  const plan = ss.getSheetByName(CONFIG.SHEETS.plan.name);
+  plan.getRange(2, 1, plan.getMaxRows() - 1, 2).setNumberFormat("dd.MM.yyyy");
+  plan.getRange(2, 3, 300, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInRange(acts.getRange("A2:A200"), true).setAllowInvalid(true).build());
+
+  ensureStaffLinks();
+  ensureDailyCheckTrigger();
+}
+
+/** Füllt das Blatt „Mitarbeiter“ auf CONFIG.STAFF_LINKS Zeilen mit persönlichen Links auf. */
+function ensureStaffLinks() {
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.staff.name);
+  const rows = Math.max(sheet.getLastRow() - 1, 0);
+  const have = rows ? sheet.getRange(2, 1, rows, 6).getValues().filter((r) => r[4]).length : 0;
+  const add = [];
+  if (!have) add.push([0, "Willbrandt und Kompagnon", "Verwaltung", true]);
+  for (let i = have + add.length; i <= CONFIG.STAFF_LINKS; i++) add.push([i, "", "Hausmeister", true]);
+  if (!add.length) return;
+  const start = sheet.getLastRow() + 1;
+  sheet.getRange(start, 1, add.length, 6).setValues(add.map((r) => {
+    const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
+    return [r[0], r[1], r[2], r[3], token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
+  }));
+  sheet.getRange(2, 4, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  sheet.getRange(2, 3, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(["Hausmeister", "Verwaltung"], true).build());
+  CacheService.getScriptCache().remove("staff");
+}
+
+/** Liest ein Blatt als Liste von Objekten (Schlüssel = Spaltenüberschrift). */
+function sheetObjects(def) {
+  const sheet = getSpreadsheet().getSheetByName(def.name);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const values = sheet.getDataRange().getValues();
+  const h = values.shift();
+  return values.map((r, i) => {
+    const o = { _row: i + 2 };
+    h.forEach((name, j) => { o[name] = r[j]; });
+    return o;
+  });
+}
+
+/** Prüft den persönlichen Zugang. Ergebnis: { nr, name, role }. */
+function authStaff(token) {
+  const t = String(token || "").trim();
+  if (!/^[a-f0-9]{24,64}$/i.test(t)) throw userError("Kein gültiger Zugang", "staff");
+  const cache = CacheService.getScriptCache();
+  let map = null;
+  try { map = JSON.parse(cache.get("staff") || "null"); } catch (e) { map = null; }
+  if (!map) {
+    map = {};
+    sheetObjects(CONFIG.SHEETS.staff).forEach((r) => {
+      if (r.Token && r.Aktiv === true) {
+        map[String(r.Token)] = { nr: r.Nr, name: String(r.Name || "").trim() || `Mitarbeiter ${r.Nr}`, role: String(r.Rolle || "Hausmeister") };
+      }
+    });
+    cache.put("staff", JSON.stringify(map), 300);
+  }
+  const user = map[t];
+  if (!user) throw userError("Dieser Zugang ist nicht (mehr) freigeschaltet. Bitte an die Hausverwaltung wenden.", "staff");
+  return user;
+}
+
+function activeAreas() {
+  return sheetObjects(CONFIG.SHEETS.areas).filter((a) => a.Code && a.Aktiv !== false).map((a) => ({
+    code: String(a.Code).trim(), ort: String(a.Ort || a.Code), bereich: String(a.Bereich || ""),
+    aufgang: String(a["Aufgang-ID"] || "").trim(), activity: String(a["Standard-Tätigkeit"] || ""),
+    residents: a["Für Bewohner anzeigen"] === true,
+  }));
+}
+
+function activeActivities() {
+  const list = sheetObjects(CONFIG.SHEETS.activities).filter((a) => a["Tätigkeit"] && a.Aktiv !== false)
+    .map((a) => String(a["Tätigkeit"]).trim());
+  return list.length ? list : DEFAULT_ACTIVITIES;
+}
+
+/** US 3.1 – Anmeldung: Name, Rolle, Orte und Tätigkeiten für die App. */
+function staffLogin(user) {
+  return {
+    ok: true, user: { name: user.name, role: user.role },
+    areas: activeAreas().map(({ residents, ...a }) => a), activities: activeActivities(),
+  };
+}
+
+/** US 3.2 – Nachweis per QR-Scan (oder manuell gewählter Ort, als solcher gekennzeichnet). */
+function logCleaning(p, user) {
+  const code = String(p.areaToken || "").trim().toUpperCase();
+  const area = activeAreas().find((a) => a.code.toUpperCase() === code);
+  if (!area) throw userError("Unbekannter QR-Code. Bitte an die Hausverwaltung wenden.");
+  const activity = str(p.activity, 60) || area.activity || "Reinigung";
+
+  // Zeitpunkt vom Gerät (auch nachträglich gesendete Offline-Scans), aber nicht in der Zukunft
+  // und höchstens 7 Tage zurück.
+  const now = new Date();
+  let when = new Date(p.timestamp);
+  if (isNaN(when) || when > new Date(now.getTime() + 5 * 60000) || when < new Date(now.getTime() - 7 * 86400000)) when = now;
+
+  const photoUrl = p.photo ? savePhoto(p.photo, `Nachweis_${area.code}_${Utilities.formatDate(when, CONFIG.TIMEZONE, "yyyyMMdd_HHmm")}`) : "";
+  appendRow(CONFIG.SHEETS.cleaning.name, [
+    when, area.code, str(String(user.nr), 10), now, str(area.ort, 120), activity, str(user.name, 80),
+    str(p.note, 500), photoUrl, area.aufgang, p.manual ? "manuell gewählt" : "QR-Scan",
+  ]);
+  return { ok: true, ort: area.ort, activity, time: when.toISOString() };
+}
+
+/** US 3.3 – offene Aufträge: Anträge der Bewohner und Mängel des Hausmeisters. */
+function getTasks(p, user) {
+  const iso = (d) => (d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd") : String(d || ""));
+  const open = (r) => r.Status && r.Status !== "erledigt";
+  const tickets = sheetObjects(CONFIG.SHEETS.tickets).filter(open).map((r) => ({
+    id: r.ID, source: "Bewohner", type: r.Typ, status: r.Status, entrance: r.Aufgang, wohnung: r.Wohnung,
+    name: r.Name, contact: r["Telefon/Kontakt"], date: iso(r.Termin), details: r.Details, ort: r.Ort,
+    created: iso(r.Eingang),
+  }));
+  const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter(open).map((r) => ({
+    id: r.ID, source: r["Erfasst von"], type: "Mangel (intern)", status: r.Status, entrance: "", wohnung: "",
+    name: "", contact: "", date: "", details: r.Beschreibung, ort: r.Ort, urgent: r.Dringend === true,
+    created: iso(r.Eingang),
+  }));
+  const tasks = tickets.concat(defects).sort((a, b) =>
+    (b.urgent === true) - (a.urgent === true) || (a.date || "9999").localeCompare(b.date || "9999")
+    || String(a.created).localeCompare(String(b.created)));
+  return { ok: true, tasks };
+}
+
+/** Auftrag im Portal als erledigt melden. */
+function completeTask(p, user) {
+  const id = String(p.id || "").trim();
+  const def = /^M-/.test(id) ? CONFIG.SHEETS.staffDefects : CONFIG.SHEETS.tickets;
+  const sheet = getSpreadsheet().getSheetByName(def.name);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let row;
+  try {
+    row = sheetObjects(def).find((r) => r.ID === id);
+    if (!row) throw userError("Auftrag nicht gefunden");
+    if (row.Status !== "erledigt") {
+      sheet.getRange(row._row, def.headers.indexOf("Status") + 1).setValue("erledigt");
+      sheet.getRange(row._row, def.headers.indexOf("Erledigt am") + 1).setValue(new Date());
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  notify(`Erledigt: ${row.Typ || "Mangel (intern)"} (${id})`, [
+    `${row.Typ || "Mangel"} · ${row.Aufgang || row.Ort || ""}${row.Wohnung ? ", " + whg(row.Wohnung) : ""}`,
+    `Im Hausmeister-Portal als erledigt gemeldet von ${user.name}.`,
+  ]);
+  return { ok: true };
+}
+
+/** Mangel, vom Hausmeister oder der Verwaltung erfasst – eigenes Blatt. */
+function submitStaffDefect(p, user) {
+  const text = str(p.beschreibung, 2000);
+  if (!text) throw userError("Bitte den Mangel beschreiben");
+  const id = newId("M");
+  const photoUrl = p.photo ? savePhoto(p.photo, `${id}_Mangel`) : "";
+  const ort = str(p.ort, 120);
+  const area = activeAreas().find((a) => a.ort === p.ort);
+  appendRow(CONFIG.SHEETS.staffDefects.name, [
+    id, new Date(), str(user.name, 80), user.role, ort, area ? area.aufgang : "", text, p.dringend === true,
+    photoUrl, CONFIG.STATUS_OPEN, "", "",
+  ]);
+  notify(`${p.dringend === true ? "DRINGEND – " : ""}Mangel vom ${user.role}: ${plain(ort, 60)} (${id})`, [
+    `Erfasst von: ${user.name}`, `Ort: ${plain(ort, 120)}`, `Beschreibung: ${plain(text)}`,
+    photoUrl ? `Foto: ${photoUrl}` : "",
+  ]);
+  return { ok: true, id };
+}
+
+/* ---------- Reinigungsplan ---------- */
+
+/** Datum aus Zelle (Datum oder Text „dd.mm.yyyy“ / „yyyy-mm-dd“) → Date ohne Uhrzeit oder null. */
+function cellDate(v) {
+  if (v instanceof Date && !isNaN(v)) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  const s = String(v || "").trim();
+  let m = /^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/.exec(s);
+  if (m) return new Date(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1]);
+  m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+
+/** Heutiges Datum (Berliner Zeit) ohne Uhrzeit. */
+function berlinToday() {
+  return parseIsoDate(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd"));
+}
+
+function planRows() {
+  return sheetObjects(CONFIG.SHEETS.plan).map((r) => {
+    const from = cellDate(r.Datum);
+    const to = cellDate(r.Bis);
+    return {
+      row: r._row, from, to: to && from && to >= from ? to : from, activity: String(r["Tätigkeit"] || "").trim(),
+      ort: String(r.Ort || "").trim(), note: String(r.Bemerkung || "").trim(), eventId: String(r["Kalender-ID"] || ""),
+    };
+  }).filter((r) => r.from && r.activity);
+}
+
+/** Welche QR-Orte sind mit dem Ort-Text im Plan gemeint? (mehrere kommagetrennt, „alle Aufgänge“ …) */
+function planAreas(ortText, areas) {
+  const parts = String(ortText || "").split(/[,;\n]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+  if (!parts.length || parts.some((x) => x === "alle" || x === "gesamte anlage")) return null; // = überall
+  const out = [];
+  parts.forEach((part) => {
+    if (/^alle aufgänge|^alle treppenhäuser/.test(part)) out.push(...areas.filter((a) => a.bereich === "Aufgang"));
+    else if (/^alle keller/.test(part)) out.push(...areas.filter((a) => a.bereich === "Keller"));
+    else out.push(...areas.filter((a) => a.ort.toLowerCase() === part || a.code.toLowerCase() === part
+      || a.ort.toLowerCase().indexOf(part) !== -1));
+  });
+  return out;
+}
+
+function findCalendar() {
+  const id = PropertiesService.getScriptProperties().getProperty("CALENDAR_ID");
+  const cal = id ? CalendarApp.getCalendarById(id) : (CalendarApp.getCalendarsByName(CONFIG.CALENDAR_NAME) || [])[0];
+  if (!cal) throw new Error(`Kalender „${CONFIG.CALENDAR_NAME}“ nicht gefunden. Bitte anlegen oder CALENDAR_ID setzen.`);
+  return cal;
+}
+
+/** Überträgt das Blatt „Reinigungsplan“ in den Google-Kalender (neu, geändert, gelöscht). */
+function syncPlanToCalendar() {
+  const cal = findCalendar();
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.plan.name);
+  const idCol = CONFIG.SHEETS.plan.headers.indexOf("Kalender-ID") + 1;
+  const rows = planRows();
+  const keep = {};
+  let created = 0, updated = 0, removed = 0;
+
+  rows.forEach((r) => {
+    const title = r.ort ? `${r.activity} – ${r.ort}` : r.activity;
+    const endExcl = new Date(r.to.getFullYear(), r.to.getMonth(), r.to.getDate() + 1);
+    const desc = `${r.note ? r.note + "\n\n" : ""}${PLAN_TAG}`;
+    let ev = r.eventId ? cal.getEventById(r.eventId) : null;
+    if (ev) {
+      ev.setTitle(title); ev.setAllDayDates(r.from, endExcl); ev.setDescription(desc);
+      updated++;
+    } else {
+      ev = cal.createAllDayEvent(title, r.from, endExcl, { description: desc });
+      sheet.getRange(r.row, idCol).setValue(ev.getId());
+      created++;
+    }
+    keep[ev.getId()] = true;
+  });
+
+  // Einträge, die aus dem Plan gelöscht wurden, auch im Kalender entfernen.
+  const now = new Date();
+  const start = new Date(now.getFullYear() - 1, 0, 1);
+  const end = new Date(now.getFullYear() + 2, 0, 1);
+  cal.getEvents(start, end).forEach((ev) => {
+    if (String(ev.getDescription()).indexOf(PLAN_TAG) !== -1 && !keep[ev.getId()]) { ev.deleteEvent(); removed++; }
+  });
+  const msg = `Kalender „${cal.getName()}“: ${created} neu, ${updated} aktualisiert, ${removed} entfernt.`;
+  Logger.log(msg);
+  try { SpreadsheetApp.getActive().toast(msg, "Reinigungsplan", 8); } catch (e) { /* ohne Tabelle geöffnet */ }
+  return msg;
+}
+
+/** Tägliche Kontrolle (Trigger 19 Uhr): Geplante Tätigkeiten von heute ohne Nachweis → E-Mail. */
+function checkPlanFulfilment() {
+  const today = berlinToday();
+  const key = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+  const areas = activeAreas();
+  const scans = sheetObjects(CONFIG.SHEETS.cleaning).filter((s) => s["Zeitpunkt (Scan)"] instanceof Date
+    && key(s["Zeitpunkt (Scan)"]) === key(today));
+  const done = (activity, area) => scans.some((s) => String(s["Tätigkeit"]).toLowerCase() === activity.toLowerCase()
+    && (!area || String(s["Ort-Code"]).toUpperCase() === area.code.toUpperCase()));
+
+  const missing = [];
+  planRows().filter((r) => key(r.from) === key(today) && key(r.to) === key(today)).forEach((r) => {
+    const targets = planAreas(r.ort, areas);
+    if (targets === null) { if (!done(r.activity, null)) missing.push(`${r.activity} (${r.ort || "ohne Ort"})`); return; }
+    if (!targets.length) { if (!done(r.activity, null)) missing.push(`${r.activity} – ${r.ort}`); return; }
+    targets.forEach((a) => { if (!done(r.activity, a)) missing.push(`${r.activity} – ${a.ort}`); });
+  });
+  if (missing.length) {
+    notify(`Fehlende Nachweise heute (${missing.length})`, [
+      `Für heute (${Utilities.formatDate(today, CONFIG.TIMEZONE, "dd.MM.yyyy")}) geplant, aber bis jetzt ohne Scan:`, "",
+      ...missing.map((m) => `• ${m}`),
+    ]);
+  }
+  Logger.log(missing.length ? "Fehlend: " + missing.join("; ") : "Alle geplanten Tätigkeiten von heute sind nachgewiesen.");
+  return missing;
+}
+
+function ensureDailyCheckTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "checkPlanFulfilment");
+  if (!exists) ScriptApp.newTrigger("checkPlanFulfilment").timeBased().everyDays(1).atHour(19).inTimezone(CONFIG.TIMEZONE).create();
+}
+
+/** Für die Bewohner-App: zuletzt erledigt (60 Tage) und demnächst geplant (14 Tage) für einen Aufgang. */
+function residentCareInfo(object) {
+  const areas = activeAreas().filter((a) => a.residents && (!a.aufgang || a.aufgang === object));
+  if (!areas.length) return { last: [], next: [] };
+  const byCode = {};
+  areas.forEach((a) => { byCode[a.code.toUpperCase()] = a; });
+  const since = new Date(Date.now() - 60 * 86400000);
+  const latest = {};
+  sheetObjects(CONFIG.SHEETS.cleaning).forEach((s) => {
+    const a = byCode[String(s["Ort-Code"] || "").toUpperCase()];
+    const t = s["Zeitpunkt (Scan)"];
+    if (!a || !(t instanceof Date) || t < since) return;
+    const k = `${a.code}|${s["Tätigkeit"]}`;
+    if (!latest[k] || latest[k].time < t) latest[k] = { ort: a.ort, bereich: a.bereich, activity: String(s["Tätigkeit"]), time: t };
+  });
+  const last = Object.keys(latest).map((k) => latest[k])
+    .sort((x, y) => (x.bereich === "Aufgang" ? 0 : 1) - (y.bereich === "Aufgang" ? 0 : 1) || y.time - x.time)
+    .slice(0, 6).map((x) => ({ ort: x.ort, activity: x.activity, time: x.time.toISOString() }));
+
+  const allAreas = activeAreas();
+  const today = berlinToday();
+  const until = new Date(today.getTime() + 14 * 86400000);
+  const ymd = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+  const next = planRows().filter((r) => r.to >= today && r.from <= until).filter((r) => {
+    const t = planAreas(r.ort, allAreas);
+    return t === null || t.some((a) => byCode[a.code.toUpperCase()]);
+  }).sort((a, b) => a.from - b.from).slice(0, 5)
+    .map((r) => ({ activity: r.activity, ort: r.ort, from: ymd(r.from), to: ymd(r.to) }));
+  return { last, next };
 }

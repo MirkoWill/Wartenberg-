@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=22">
+  <link rel="stylesheet" href="css/style.css?v=23">
 </head>
 <body>
   <header class="app-header">
@@ -61,6 +61,8 @@
 
       <h2 class="section-title">Verhaltensregeln</h2>
       <div class="rules" id="emergencyRules"></div>
+
+      <div class="care" id="careBox" hidden></div>
     </section>
 
     <!-- ============ EPIC 1 – US 1.3: Live-ÖPNV ============ -->
@@ -131,6 +133,134 @@
         </li>
       </ul>
       <ul class="link-list link-list--more" id="documentList"></ul>
+    </section>
+
+    <!-- ============ EPIC 3: Hausmeister-Portal (nur mit persönlichem Link) ============ -->
+    <section class="view" data-view="hausmeister" data-title="Hausmeister-Tools" hidden>
+      <div data-no-i18n>
+      <div class="staff-none" id="staffNone">
+        <p class="lead">Dieser Bereich ist nur für den Hausmeisterdienst.</p>
+        <p class="muted">Bitte öffnen Sie einmal Ihren persönlichen Link, den Sie von der Hausverwaltung erhalten haben.
+          Danach bleiben Sie auf diesem Gerät angemeldet.</p>
+      </div>
+
+      <div id="staffArea" hidden>
+        <div class="staff-head">
+          <div>
+            <div class="muted small">Angemeldet als</div>
+            <div class="staff-head__name" id="staffName">–</div>
+          </div>
+          <span class="badge" id="staffQueue" hidden></span>
+        </div>
+
+        <div class="segmented segmented--tabs" role="tablist" id="staffTabs">
+          <label><input type="radio" name="staffTab" value="scan" checked><span>Scannen</span></label>
+          <label><input type="radio" name="staffTab" value="tasks"><span>Aufträge</span></label>
+          <label><input type="radio" name="staffTab" value="defect"><span>Mangel</span></label>
+        </div>
+
+        <!-- Scannen -->
+        <div class="staff-pane" data-pane="scan">
+          <div class="scan-done" id="scanDone" hidden>
+            <div class="scan-done__check" aria-hidden="true">✓</div>
+            <div class="scan-done__text" id="scanDoneText">Gespeichert</div>
+          </div>
+
+          <div id="scanStart">
+            <button class="btn btn--primary btn--block btn--big" id="scanBtn" type="button">📷 QR-Code scannen</button>
+            <button class="btn btn--ghost btn--block" id="manualBtn" type="button">Ort ohne QR-Code wählen (Code beschädigt)</button>
+          </div>
+          <div class="scanner" id="scanner" hidden>
+            <div id="scannerView"></div>
+            <button class="btn btn--ghost btn--block" id="scanCancel" type="button">Abbrechen</button>
+          </div>
+
+          <form class="form scan-form" id="scanForm" novalidate hidden>
+            <div class="scan-place">
+              <div class="muted small" id="scanHow">Ort (per QR-Code)</div>
+              <div class="scan-place__name" id="scanPlace">–</div>
+              <select id="scanManual" hidden aria-label="Ort wählen"></select>
+            </div>
+            <label class="field">
+              <span class="field__label">Tätigkeit *</span>
+              <select name="activity" id="scanActivity" required></select>
+            </label>
+            <label class="field">
+              <span class="field__label">Notiz (optional)</span>
+              <input name="note" maxlength="500" autocomplete="off" placeholder="z. B. Glühbirne defekt">
+            </label>
+            <label class="field">
+              <span class="field__label">Foto (optional)</span>
+              <input type="file" name="foto" accept="image/*" capture="environment" data-preview="scanPhotoPreview">
+              <img class="photo-preview" id="scanPhotoPreview" alt="Vorschau" hidden>
+            </label>
+            <button class="btn btn--primary btn--block btn--big" type="submit">✓ Erledigt – Nachweis speichern</button>
+            <button class="btn btn--ghost btn--block" type="button" id="scanFormCancel">Abbrechen</button>
+          </form>
+
+          <h2 class="section-title">Heute erfasst</h2>
+          <ul class="today-list" id="todayList"><li class="muted">Noch nichts erfasst.</li></ul>
+        </div>
+
+        <!-- Aufträge -->
+        <div class="staff-pane" data-pane="tasks" hidden>
+          <button class="btn btn--ghost btn--small" id="tasksRefresh" type="button">Aktualisieren</button>
+          <p class="muted small" id="tasksStatus"></p>
+          <ul class="task-list" id="taskList"></ul>
+        </div>
+
+        <!-- Mangel erfassen -->
+        <div class="staff-pane" data-pane="defect" hidden>
+          <form class="form" id="formStaffDefect" novalidate>
+            <label class="field">
+              <span class="field__label">Ort *</span>
+              <select name="ort" id="defectOrt" required></select>
+            </label>
+            <label class="field" id="defectOrtFreeWrap" hidden>
+              <span class="field__label">Ort genauer *</span>
+              <input name="ortFrei" id="defectOrtFree" maxlength="120" placeholder="z. B. Lindenberger Str. 4, Whg 07">
+            </label>
+            <label class="field">
+              <span class="field__label">Was ist defekt? *</span>
+              <textarea name="beschreibung" rows="4" required maxlength="2000"></textarea>
+            </label>
+            <label class="remember"><input type="checkbox" name="dringend"> <span>Dringend</span></label>
+            <label class="field">
+              <span class="field__label">Foto</span>
+              <input type="file" name="foto" accept="image/*" capture="environment" data-preview="defectPhotoPreview">
+              <img class="photo-preview" id="defectPhotoPreview" alt="Vorschau" hidden>
+            </label>
+            <button class="btn btn--primary btn--block" type="submit">Mangel melden</button>
+          </form>
+        </div>
+
+        <div class="staff-admin" id="staffAdmin" hidden>
+          <h2 class="section-title">Verwaltung</h2>
+          <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
+        </div>
+
+        <details class="rule staff-privacy">
+          <summary>Datenschutz-Hinweis</summary>
+          <p>Mit jedem Nachweis speichern wir Ihren Namen, den Ort, die Tätigkeit und die Uhrzeit (bei Offline-Scans die
+            Uhrzeit des Scans) sowie freiwillig eine Notiz oder ein Foto. Zweck ist der Leistungsnachweis gegenüber der
+            WEG Wartenberger Dorfkrug. Die Bewohner sehen in der App nur Ort, Tätigkeit und Datum, nicht Ihren Namen.
+            Verantwortlich: Willbrandt und Kompagnon (siehe Impressum). Die Daten liegen in einer Google-Tabelle der
+            Hausverwaltung.</p>
+        </details>
+        <button class="btn btn--ghost btn--block" id="staffLogout" type="button">Auf diesem Gerät abmelden</button>
+      </div>
+      </div>
+    </section>
+
+    <!-- ============ QR-Codes drucken (Verwaltung) ============ -->
+    <section class="view" data-view="qrdruck" data-title="QR-Codes" data-parent="hausmeister" hidden>
+      <div data-no-i18n>
+      <div class="no-print">
+        <p class="muted">Ein Code je Ort (Blatt „QR-Orte“). Am besten laminiert oder als wetterfeste Aufkleber anbringen.</p>
+        <button class="btn btn--primary btn--block" id="qrPrint" type="button">🖨️ Drucken</button>
+      </div>
+      <div class="qr-sheet" id="qrSheet"></div>
+      </div>
     </section>
 
     <!-- ============ Hausordnung (Stand 19.11.2012) ============ -->
@@ -448,6 +578,14 @@
           Es gelten die Datenschutzhinweise von aponet.de.</p>
       </details>
       <details class="rule">
+        <summary>Hausmeister-Portal und Reinigungsnachweise</summary>
+        <p>Der Hausmeisterdienst dokumentiert erledigte Arbeiten (z. B. Treppenhausreinigung) per QR-Code in einem
+          eigenen, mit persönlichem Link geschützten Bereich der App. Gespeichert werden Name der Mitarbeiterin bzw. des
+          Mitarbeiters, Ort, Tätigkeit, Uhrzeit sowie freiwillig Notiz und Foto – als Leistungsnachweis gegenüber der
+          WEG (Art. 6 Abs. 1 lit. b und f DSGVO). Bewohnerinnen und Bewohner sehen in der App nur Ort, Tätigkeit und
+          Datum, keine Namen. Der Reinigungsplan wird zusätzlich im Google-Kalender der WEG veröffentlicht.</p>
+      </details>
+      <details class="rule">
         <summary>Anfragen per WhatsApp und Telefon</summary>
         <p>Die Funktionen „Zugang Stromzähler“ und „Hausverwaltung per WhatsApp“ (bei Wasserschäden) öffnen WhatsApp mit einem vorausgefüllten Text (WhatsApp Ireland
           Limited bzw. Meta Platforms, Inc., USA). Die Nachricht wird erst gesendet, wenn Sie dies in WhatsApp selbst
@@ -517,6 +655,7 @@
     <a class="tabbar__item" href="#oepnv" data-tab="oepnv"><span aria-hidden="true">🚆</span>Abfahrten</a>
     <a class="tabbar__item" href="#infos" data-tab="infos"><span aria-hidden="true">📄</span>Infos</a>
     <a class="tabbar__item" href="#services" data-tab="services"><span aria-hidden="true">🧰</span>Services</a>
+    <a class="tabbar__item" href="#hausmeister" data-tab="hausmeister" id="staffTab" hidden><span aria-hidden="true">🧹</span>Hausmeister</a>
   </nav>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -580,8 +719,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=22"></script>
-  <script src="js/i18n.js?v=22"></script>
-  <script src="js/app.js?v=22"></script>
+  <script src="js/config.js?v=23"></script>
+  <script src="js/i18n.js?v=23"></script>
+  <script src="js/app.js?v=23"></script>
 </body>
 </html>

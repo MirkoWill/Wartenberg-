@@ -109,3 +109,20 @@ bei GET als `&pin=13059`. Falsche oder fehlende PIN: `{ "ok": false, "error": "P
 die App fragt die PIN dann erneut ab. Zu viele Fehlversuche: `"code": "pin_locked"`.
 Ausgenommen: `?action=done` (Erledigt-Link) und Hausmeister-Aktionen mit Token.
 
+## Hausmeister-Portal (Epic 3)
+
+Alle Aufrufe per POST mit persönlichem Token (aus dem Link `?hm=TOKEN`, Blatt „Mitarbeiter“) statt App-PIN.
+Ungültiger/gesperrter Token: `{ "ok": false, "code": "staff", "error": "…" }`.
+
+| action | Payload | Antwort |
+|---|---|---|
+| `hmLogin` | `{ token }` | `{ user: { name, role }, areas: [{ code, ort, bereich, aufgang, activity }], activities: [...] }` |
+| `logCleaning` | `{ token, areaToken, activity, timestamp (ISO, Zeit des Scans), note?, photo?, manual? }` | `{ ort, activity, time }` |
+| `getTasks` | `{ token }` | `{ tasks: [{ id, source, type, status, entrance, wohnung, name, contact, date, details, ort, urgent, created }] }` |
+| `completeTask` | `{ token, id }` | `{ ok }` – setzt Status „erledigt“ (Tickets `T-…` oder Mängel `M-…`) |
+| `submitStaffDefect` | `{ token, ort, beschreibung, dringend, photo? }` | `{ id: "M-…" }` |
+
+QR-Code-Inhalt: `https://mirkowill.github.io/Wartenberg-/?scan=CODE#hausmeister` (der Scanner akzeptiert auch nur `CODE`).
+
+`GET ?action=news` liefert zusätzlich `care: { last: [{ ort, activity, time }], next: [{ activity, ort, from, to }] }`.
+
