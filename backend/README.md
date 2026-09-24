@@ -84,6 +84,7 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 | **QR-Orte** | Alle Orte mit QR-Code (Code, Ort, Bereich, Aufgang-ID, Standard-Tätigkeit). *Für Bewohner anzeigen* = erscheint bei den Bewohnern unter „Hausreinigung & Pflege“ (bei Aufgang-ID nur in diesem Aufgang, leer = alle). Neue Orte einfach als Zeile ergänzen (in der App nach spätestens 5 Minuten sichtbar); *Code* nur Buchstaben/Ziffern/_ und danach nicht mehr ändern (steht im gedruckten QR-Code). |
 | **Tätigkeiten** | Auswahlliste beim Scannen; beliebig erweiterbar. |
 | **Reinigung** | Jeder Nachweis: Scan-Zeit, Ort, Tätigkeit, Mitarbeiter-Nr, Notiz, Foto, *Erfassung* = „QR-Scan“ oder „manuell gewählt“ (QR-Code beschädigt). |
+| **Zuständig** (Spalte in *Tickets* und *Mängel Hausmeister*) | Wer den Auftrag erledigt: *Hausmeister* oder *Verwaltung*. Der Hausmeister sieht im Portal **nur** „Hausmeister“-Aufträge, die Verwaltung (007) sieht alle. Voreinstellung: Klingelschild → Hausmeister; Elektroraum, Mängel der Bewohner und interne Mängel → Verwaltung (umstellen per Auswahl in der Zelle, z. B. einen Mangel an den Hausmeister geben). Standards in `CONFIG.DEFAULT_OWNER`. |
 | **Mängel Hausmeister** | Vom Hausmeister/der Verwaltung erfasste Mängel, getrennt von den Bewohner-Tickets; Status wie bei *Tickets*. |
 | **Reinigungsplan** | Termine vom Hausmeister (siehe unten). |
 

@@ -919,3 +919,4 @@ body.lang-de .i18n-note { display: none; }
   .qr-card { page-break-inside: avoid; }
 }
 .kiez-link { margin-top: 8px; }
+.badge--owner { background: var(--c-surface); border: 1px solid var(--c-border); font-weight: 600; }

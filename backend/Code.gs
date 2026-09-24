@@ -21,7 +21,7 @@ const CONFIG = {
       name: "Tickets",
       headers: ["ID", "Eingang", "Typ", "Status", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Name",
         "Termin", "Details", "Ort", "Telefon/Kontakt", "Foto", "Erledigt am", "Notiz Verwaltung",
-        "Erledigt-Code"],
+        "Erledigt-Code", "Zuständig"],
     },
     meter: {
       name: "Zählerstände",
@@ -61,7 +61,7 @@ const CONFIG = {
     staffDefects: {
       name: "Mängel Hausmeister",
       headers: ["ID", "Eingang", "Erfasst von (Nr)", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
-        "Status", "Erledigt am", "Notiz Verwaltung"],
+        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig"],
     },
     plan: {
       name: "Reinigungsplan",
@@ -71,6 +71,10 @@ const CONFIG = {
   TICKET_TYPES: ["Elektroraum", "Klingelschild", "Mangel"],
   STATUS_OPEN: "offen",
   STATUS_VALUES: ["offen", "in Arbeit", "erledigt"],
+  // Wer erledigt welchen Auftrag? Der Hausmeister sieht im Portal nur „Hausmeister“-Aufträge,
+  // die Verwaltung sieht alle. Pro Auftrag in der Spalte „Zuständig“ änderbar.
+  OWNERS: ["Hausmeister", "Verwaltung"],
+  DEFAULT_OWNER: { Elektroraum: "Verwaltung", Klingelschild: "Hausmeister", Mangel: "Verwaltung", "Mangel (intern)": "Verwaltung" },
   PHOTO_FOLDER_NAME: "Mieter-App Fotos",
   MAX_TEXT: 2000,
   MAX_PHOTO_BYTES: 6 * 1024 * 1024,
@@ -119,6 +123,11 @@ function setup() {
   });
 
   const tickets = ss.getSheetByName(CONFIG.SHEETS.tickets.name);
+  [CONFIG.SHEETS.tickets, CONFIG.SHEETS.staffDefects].forEach((def) => {
+    const sh = ss.getSheetByName(def.name);
+    sh.getRange(2, def.headers.indexOf("Zuständig") + 1, sh.getMaxRows() - 1, 1).setDataValidation(
+      SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.OWNERS, true).build());
+  });
   const statusCol = CONFIG.SHEETS.tickets.headers.indexOf("Status") + 1;
   tickets.getRange(2, statusCol, tickets.getMaxRows() - 1, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.STATUS_VALUES, true).build()
@@ -235,7 +244,7 @@ function submitTicket(p) {
     id, new Date(), type, CONFIG.STATUS_OPEN,
     str(p.house, 60), str(p.entrance, 60), str(p.object, 20),
     str(p.wohnung, 60), str(p.name, 80), termin, details,
-    str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "", doneCode,
+    str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "", doneCode, defaultOwner(type),
   ]);
 
   if (type === "Klingelschild") {
@@ -1005,20 +1014,35 @@ function logCleaning(p, user) {
 }
 
 /** US 3.3 – offene Aufträge: Anträge der Bewohner und Mängel des Hausmeisters. */
+/** Zuständigkeit laut CONFIG.DEFAULT_OWNER (unbekannte Typen: Verwaltung). */
+function defaultOwner(type) {
+  return CONFIG.DEFAULT_OWNER[type] || "Verwaltung";
+}
+
+/** Zuständig laut Spalte, sonst Standard je Typ (ältere Zeilen ohne Eintrag). */
+function ownerOf(r, type) {
+  const v = String(r["Zuständig"] || "").trim();
+  return CONFIG.OWNERS.indexOf(v) !== -1 ? v : defaultOwner(type);
+}
+
+function mayHandle(user, owner) {
+  return user.role === "Verwaltung" || owner === "Hausmeister";
+}
+
 function getTasks(p, user) {
   const iso = (d) => (d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd") : String(d || ""));
   const open = (r) => r.Status && r.Status !== "erledigt";
   const tickets = sheetObjects(CONFIG.SHEETS.tickets).filter(open).map((r) => ({
     id: r.ID, source: "Bewohner", type: r.Typ, status: r.Status, entrance: r.Aufgang, wohnung: r.Wohnung,
     name: r.Name, contact: r["Telefon/Kontakt"], date: iso(r.Termin), details: r.Details, ort: r.Ort,
-    created: iso(r.Eingang),
+    created: iso(r.Eingang), owner: ownerOf(r, r.Typ),
   }));
   const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter(open).map((r) => ({
     id: r.ID, source: r["Erfasst von (Nr)"], type: "Mangel (intern)", status: r.Status, entrance: "", wohnung: "",
     name: "", contact: "", date: "", details: r.Beschreibung, ort: r.Ort, urgent: r.Dringend === true,
-    created: iso(r.Eingang),
+    created: iso(r.Eingang), owner: ownerOf(r, "Mangel (intern)"),
   }));
-  const tasks = tickets.concat(defects).sort((a, b) =>
+  const tasks = tickets.concat(defects).filter((t) => mayHandle(user, t.owner)).sort((a, b) =>
     (b.urgent === true) - (a.urgent === true) || (a.date || "9999").localeCompare(b.date || "9999")
     || String(a.created).localeCompare(String(b.created)));
   return { ok: true, tasks };
@@ -1034,7 +1058,7 @@ function completeTask(p, user) {
   let row;
   try {
     row = sheetObjects(def).find((r) => r.ID === id);
-    if (!row) throw userError("Auftrag nicht gefunden");
+    if (!row || !mayHandle(user, ownerOf(row, row.Typ || "Mangel (intern)"))) throw userError("Auftrag nicht gefunden");
     if (row.Status !== "erledigt") {
       sheet.getRange(row._row, def.headers.indexOf("Status") + 1).setValue("erledigt");
       sheet.getRange(row._row, def.headers.indexOf("Erledigt am") + 1).setValue(new Date());
@@ -1059,7 +1083,7 @@ function submitStaffDefect(p, user) {
   const area = activeAreas().find((a) => a.ort === p.ort);
   appendRow(CONFIG.SHEETS.staffDefects.name, [
     id, new Date(), str(user.name, 80), user.role, ort, area ? area.aufgang : "", text, p.dringend === true,
-    photoUrl, CONFIG.STATUS_OPEN, "", "",
+    photoUrl, CONFIG.STATUS_OPEN, "", "", defaultOwner("Mangel (intern)"),
   ]);
   notify(`${p.dringend === true ? "DRINGEND – " : ""}Mangel vom ${user.role}: ${plain(ort, 60)} (${id})`, [
     `Erfasst von: ${user.name}`, `Ort: ${plain(ort, 120)}`, `Beschreibung: ${plain(text)}`,
