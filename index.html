@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=48">
+  <link rel="stylesheet" href="css/style.css?v=49">
 </head>
 <body>
   <header class="app-header">
@@ -400,17 +400,15 @@
       <form class="form" id="formWater" novalidate>
         <fieldset class="form-block">
           <legend class="form-block__title">Ihre Angaben</legend>
-          <div class="field-row">
-            <label class="field">
-              <span class="field__label">Wohnung / Gewerbe *</span>
-              <input name="wohnung" required autocomplete="off" placeholder="z. B. 04 oder Laden EG">
-              <span class="field__hint">Steht am Türrahmen. Gewerbe: z. B. „Laden EG links“</span>
-            </label>
-            <label class="field">
-              <span class="field__label">Ablesedatum *</span>
-              <input type="date" name="ablesedatum" id="waterDate" required>
-            </label>
-          </div>
+          <label class="field">
+            <span class="field__label">Wohnung / Gewerbe *</span>
+            <input name="wohnung" required autocomplete="off" placeholder="z. B. 04 oder Laden EG">
+            <span class="field__hint">Steht am Türrahmen. Gewerbe: z. B. „Laden EG links“</span>
+          </label>
+          <label class="field">
+            <span class="field__label">Ablesedatum *</span>
+            <input type="date" name="ablesedatum" id="waterDate" required>
+          </label>
           <label class="field">
             <span class="field__label">Ihr Name</span>
             <input name="name" autocomplete="family-name">
@@ -806,8 +804,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=48"></script>
-  <script src="js/i18n.js?v=48"></script>
-  <script src="js/app.js?v=48"></script>
+  <script src="js/config.js?v=49"></script>
+  <script src="js/i18n.js?v=49"></script>
+  <script src="js/app.js?v=49"></script>
 </body>
 </html>
