@@ -237,6 +237,23 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Fehlerüberwachung");
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend() });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(300);
+      await p.evaluate(() => setTimeout(() => { throw new Error("Testfehler vor Zustimmung"); }));
+      await p.waitForTimeout(300);
+      check("Vor der Zustimmung wird nichts gemeldet", !ctx.requests.some((r) => r.action === "reportError"));
+      await acceptConsent(p);
+      for (let i = 0; i < 8; i++) await p.evaluate((i) => setTimeout(() => { throw new Error("Testfehler " + i); }), i);
+      await p.evaluate(() => setTimeout(() => { throw new Error("Testfehler 0"); }));
+      await p.waitForTimeout(600);
+      const reps = ctx.requests.filter((r) => r.action === "reportError");
+      check("Fehler nach Zustimmung gemeldet (mit PIN, Ansicht, Version), max. 5, ohne Doppelte", reps.length === 5 && reps[0].pin === PIN && reps[0].view === "notfall" && reps[0].version && new Set(reps.map((r) => r.message)).size === 5, reps.map((r) => r.message));
+      await ctx.close();
+    }
+
     console.log("--- Sicherheit (Browser)");
     {
       const X = `<img src=x class=pwn onerror="window.__xss=1"><svg class=pwn onload="window.__xss=1"></svg>"'><script class=pwn>window.__xss=1</script>`;

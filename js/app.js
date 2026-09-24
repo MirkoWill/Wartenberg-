@@ -16,6 +16,27 @@
   // bewusst Menü ⋮ → „Zum Startbildschirm hinzufügen“.
   window.addEventListener("beforeinstallprompt", (e) => e.preventDefault());
 
+  // Fehlerüberwachung: unerwartete Fehler (nur nach Zustimmung, max. 5 je Sitzung, ohne persönliche
+  // Daten) an die Verwaltung melden – Blatt „Fehlerprotokoll“, Systemprüfung per Mail.
+  const APP_VERSION = ((document.querySelector('script[src*="app.js"]') || {}).src || "").replace(/.*v=/, "") || "?";
+  const reportedErrors = new Set();
+  function reportError(message, source) {
+    try {
+      const msg = String(message || "").slice(0, 300);
+      if (!msg || !CFG.API_URL || reportedErrors.size >= 5 || reportedErrors.has(msg) || !hasConsent()) return;
+      reportedErrors.add(msg);
+      const s = readJson("mieterapp.staff");
+      fetch(CFG.API_URL, {
+        method: "POST", keepalive: true, headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "reportError", message: msg, source: String(source || "").slice(0, 200),
+          view: location.hash.slice(1, 40), browser: navigator.userAgent.slice(0, 200), version: APP_VERSION,
+          pin: storedPin(), token: s && s.token }),
+      }).catch(() => {});
+    } catch (e) { /* Melden darf nie selbst stören */ }
+  }
+  window.addEventListener("error", (e) => reportError(e.message, `${String(e.filename || "").split("/").pop()}:${e.lineno}`));
+  window.addEventListener("unhandledrejection", (e) => reportError((e.reason && e.reason.message) || e.reason, "promise"));
+
   const CFG = window.APP_CONFIG;
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -2072,7 +2093,7 @@
       initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
       initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff,
     ].forEach((step) => {
-      try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); }
+      try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); setTimeout(() => reportError(`${step.name}: ${err.message}`, "init"), 3000); }
     });
     try { translateDom(document.body); watchTranslations(); } catch (err) { console.error("Übersetzung:", err); }
     initRouter();

@@ -115,6 +115,32 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
   kommt eine Mail an `NOTIFY_EMAIL` („Fehlende Nachweise“). Zeiträume (z. B. Winterdienst) werden nicht geprüft.
 - Die Bewohner sehen in der App die nächsten Termine (14 Tage) und die zuletzt erledigten Arbeiten (60 Tage) für ihren Aufgang.
 
+## Löschkonzept und Überwachung (automatisch, täglich 3 Uhr)
+
+`setup` richtet einen nächtlichen Wartungslauf ein:
+
+**Löschkonzept** (Werte in `CONFIG.RETENTION`, bitte mit dem Beirat abstimmen):
+
+| Daten | gelöscht nach |
+|---|---|
+| Erledigte Bewohner-Meldungen samt Fotos | 2 Jahren ab „Erledigt am“ |
+| Erledigte Mängel vom Hausmeister samt Fotos | 2 Jahren |
+| Zählerstände samt Fotos | 3 Jahren ab Ablesedatum |
+| Tätigkeitsnachweise (Blatt „Reinigung“) samt Fotos | 2 Jahren |
+| Vergangene Einträge im Reinigungsplan | 2 Jahren |
+| Fehlerprotokoll | 90 Tagen |
+
+Offene Vorgänge und Zeilen ohne gültiges Datum werden nie gelöscht. Fotos wandern in den Drive-Papierkorb
+(Google leert ihn nach 30 Tagen). Sofort ausführen: Menü **Mieter-App → Alte Daten jetzt löschen**.
+
+**Fehlerüberwachung:**
+- Unerwartete Fehler im Backend landen im Blatt **Fehlerprotokoll**; zusätzlich kommt sofort eine Mail „Fehler im
+  Backend“ (höchstens alle 3 Stunden).
+- Fehler auf den Handys der Bewohner meldet die App ebenfalls dorthin (nur nach Zustimmung, ohne Namen/Eingaben).
+- **Systemprüfung** jede Nacht: fehlende Einstellungen/Blätter/Automatiken, Mail-Kontingent, Foto-Ordner, Kalender,
+  Fehler der letzten 24 Stunden, seit über 14 Tagen offene Meldungen. **Mail nur, wenn es etwas zu tun gibt.**
+  Sofort ausführen: Menü **Mieter-App → Systemprüfung jetzt**.
+
 ## Fehlersuche: Es kommen keine E-Mails an
 
 1. **Aktuellen Code eingespielt?** Benachrichtigungen bei Zählermeldungen gibt es erst ab der Version mit der

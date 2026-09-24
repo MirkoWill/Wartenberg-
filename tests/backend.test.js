@@ -2,7 +2,7 @@
 // Prüft backend/Code.gs mit nachgebildeten Google-Diensten (kein Google-Konto nötig).
 const fs = require('fs'), vm = require('vm');
 process.env.TZ = 'Europe/Berlin';
-let calName = 'WEG Wartenberger Dorfkrug'; const alerts = []; const cache = {}; const triggers = [];
+let calName = 'WEG Wartenberger Dorfkrug'; const trashed = []; const alerts = []; const cache = {}; const triggers = [];
 const events = {}; let evSeq = 0;
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
@@ -18,7 +18,7 @@ function mkSheet(name) {
       createFilter() { sh.filter = { remove() { sh.filter = null; } }; return sh.filter; } }; return api; },
     getDataRange() { return { getValues: () => sh.grid.map((r) => r.slice()) }; },
     getLastRow() { return sh.grid.length; }, getMaxRows() { return 1000; }, setFrozenRows() {},
-    appendRow(row) { sh.grid.push(row); }, clear() { sh.grid = []; }, getFilter() { return sh.filter; }, autoResizeColumns() {} };
+    appendRow(row) { sh.grid.push(row); }, deleteRow(n) { sh.grid.splice(n - 1, 1); }, clear() { sh.grid = []; }, getFilter() { return sh.filter; }, autoResizeColumns() {} };
   return (sheets[name] = sh);
 }
 const ss = { getSheetByName: (n) => sheets[n] || null, insertSheet: mkSheet, getSheets: () => Object.values(sheets), deleteSheet() {}, getUrl: () => 'https://sheet' };
@@ -26,8 +26,8 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   Logger: { log() {} },
   SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
-  DriveApp: { createFolder: () => ({ getId: () => 'F1' }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
-  Utilities: { base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
+  DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id) }), createFolder: () => ({ getId: () => 'F1' }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
+  Utilities: { DigestAlgorithm: { MD5: 'md5' }, computeDigest: (a, t) => [...require('crypto').createHash('md5').update(t).digest()], base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64url'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
@@ -280,4 +280,61 @@ let blocked = false;
 for (let i = 0; i < 160; i++) { const r = post({ action: 'hmLogin', token: hmTok }); if (!r.ok && /sehr viele/.test(r.error)) { blocked = true; break; } }
 check('Limit je Zugang greift', blocked);
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (3)');
+
+// ================= Löschkonzept =================
+ctx.setup();
+const yearsAgo = (y, extraDays = 0) => { const d = new Date(); d.setFullYear(d.getFullYear() - y); d.setDate(d.getDate() - extraDays); return d; };
+const H = (sheet) => sheets[sheet].grid[0];
+const rowFor = (sheet, obj) => H(sheet).map((h) => (h in obj ? obj[h] : ''));
+const drive = (id) => `https://drive.google.com/file/d/${id}xxxxxxxxxxxxxxxxxxxx/view`;
+sheets['Tickets'].grid.push(
+  rowFor('Tickets', { ID: 'T-OLD-DONE', Eingang: yearsAgo(3), Typ: 'Mangel', Status: 'erledigt', 'Erledigt am': yearsAgo(2, 5), Foto: drive('p1') }),
+  rowFor('Tickets', { ID: 'T-OLD-OPEN', Eingang: yearsAgo(4), Typ: 'Mangel', Status: 'offen', Foto: drive('p2') }),
+  rowFor('Tickets', { ID: 'T-RECENT-DONE', Eingang: yearsAgo(1), Typ: 'Mangel', Status: 'erledigt', 'Erledigt am': yearsAgo(1), Foto: drive('p3') }));
+sheets['Zählerstände'].grid.push(
+  rowFor('Zählerstände', { ID: 'Z-OLD', Eingang: yearsAgo(3, 10), Ablesedatum: yearsAgo(3, 10), Wohnung: 'Whg 1', Art: 'Kalt', Zählerstand: 1, Foto: drive('p4') }),
+  rowFor('Zählerstände', { ID: 'Z-KEEP', Eingang: yearsAgo(2), Ablesedatum: yearsAgo(2), Wohnung: 'Whg 1', Art: 'Kalt', Zählerstand: 2, Foto: drive('p5') }));
+sheets['Reinigung'].grid.push(rowFor('Reinigung', { 'Zeitpunkt (Scan)': yearsAgo(2, 3), 'Ort-Code': 'TG', Foto: drive('p6') }));
+sheets['Fehlerprotokoll'].grid.push(rowFor('Fehlerprotokoll', { Zeit: new Date(Date.now() - 100 * 86400000), Quelle: 'App', Meldung: 'alt' }));
+sheets['Reinigungsplan'].grid.push(rowFor('Reinigungsplan', { Datum: yearsAgo(3), 'Tätigkeit': 'Alt-Eintrag' }), rowFor('Reinigungsplan', { Datum: 'irgendwann', 'Tätigkeit': 'Unklar' }));
+sheets['Tickets'].grid.push(rowFor('Tickets', { ID: 'T-NODATE', Typ: 'Mangel', Status: 'erledigt' }));
+const ids = (n) => sheets[n].grid.slice(1).map((r) => r[0]);
+trashed.length = 0;
+const rem = ctx.cleanupOldData();
+check('Löschen nie ohne gültiges Datum (Plan „irgendwann“, Ticket ohne Datum bleiben)', sheets['Reinigungsplan'].grid.some((r) => r[2] === 'Unklar') && !sheets['Reinigungsplan'].grid.some((r) => r[2] === 'Alt-Eintrag') && ids('Tickets').includes('T-NODATE'));
+check('Löschen: erledigte Meldung > 2 Jahre weg, offene alte bleibt, junge bleibt', !ids('Tickets').includes('T-OLD-DONE') && ids('Tickets').includes('T-OLD-OPEN') && ids('Tickets').includes('T-RECENT-DONE'), ids('Tickets'));
+check('Löschen: Zählerstand > 3 Jahre weg, 2 Jahre alt bleibt', !ids('Zählerstände').includes('Z-OLD') && ids('Zählerstände').includes('Z-KEEP'));
+check('Löschen: Nachweis > 2 Jahre und Fehlerbericht > 90 Tage weg', !sheets['Reinigung'].grid.some((r) => r[1] === 'TG' && r[0] < yearsAgo(2)) && !sheets['Fehlerprotokoll'].grid.some((r) => r[2] === 'alt'));
+check('Löschen: Fotos der gelöschten Zeilen im Papierkorb, andere nicht', ['p1', 'p4', 'p6'].every((p) => trashed.some((t) => t.startsWith(p))) && !trashed.some((t) => /^p[235]/.test(t)), trashed);
+check('Löschen: Ergebnis gezählt', rem.tickets === 1 && rem.meter === 1 && rem.errors === 1 && rem.plan === 1, rem);
+check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunction() === 'dailyMaintenance'));
+
+// ================= Fehlerüberwachung =================
+Object.keys(cache).forEach((k) => delete cache[k]); mails.length = 0;
+const saveTickets = sheets['Tickets']; delete sheets['Tickets'];
+let fr = post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' });
+sheets['Tickets'] = saveTickets;
+const flog = sheets['Fehlerprotokoll'].grid.slice(1);
+check('Serverfehler: Nutzer sieht nur „Serverfehler“', fr.ok === false && fr.error === 'Serverfehler');
+check('Serverfehler protokolliert + Sofort-Mail', flog.some((r) => /^Server/.test(r[1])) && mails.some((m) => /Fehler im Backend/.test(m.subject)));
+delete sheets['Tickets']; post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }); sheets['Tickets'] = saveTickets;
+check('Sofort-Mail höchstens alle 3 Stunden', mails.filter((m) => /Fehler im Backend/.test(m.subject)).length === 1);
+const before = sheets['Fehlerprotokoll'].grid.length;
+check('App-Fehler ohne PIN abgelehnt', post({ action: 'reportError', message: 'X' }).code === 'pin');
+post({ action: 'reportError', pin: '13059', message: 'TypeError: foo', source: 'app.js:1', view: 'wasser', browser: 'UA', version: '42' });
+post({ action: 'reportError', pin: '13059', message: 'TypeError: foo' });
+const cl = sheets['Fehlerprotokoll'].grid.slice(before);
+check('App-Fehler protokolliert, gleiche Meldung nur einmal', cl.length === 1 && cl[0][1] === 'App' && cl[0][4] === 'wasser' && /Version 42/.test(cl[0][3]), cl);
+post({ action: 'reportError', pin: '13059', message: '=HYPERLINK("x")' });
+check('App-Fehler: Formel wird Text', sheets['Fehlerprotokoll'].grid.slice(-1)[0][2].startsWith("'"));
+mails.length = 0;
+let hc = ctx.healthCheck();
+check('Systemprüfung meldet Fehler der letzten 24 Std. per Mail', hc.issues.some((i) => /Fehler in den letzten 24 Stunden/.test(i)) && mails.some((m) => /Systemprüfung/.test(m.subject)));
+sheets['Fehlerprotokoll'].grid.splice(1); mails.length = 0;
+hc = ctx.healthCheck();
+check('Systemprüfung ohne Probleme: keine Mail', hc.issues.length === 0 && mails.length === 0, hc.issues);
+const nm = props.NOTIFY_EMAIL; delete props.NOTIFY_EMAIL;
+check('Systemprüfung erkennt fehlende NOTIFY_EMAIL', ctx.healthCheck().issues.some((i) => /NOTIFY_EMAIL/.test(i)));
+props.NOTIFY_EMAIL = nm;
+console.log(fails ? fails + ' FEHLER' : 'ALLE OK (Löschkonzept/Überwachung)');
 process.exitCode = fails ? 1 : 0;
