@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=52">
+  <link rel="stylesheet" href="css/style.css?v=53">
 </head>
 <body>
   <header class="app-header">
@@ -143,6 +143,17 @@
     <!-- ============ EPIC 3: Hausmeister-Portal (nur mit persönlichem Link) ============ -->
     <section class="view" data-view="hausmeister" data-title="Hausmeister-Tools" hidden>
       <div data-no-i18n>
+      <div class="staff-pending" id="staffPending" hidden>
+        <div id="staffPendingWait">
+          <p class="lead"><span class="spinner" aria-hidden="true"></span> Anmeldung läuft …</p>
+          <p class="muted">Beim ersten Öffnen kann das 10–20 Sekunden dauern. Bitte kurz warten.</p>
+        </div>
+        <div id="staffPendingFailed" hidden>
+          <p class="lead">Anmeldung hat nicht geklappt.</p>
+          <p class="muted">Bitte Internetverbindung prüfen und erneut versuchen.</p>
+          <button class="btn btn--primary btn--block" id="staffRetry" type="button">Erneut versuchen</button>
+        </div>
+      </div>
       <div class="staff-none" id="staffNone">
         <p class="lead">Dieser Bereich ist nur für den Hausmeisterdienst.</p>
         <p class="muted">Bitte öffnen Sie einmal Ihren persönlichen Link, den Sie von der Hausverwaltung erhalten haben.
@@ -269,6 +280,7 @@
 
     <!-- ============ QR-Codes drucken (Verwaltung) ============ -->
     <section class="view" data-view="cockpit" data-title="Cockpit" hidden>
+      <p class="lead" id="cockpitPending" hidden><span class="spinner" aria-hidden="true"></span> Anmeldung läuft …</p>
       <p class="muted" id="cockpitNone">Das Cockpit ist nur für die Verwaltung (007/008) und die Leitung des Hausmeisterdienstes (001). Bitte mit dem persönlichen Link anmelden.</p>
       <div id="cockpitArea" hidden>
         <div class="cockpit-bar">
@@ -804,8 +816,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=52"></script>
-  <script src="js/i18n.js?v=52"></script>
-  <script src="js/app.js?v=52"></script>
+  <script src="js/config.js?v=53"></script>
+  <script src="js/i18n.js?v=53"></script>
+  <script src="js/app.js?v=53"></script>
 </body>
 </html>

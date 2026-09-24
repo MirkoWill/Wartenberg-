@@ -1687,22 +1687,41 @@
     return scriptLoads[src];
   }
 
-  async function staffLogin() {
+  // Anmeldung beim Server: läuft höchstens einmal gleichzeitig; beim ersten Mal ohne gespeicherte Daten
+  // zeigt die Seite „Anmeldung läuft …“ und versucht es bei Netzproblemen einmal automatisch erneut.
+  let staffLoginRun = null;
+  let staffLoginFailed = false;
+
+  function staffLogin() {
+    if (!staffLoginRun) staffLoginRun = doStaffLogin().finally(() => { staffLoginRun = null; renderStaff(); });
+    renderStaff();
+    return staffLoginRun;
+  }
+
+  async function doStaffLogin() {
     const s = staff();
     if (!s || !CFG.API_URL) return;
-    try {
-      const data = await staffPost({ action: "hmLogin", token: s.token });
-      // Inzwischen abgemeldet oder anderer Zugang? Dann die verspätete Antwort verwerfen.
-      const cur = staff();
-      if (!cur || cur.token !== s.token) return;
-      writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities });
-      loadTasks(); // Aufträge schon im Hintergrund holen
-      fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
-    } catch (err) {
-      const cur = staff();
-      if (!cur || cur.token !== s.token) return;
-      if (err.code === "staff") toast(err.userMessage, "error", 8000);
-      else if (!s.user) toast("Anmeldung nicht möglich – bitte Internetverbindung prüfen.", "error");
+    staffLoginFailed = false;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const data = await staffPost({ action: "hmLogin", token: s.token });
+        // Inzwischen abgemeldet oder anderer Zugang? Dann die verspätete Antwort verwerfen.
+        const cur = staff();
+        if (!cur || cur.token !== s.token) return;
+        writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities });
+        loadTasks(); // Aufträge schon im Hintergrund holen
+        if (isAdmin() && currentView === "cockpit") loadCockpit();
+        fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
+        break;
+      } catch (err) {
+        const cur = staff();
+        if (!cur || cur.token !== s.token) return;
+        if (err.code === "staff") { toast(err.userMessage, "error", 8000); break; }
+        if (attempt === 2) {
+          staffLoginFailed = !s.user;
+          if (!s.user) toast("Anmeldung nicht möglich – bitte Internetverbindung prüfen.", "error");
+        }
+      }
     }
     renderStaff();
     flushStaffQueue();
@@ -1728,11 +1747,16 @@
       tab.dataset.tab = admin ? "cockpit hausmeister" : "hausmeister";
       tab.innerHTML = admin ? '<span aria-hidden="true">📊</span>Cockpit' : '<span aria-hidden="true">🧹</span>Hausmeister';
     }
-    $("#cockpitNone").hidden = admin;
+    $("#cockpitNone").hidden = admin || !!(loggedIn && !s.user);
     $("#cockpitArea").hidden = !admin;
     $(".tabbar").classList.toggle("tabbar--5", loggedIn);
-    $("#staffNone").hidden = loggedIn && !!s.user;
-    $("#staffLinkForm").hidden = loggedIn;
+    // Link geöffnet, Anmeldung noch nicht fertig: Ladeanzeige statt „Bitte Link öffnen“
+    const pending = loggedIn && !s.user;
+    $("#staffNone").hidden = loggedIn;
+    $("#staffPending").hidden = !pending;
+    $("#staffPendingWait").hidden = !pending || (staffLoginFailed && !staffLoginRun);
+    $("#staffPendingFailed").hidden = !pending || !staffLoginFailed || !!staffLoginRun;
+    $("#cockpitPending").hidden = !pending;
     $("#staffArea").hidden = !(loggedIn && s.user);
     if (!loggedIn || !s.user) return;
 
@@ -2330,6 +2354,7 @@
       $("#defectOrtFree").required = free;
     });
     $("#formStaffDefect").addEventListener("submit", submitStaffDefect);
+    $("#staffRetry").addEventListener("click", () => { staffLoginFailed = false; staffLogin(); });
     $("#staffLinkForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const text = $("#staffLinkInput").value.trim();
