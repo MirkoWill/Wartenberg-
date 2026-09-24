@@ -1,0 +1,13 @@
+{
+  "name": "wartenberg-mieter-app",
+  "private": true,
+  "description": "Mieter-App WEG Wartenberger Dorfkrug – nur für Tests benötigt (die App selbst hat keine Abhängigkeiten).",
+  "scripts": {
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "node tests/backend.test.js && node tests/backend-security.test.js",
+    "test:frontend": "node tests/frontend.test.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

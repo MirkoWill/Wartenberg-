@@ -89,3 +89,15 @@ Nach Änderungen an Dateien `CACHE_VERSION` in `sw.js` hochzählen, damit Nutzer
 - Jährlich: neuen Abfuhrkalender (.ics + PDF) von bsr.de in `assets/` ablegen und in `js/config.js` verlinken
 - Optional: VBB-Haltestellen-ID fest eintragen (wird sonst automatisch per Name gesucht)
 - `API_URL` der Apps-Script-Web-App (Einrichtung: `backend/README.md`)
+
+## Tests
+
+Jede Änderung wird auf GitHub automatisch geprüft (Reiter **Actions**, Workflow „Tests“):
+
+| Datei | Prüft |
+|---|---|
+| `tests/backend.test.js` | Backend (`backend/Code.gs`) mit nachgebildeten Google-Diensten: Meldungen, Zähler, PIN, Hausmeister-Portal, Reinigungsplan/Kalender, Limits |
+| `tests/backend-security.test.js` | Pen-Test Backend: Zugriff, Rechte, Formel-Injection, Uploads, Manipulation, Überlastung |
+| `tests/frontend.test.js` | App im Browser (Chromium): Zustimmung/PIN, Navigation, Formulare, Sprachen, Hausmeister-Portal inkl. Kamera-Scan, Sicherheit |
+
+Lokal (am Computer, mit Node.js): `npm ci`, `npx playwright install chromium`, dann `npm test`.
