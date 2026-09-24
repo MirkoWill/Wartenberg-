@@ -311,6 +311,27 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Abfahrten über Backend");
+    {
+      const inMin = (m) => new Date(Date.now() + m * 60000).toISOString();
+      const state = {};
+      const be = fakeBackend(state);
+      const ctx = await newContext(browser, { preset: "resident", backend: (d) => (d.action === "departures"
+        ? { ok: true, live: false, time: new Date(Date.now() - 7 * 60000).toISOString(), departures: [
+          { when: inMin(6), plannedWhen: inMin(6), delay: null, direction: "Ahrensfelde", line: { name: "893", product: "bus" } },
+          { when: inMin(-5), direction: "vorbei", line: { name: "N56" } }] }
+        : be(d)) });
+      await ctx.route("**/*.transport.rest/**", (route) => route.abort("internetdisconnected"));
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#oepnv`); await p.waitForSelector(".departure__dir", { timeout: 20000 });
+      await p.waitForTimeout(1500);
+      const txt = await p.textContent("#departures");
+      check("Fahrplandienste ausgefallen: Abfahrten kommen vom Backend (nur künftige)", /Ahrensfelde/.test(txt) && !/vorbei/.test(txt), txt);
+      check("Hinweis mit Stand statt roter Fehlermeldung, keine Technik-Details", /Fahrplan vom/.test(await p.textContent("#transitStatus")) && !/nicht erreichbar ·|bvg:/.test(await p.textContent("#transitStatus")), await p.textContent("#transitStatus"));
+      check("Keine Fehler (Abfahrten)", p.errors.length === 0, p.errors);
+      await ctx.close();
+    }
+
     console.log("--- Wetter");
     {
       const day = (off) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + off * 86400000));

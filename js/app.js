@@ -786,18 +786,29 @@
   const TRANSIT_HEDGE_SECONDS = 3;
   const transit = { timer: null, loading: false, preferred: 0, failures: 0, nextTry: 0 };
 
-  async function loadDepartures(force) {
-    if (transit.loading) return;
-    if (!force && Date.now() < transit.nextTry) return;
-    transit.loading = true;
-    const status = $("#transitStatus");
-    status.textContent = t_("Lade Abfahrten …");
-    status.classList.remove("is-error", "is-warn");
+  /** Abfahrten über unser Backend (zentral zwischengespeichert, letzter Stand bleibt bei Ausfall erhalten). */
+  async function serverDepartures() {
+    if (!CFG.API_URL) throw new Error("kein Backend");
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000);
+    try {
+      const res = await fetch(`${CFG.API_URL}?action=departures${pinParam()}`, { signal: ctrl.signal });
+      const data = await res.json();
+      if (!data || !data.ok || !Array.isArray(data.departures) || !data.time) throw new Error("keine Daten");
+      const now = Date.now() - 60 * 1000;
+      const departures = data.departures.filter((d) => d && new Date(d.when || d.plannedWhen).getTime() >= now);
+      if (!departures.length) throw new Error("keine Daten");
+      return { departures, time: new Date(data.time).getTime(), live: data.live === true };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
+  /** Direkt bei den transport.rest-Diensten (schnellster gewinnt). */
+  function directDepartures() {
     const apis = CFG.TRANSIT_APIS;
     const order = apis.map((_, i) => (transit.preferred + i) % apis.length);
     const controllers = [];
-    const problems = [];
     let settled = false;
     // Schlägt ein Dienst fehl, starten die übrigen sofort (statt erst nach der Wartezeit).
     let kick;
@@ -817,43 +828,70 @@
           // transport.rest v6 liefert { departures: [...] }, ältere Versionen ein Array.
           resolve({ i, departures: Array.isArray(data) ? data : data.departures || [] });
         } catch (err) {
-          if (!settled) {
-            console.warn(`ÖPNV über ${api} fehlgeschlagen:`, err);
-            problems.push(`${new URL(api).hostname.split(".")[1]}: ${err.message}`);
-          }
+          if (!settled) console.warn(`ÖPNV über ${api} fehlgeschlagen:`, err);
           kick();
           reject(err);
         }
       });
     });
 
+    return Promise.any(order.map((i, n) => attempt(i, n === 0 ? 0 : TRANSIT_HEDGE_SECONDS * 1000)))
+      .then((result) => { settled = true; controllers.forEach((c) => c.abort()); transit.preferred = result.i; return result.departures; })
+      .catch((err) => { settled = true; throw err; });
+  }
+
+  async function loadDepartures(force) {
+    if (transit.loading) return;
+    if (!force && Date.now() < transit.nextTry) return;
+    transit.loading = true;
+    const status = $("#transitStatus");
+    status.textContent = t_("Lade Abfahrten …");
+    status.classList.remove("is-error", "is-warn");
+    const stand = (time) => formatTime(new Date(time));
+
+    // Beide Wege gleichzeitig: Backend (meist verfügbar, ggf. etwas älter) und direkt (live, oft überlastet).
+    let liveShown = false;
+    const server = serverDepartures().then((r) => {
+      if (!liveShown) {
+        renderDepartures(r.departures.slice(0, CFG.TRANSIT_RESULTS));
+        status.textContent = t_("Stand {zeit} Uhr · aktualisiert alle {s} s", { zeit: stand(r.time), s: CFG.TRANSIT_REFRESH_SECONDS });
+      }
+      return r;
+    }).catch(() => null);
+
     try {
-      const result = await Promise.any(order.map((i, n) => attempt(i, n === 0 ? 0 : TRANSIT_HEDGE_SECONDS * 1000)));
-      settled = true;
-      controllers.forEach((c) => c.abort());
-      transit.preferred = result.i;
+      const departures = await directDepartures();
+      liveShown = true;
       transit.failures = 0;
       transit.nextTry = 0;
-      renderDepartures(result.departures);
+      renderDepartures(departures);
       try {
-        localStorage.setItem(TRANSIT_CACHE_KEY, JSON.stringify({ time: Date.now(), departures: result.departures }));
+        localStorage.setItem(TRANSIT_CACHE_KEY, JSON.stringify({ time: Date.now(), departures }));
       } catch (e) { /* egal */ }
+      status.classList.remove("is-warn", "is-error");
       status.textContent = t_("Stand {zeit} Uhr · aktualisiert alle {s} s", { zeit: formatTime(new Date()), s: CFG.TRANSIT_REFRESH_SECONDS });
     } catch (err) {
-      settled = true;
+      const r = await server;
+      if (r && r.live) {
+        // Backend hat gerade frische Daten geholt – das ist so gut wie live.
+        transit.failures = 0;
+        transit.nextTry = 0;
+        return;
+      }
       transit.failures++;
       const waitS = Math.min(300, CFG.TRANSIT_REFRESH_SECONDS * 2 ** (transit.failures - 1));
       transit.nextTry = Date.now() + waitS * 1000;
-      const cached = readCachedDepartures();
-      if (cached) {
-        renderDepartures(cached.departures);
-        status.textContent = t_("Live-Daten gerade nicht erreichbar – Fahrplan vom {zeit} Uhr.", { zeit: formatTime(new Date(cached.time)) })
+      const local = readCachedDepartures();
+      const best = r && (!local || r.time >= local.time) ? r : local;
+      if (best) {
+        renderDepartures(best.departures.slice(0, CFG.TRANSIT_RESULTS));
+        status.textContent = t_("Live-Daten gerade nicht erreichbar – Fahrplan vom {zeit} Uhr.", { zeit: stand(best.time) })
           + " " + t_("Neuer Versuch in {n} min.", { n: Math.round(waitS / 60) || 1 });
         status.classList.add("is-warn");
       } else {
         $("#departures").innerHTML = "";
         status.textContent = t_("Abfahrten derzeit nicht verfügbar – der kostenlose Fahrplandienst antwortet nicht.")
-          + " " + t_("Neuer Versuch in {n} min.", { n: Math.round(waitS / 60) || 1 }) + ` (${problems.join(" · ")})`;
+          + " " + t_("Neuer Versuch in {n} min.", { n: Math.round(waitS / 60) || 1 });
         status.classList.add("is-error");
       }
     } finally {

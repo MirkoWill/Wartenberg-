@@ -4,7 +4,7 @@ const fs = require('fs'), vm = require('vm');
 process.env.TZ = 'Europe/Berlin';
 let calName = 'WEG Wartenberger Dorfkrug'; const trashed = []; const alerts = []; const cache = {}; const triggers = [];
 const events = {}; let evSeq = 0;
-const fetches = []; const wx = { fail: false, alerts: [], hours: [] };
+const fetches = []; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
 const mkHours = (date, icons, tmin, tmax) => Array.from({ length: 24 }, (_, h) => ({ timestamp: `${date}T${String(h).padStart(2, '0')}:00:00+02:00`, temperature: tmin + (tmax - tmin) * Math.sin(Math.PI * h / 23), icon: icons(h), precipitation: icons(h) === 'rain' ? 0.5 : 0 }));
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
@@ -32,8 +32,17 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   Utilities: { DigestAlgorithm: { MD5: 'md5' }, computeDigest: (a, t) => [...require('crypto').createHash('md5').update(t).digest()], base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64url'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
-  LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-  UrlFetchApp: { fetchAll: (reqs) => { fetches.push(...reqs.map((r) => r.url)); if (wx.fail) throw new Error('DNS'); return reqs.map((r) => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify(/\/alerts/.test(r.url) ? { alerts: wx.alerts } : { weather: wx.hours }) })); } },
+  LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
+  UrlFetchApp: { fetchAll: (reqs) => { fetches.push(...reqs.map((r) => r.url)); if (wx.fail) throw new Error('DNS'); return reqs.map((r) => {
+    if (/transport\.rest/.test(r.url)) {
+      const code = tr.down || (tr.onlyVbb && /bvg/.test(r.url)) ? 503 : 200;
+      const body = /locations/.test(r.url) ? [{ type: 'stop', id: '900150005', name: 'Dorfstr./Lindenberger Str. (Berlin)' }]
+        : { departures: [{ when: new Date(Date.now() + 5 * 60000).toISOString(), plannedWhen: new Date(Date.now() + 4 * 60000).toISOString(), delay: 60, direction: 'S+U Lichtenberg', line: { name: '256', product: 'bus', operator: { id: 'x' } }, stop: { big: 'x'.repeat(500) } },
+          { when: new Date(Date.now() - 10 * 60000).toISOString(), direction: 'alt', line: { name: '893' } }] };
+      return { getResponseCode: () => code, getContentText: () => JSON.stringify(body) };
+    }
+    return { getResponseCode: () => 200, getContentText: () => JSON.stringify(/\/alerts/.test(r.url) ? { alerts: wx.alerts } : { weather: wx.hours }) };
+  }); } },
   MailApp: { sendEmail: (m) => mails.push(m), getRemainingDailyQuota: () => 1500 },
   ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
   CalendarApp: { getAllCalendars: () => [cal, { getName: () => 'Privat' }], getCalendarById: (id) => (id === 'good' ? cal : null), getCalendarsByName: (n) => (n === calName ? [cal] : []) },
@@ -338,6 +347,20 @@ check('Wetterdienst gestört: Aktuelles funktioniert trotzdem, Wetter leer', wn.
 ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
 check('Wetterdienst gestört: 10 Min. kein neuer Versuch', fetches.length === 4, fetches.length);
 wx.fail = false; delete cache.weather;
+
+// ================= Abfahrten (zentral) =================
+delete cache.departures; fetches.length = 0; tr.onlyVbb = true;
+let dp = ctx.doGet({ parameter: { action: 'departures', pin: '13059' } });
+check('Abfahrten über Backend: nur künftige, schlanke Daten, 2. Dienst springt ein', dp.ok && dp.live && dp.departures.length === 1 && dp.departures[0].line.name === '256' && !('stop' in dp.departures[0]) && !dp.departures[0].line.operator, dp);
+check('Haltestellen-ID gemerkt', Object.keys(props).some((k) => /^STOP_/.test(k) && props[k] === '900150005'));
+const n1 = fetches.length; ctx.doGet({ parameter: { action: 'departures', pin: '13059' } });
+check('Abfahrten 90 s zwischengespeichert (kein neuer Abruf)', fetches.length === n1);
+{ const c = JSON.parse(cache.departures); c.time = new Date(Date.now() - 10 * 60000).toISOString(); cache.departures = JSON.stringify(c); }
+tr.down = true;
+dp = ctx.doGet({ parameter: { action: 'departures', pin: '13059' } });
+check('Dienst ausgefallen: letzter Stand wird weiter geliefert (live=false)', dp.ok && dp.live === false && dp.departures.length === 1, dp);
+check('Abfahrten ohne PIN abgelehnt', ctx.doGet({ parameter: { action: 'departures' } }).code === 'pin');
+tr.down = false; tr.onlyVbb = false;
 
 // Bewohner-Info
 Object.keys(cache).forEach((k) => delete cache[k]);
