@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=44">
+  <link rel="stylesheet" href="css/style.css?v=45">
 </head>
 <body>
   <header class="app-header">
@@ -58,6 +58,7 @@
     <!-- Startseite (interner Name „notfall“ bleibt, damit alte Links/QR-Codes funktionieren) -->
     <section class="view" data-view="notfall" data-title="Start">
       <div class="news" id="newsBox" hidden></div>
+      <div class="weather" id="weatherBox" hidden></div>
       <h2 class="section-title section-title--first">Im Notfall</h2>
       <p class="lead">Einfach antippen – der Anruf startet sofort.</p>
       <ul class="contact-list" id="emergencyList"></ul>
@@ -612,6 +613,12 @@
           Name, gewünschte Beschriftung und Ihre Kontaktangabe; die Übermittlung erfolgt per E-Mail.</p>
       </details>
       <details class="rule">
+        <summary>Wetter – Deutscher Wetterdienst</summary>
+        <p>Die Wetteranzeige auf der Startseite stammt vom Deutschen Wetterdienst (über den freien Dienst Bright Sky).
+          Die Daten ruft unser Server (Google) für den Standort der Wohnanlage ab. Ihr Gerät verbindet sich dafür nicht
+          mit einem Wetterdienst; es werden keine Daten über Sie übermittelt.</p>
+      </details>
+      <details class="rule">
         <summary>Abfahrtszeiten – transport.rest</summary>
         <p>Für die Live-Abfahrten fragt die App den offenen Fahrplandienst transport.rest ab, der die Anfragen an
           die Fahrplansysteme von BVG, VBB bzw. Deutscher Bahn weiterleitet. Dabei wird Ihre IP-Adresse an den
@@ -791,8 +798,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=44"></script>
-  <script src="js/i18n.js?v=44"></script>
-  <script src="js/app.js?v=44"></script>
+  <script src="js/config.js?v=45"></script>
+  <script src="js/i18n.js?v=45"></script>
+  <script src="js/app.js?v=45"></script>
 </body>
 </html>

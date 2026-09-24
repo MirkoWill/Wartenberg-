@@ -542,6 +542,7 @@
     const cached = readJson(NEWS_KEY);
     renderNews(cached && cached.obj === OBJ.key ? cached.items : []);
     renderCare(cached && cached.obj === OBJ.key ? cached.care : null);
+    renderWeather(cached ? cached.weather : null);
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
       const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}${pinParam()}`);
@@ -549,14 +550,72 @@
       if (data.code === "pin") { handlePinRejected(); return; }
       if (!data.ok) return;
       newsLoadedAt = Date.now();
-      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items, care: data.care || null });
+      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items, care: data.care || null, weather: data.weather || null });
       renderNews(data.items);
       renderCare(data.care);
+      renderWeather(data.weather);
     } catch (err) {
       console.warn("Aktuelles:", err);
     }
   }
   viewEnterHooks.notfall = loadNews;
+
+  /* ======================================================================
+     Wetter – 3 Tage + Warnungen (Daten: Deutscher Wetterdienst, abgerufen vom Backend)
+     ====================================================================== */
+
+  const WEATHER_ICONS = {
+    "clear-day": ["☀️", "Sonnig"], "partly-cloudy-day": ["⛅", "Teils bewölkt"], cloudy: ["☁️", "Bewölkt"],
+    fog: ["🌫️", "Nebel"], wind: ["💨", "Windig"], rain: ["🌧️", "Regen"], sleet: ["🌨️", "Schneeregen"],
+    snow: ["❄️", "Schnee"], hail: ["🌨️", "Hagel"], thunderstorm: ["⛈️", "Gewitter"],
+  };
+
+  function renderWeather(w) {
+    const box = $("#weatherBox");
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()); // yyyy-mm-dd
+    const fresh = w && Array.isArray(w.days) && Date.now() - new Date(w.at).getTime() < 24 * 3600000;
+    const days = fresh ? w.days.filter((d) => d && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && d.date >= today).slice(0, 3) : [];
+    if (!days.length) { box.hidden = true; box.innerHTML = ""; return; }
+    const cfg = CFG.WEATHER || {};
+    const num = (x) => (typeof x === "number" && isFinite(x) ? Math.round(x) : null);
+    const dayName = (d, i) => (d.date === today ? t_("Heute") : i <= 1 && days[0].date === today ? t_("Morgen")
+      : parseIsoDate(d.date).toLocaleDateString(LOCALE(), { weekday: "long" }));
+    const alerts = (Array.isArray(w.alerts) ? w.alerts : []).filter((a) => a && (a.headline || a.event));
+    const dwdHeat = alerts.some((a) => /hitze|wärme/i.test(a.event + a.headline));
+    const dwdCold = alerts.some((a) => /frost|kälte/i.test(a.event + a.headline));
+    const maxT = Math.max(...days.map((d) => num(d.max) ?? -99));
+    const minT = Math.min(...days.map((d) => num(d.min) ?? 99));
+    const warn = [];
+    if (!dwdHeat && maxT >= (cfg.hot ?? 30)) {
+      warn.push({ cls: "heat", icon: "🌡️", title: t_("Hitze: bis {t} °C erwartet", { t: maxT }),
+        text: t_("Tagsüber Fenster und Rollläden geschlossen halten, früh morgens und nachts lüften. Viel trinken – und bitte auf ältere Nachbarn achten.") });
+    }
+    if (!dwdCold && minT <= (cfg.cold ?? -10)) {
+      warn.push({ cls: "cold", icon: "🥶", title: t_("Strenger Frost: bis {t} °C erwartet", { t: minT }),
+        text: t_("Heizung nicht ganz abdrehen (Frostgefahr für Leitungen), Keller- und Treppenhausfenster geschlossen halten, Haustüren nicht offen stehen lassen. Vorsicht auf Wegen.") });
+    }
+    const until = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(LOCALE(), { weekday: "short", hour: "2-digit", minute: "2-digit" }); };
+    alerts.forEach((a) => {
+      const extreme = a.severity === "severe" || a.severity === "extreme";
+      warn.push({ cls: extreme ? "severe" : "dwd", icon: "⚠️", title: (LANG !== "de" && a.headlineEn) || a.headline || a.event,
+        text: [t_("Warnung des Deutschen Wetterdienstes"), until(a.expires) ? t_("gültig bis {zeit}", { zeit: until(a.expires) }) : ""].filter(Boolean).join(" · ") });
+    });
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="weather__days">${days.map((d, i) => {
+        const [icon, label] = WEATHER_ICONS[d.icon] || ["🌡️", ""];
+        const hi = num(d.max), lo = num(d.min);
+        return `<div class="weather__day">
+          <div class="weather__name">${esc(dayName(d, i))}</div>
+          <div class="weather__icon" role="img" aria-label="${esc(label ? t_(label) : "")}">${icon}</div>
+          <div class="weather__temp"><strong>${hi === null ? "–" : esc(hi) + "°"}</strong> <span class="muted">${lo === null ? "" : esc(lo) + "°"}</span></div>
+        </div>`;
+      }).join("")}</div>
+      ${warn.map((x) => `<div class="weather__warn weather__warn--${x.cls}" role="note">
+        <span class="weather__warn-icon" aria-hidden="true">${x.icon}</span>
+        <div><strong>${esc(x.title)}</strong>${x.text ? `<p>${esc(x.text)}</p>` : ""}</div></div>`).join("")}
+      <p class="weather__src">${esc(t_("Quelle: Deutscher Wetterdienst"))}</p>`;
+  }
 
   function initRouter() {
     // Ohne bekannten Aufgang zuerst die Auswahl zeigen.

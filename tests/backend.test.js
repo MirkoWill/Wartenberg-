@@ -4,6 +4,8 @@ const fs = require('fs'), vm = require('vm');
 process.env.TZ = 'Europe/Berlin';
 let calName = 'WEG Wartenberger Dorfkrug'; const trashed = []; const alerts = []; const cache = {}; const triggers = [];
 const events = {}; let evSeq = 0;
+const fetches = []; const wx = { fail: false, alerts: [], hours: [] };
+const mkHours = (date, icons, tmin, tmax) => Array.from({ length: 24 }, (_, h) => ({ timestamp: `${date}T${String(h).padStart(2, '0')}:00:00+02:00`, temperature: tmin + (tmax - tmin) * Math.sin(Math.PI * h / 23), icon: icons(h), precipitation: icons(h) === 'rain' ? 0.5 : 0 }));
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
 function mkSheet(name) {
@@ -31,6 +33,7 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+  UrlFetchApp: { fetchAll: (reqs) => { fetches.push(...reqs.map((r) => r.url)); if (wx.fail) throw new Error('DNS'); return reqs.map((r) => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify(/\/alerts/.test(r.url) ? { alerts: wx.alerts } : { weather: wx.hours }) })); } },
   MailApp: { sendEmail: (m) => mails.push(m), getRemainingDailyQuota: () => 1500 },
   ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
   CalendarApp: { getAllCalendars: () => [cal, { getName: () => 'Privat' }], getCalendarById: (id) => (id === 'good' ? cal : null), getCalendarsByName: (n) => (n === calName ? [cal] : []) },
@@ -286,6 +289,26 @@ sheets['Mängel Hausmeister'].grid.forEach((r, i) => { if (i) r[9] = 'erledigt';
 mails.length = 0; dg = ctx.morningDigest();
 check('Keine Morgen-Mail, wenn nichts fällig', dg.red === 0 && mails.length === 0);
 check('Morgen-Trigger 7 Uhr angelegt', triggers.some((t) => t.getHandlerFunction() === 'morningDigest'));
+
+// ================= Wetter =================
+delete cache.weather; fetches.length = 0;
+wx.hours = [...mkHours('2026-07-01', (h) => (h < 7 ? 'clear-night' : 'clear-day'), 18, 33), ...mkHours('2026-07-02', (h) => (h === 14 || h === 15 ? 'thunderstorm' : 'partly-cloudy-day'), 20, 29), ...mkHours('2026-07-03', () => 'cloudy', 15, 22), ...mkHours('2026-07-04', () => 'rain', 10, 12)];
+wx.alerts = [{ status: 'actual', severity: 'minor', event_de: 'WINDBÖEN', headline_de: 'Amtliche WARNUNG vor WINDBÖEN' },
+  { status: 'actual', severity: 'moderate', event_de: 'STARKE HITZE', headline_de: 'Amtliche WARNUNG vor HITZE', headline_en: 'Official WARNING of HEAT', onset: '2026-07-01T11:00:00+02:00', expires: '2026-07-01T19:00:00+02:00', description_de: 'lang' }];
+let wn = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
+const wd = wn.weather && wn.weather.days;
+check('Wetter: 3 Tage mit Min/Max', wn.ok && wd.length === 3 && wd[0].date === '2026-07-01' && wd[0].max === 33 && wd[0].min === 18, wd);
+check('Wetter: Tagessymbol (Nacht → Tag, Gewitter ab 2 Std.)', wd[0].icon === 'clear-day' && wd[1].icon === 'thunderstorm' && wd[2].icon === 'cloudy', wd.map((d) => d.icon));
+check('Wetter: nur DWD-Warnungen ab „moderate“, ohne Langtext', wn.weather.alerts.length === 1 && wn.weather.alerts[0].event === 'STARKE HITZE' && !('description' in wn.weather.alerts[0]));
+check('Wetter: Standort aus Konfiguration, DWD/Bright Sky', fetches.length === 2 && fetches.every((u) => u.startsWith('https://api.brightsky.dev/') && /lat=52\.574&lon=13\.514/.test(u)), fetches);
+ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
+check('Wetter: 1 Std. zwischengespeichert (kein neuer Abruf)', fetches.length === 2);
+delete cache.weather; wx.fail = true;
+wn = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
+check('Wetterdienst gestört: Aktuelles funktioniert trotzdem, Wetter leer', wn.ok && wn.weather === null && Array.isArray(wn.items));
+ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
+check('Wetterdienst gestört: 10 Min. kein neuer Versuch', fetches.length === 4, fetches.length);
+wx.fail = false; delete cache.weather;
 
 // Bewohner-Info
 Object.keys(cache).forEach((k) => delete cache[k]);
