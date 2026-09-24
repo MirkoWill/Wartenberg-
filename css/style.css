@@ -949,3 +949,5 @@ input[type="file"]::file-selector-button {
 .transit-link__title { display: block; font-weight: 700; font-size: 18px; color: var(--c-heading); }
 .transit-link__sub { display: block; font-size: 14px; color: var(--c-muted); }
 .transit-link__go { font-size: 26px; color: var(--c-primary); }
+.section-title--first { margin-top: 0; }
+.news:not([hidden]) + .section-title--first { margin-top: 8px; }

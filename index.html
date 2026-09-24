@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=37">
+  <link rel="stylesheet" href="css/style.css?v=38">
 </head>
 <body>
   <header class="app-header">
@@ -41,7 +41,7 @@
           <div class="lang__menu lang-options"></div>
         </details>
       </div>
-      <h1 class="hero__title" id="viewTitle">Notfall</h1>
+      <h1 class="hero__title" id="viewTitle">Start</h1>
     </div>
   </div>
 
@@ -54,9 +54,11 @@
     </section>
 
     <!-- ============ EPIC 1 – US 1.1: Notfall ============ -->
-    <section class="view" data-view="notfall" data-title="Notfall">
+    <!-- Startseite (interner Name „notfall“ bleibt, damit alte Links/QR-Codes funktionieren) -->
+    <section class="view" data-view="notfall" data-title="Start">
       <div class="news" id="newsBox" hidden></div>
-      <p class="lead">Im Notfall einfach antippen – der Anruf startet sofort.</p>
+      <h2 class="section-title section-title--first">Im Notfall</h2>
+      <p class="lead">Einfach antippen – der Anruf startet sofort.</p>
       <ul class="contact-list" id="emergencyList"></ul>
 
       <h2 class="section-title">Verhaltensregeln</h2>
@@ -658,7 +660,7 @@
   </footer>
 
   <nav class="tabbar" aria-label="Hauptnavigation">
-    <a class="tabbar__item" href="#notfall" data-tab="notfall"><span aria-hidden="true">🚨</span>Notfall</a>
+    <a class="tabbar__item" href="#notfall" data-tab="notfall"><span aria-hidden="true">🏠</span>Start</a>
     <a class="tabbar__item" href="#services" data-tab="services"><span aria-hidden="true">🧰</span>Services</a>
     <a class="tabbar__item" href="#infos" data-tab="infos"><span aria-hidden="true">📄</span>Infos</a>
     <a class="tabbar__item" href="#meldungen" data-tab="meldungen"><span aria-hidden="true">📋</span>Meldungen</a>
@@ -730,8 +732,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=37"></script>
-  <script src="js/i18n.js?v=37"></script>
-  <script src="js/app.js?v=37"></script>
+  <script src="js/config.js?v=38"></script>
+  <script src="js/i18n.js?v=38"></script>
+  <script src="js/app.js?v=38"></script>
 </body>
 </html>

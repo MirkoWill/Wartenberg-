@@ -14,7 +14,7 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 
 | Story | Ansicht | Umsetzung |
 |---|---|---|
-| US 1.1 Notfall-Dashboard | `#notfall` | Klickbare `tel:`-Links, aufklappbare Verhaltensregeln; Anleitung „Wasser in der Wohnung abstellen“ mit Grafik |
+| US 1.1 Startseite mit Notfall-Bereich | `#notfall` (Tab „Start“) | Klickbare `tel:`-Links, aufklappbare Verhaltensregeln; Anleitung „Wasser in der Wohnung abstellen“ mit Grafik |
 | US 1.2 Abfallkalender | `#infos` | Nächste Abholungen aus der BSR-`.ics` (`assets/abfuhrkalender-2026.ics`), Kalender-Abo per `webcal://`, PDF, Sperrmüll-Buchung, Trennhilfe |
 | US 1.3 Live-ÖPNV | `#oepnv` | transport.rest (VBB), Verspätung rot/grün, Auto-Refresh 60 s (nur solange sichtbar) |
 | US 1.4 Kiez & Dokumente | `#infos`, `#hausordnung` | Supermärkte, Apotheke, Pakete mit Kartenlink; Hausordnung als Seite; `.vcf`-Visitenkarte; Link zum aponet-Notdienst (PLZ 13059) unter Apotheke |
