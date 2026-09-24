@@ -309,7 +309,14 @@
   }
 
   /** Backend meldet „PIN ungültig“ (z. B. nach PIN-Wechsel): neu abfragen. */
+  let pinRejectedAt = 0;
   function handlePinRejected() {
+    // Schutz vor einer Endlosschleife (Dialog immer wieder): höchstens einmal pro Minute neu fragen.
+    if (isStaff() || Date.now() - pinRejectedAt < 60000) {
+      toast(t_("Der Server hat den Zugang abgelehnt. Bitte später erneut versuchen oder die Hausverwaltung informieren."), "error", 8000);
+      return;
+    }
+    pinRejectedAt = Date.now();
     sessionPin = null;
     try { sessionStorage.removeItem(PIN_KEY); } catch (e) { /* egal */ }
     consentGiven = false;
@@ -1244,7 +1251,8 @@
    */
   function pinParam() {
     const pin = storedPin();
-    return pin ? `&pin=${encodeURIComponent(pin)}` : "";
+    const s = isStaff() ? staff() : null;
+    return (pin ? `&pin=${encodeURIComponent(pin)}` : "") + (s ? `&token=${encodeURIComponent(s.token)}` : "");
   }
 
   async function postToBackend(payload) {
@@ -1275,7 +1283,7 @@
     const res = await fetch(CFG.API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ ...payload, pin: storedPin() }),
+      body: JSON.stringify({ ...payload, pin: storedPin(), token: isStaff() ? staff().token : undefined }),
       redirect: "follow",
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -102,6 +102,10 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
 - Menü **Mieter-App → Reinigungsplan → Kalender übertragen**: überträgt alles in den Google-Kalender
   „WEG Wartenberger Dorfkrug“ (neu, geändert, gelöscht). Nach jeder Änderung am Plan erneut ausführen.
   Beim ersten Mal fragt Google nach der Kalender-Berechtigung. Anderer Kalender: Script-Eigenschaft `CALENDAR_ID`.
+- **Es erscheint nichts im Kalender?** Nach dem Übertragen zeigt ein Fenster das Ergebnis („x neu …“) oder den Grund:
+  Kalender nicht gefunden (dann nennt es die Kalender, die das Konto sieht), oder Zeilen, deren Datum nicht lesbar ist.
+  Der Kalender muss im **selben Google-Konto** liegen, dem die Tabelle gehört, oder für dieses Konto mit
+  „Änderungen an Terminen vornehmen“ freigegeben sein. Das Menü „Mieter-App“ erscheint erst nach dem Neuladen der Tabelle.
 - **Tägliche Kontrolle um 19 Uhr:** Für eintägige Termine von heute ohne passenden Scan (gleiche Tätigkeit, gleicher Ort)
   kommt eine Mail an `NOTIFY_EMAIL` („Fehlende Nachweise“). Zeiträume (z. B. Winterdienst) werden nicht geprüft.
 - Die Bewohner sehen in der App die nächsten Termine (14 Tage) und die zuletzt erledigten Arbeiten (60 Tage) für ihren Aufgang.
