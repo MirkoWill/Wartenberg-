@@ -237,6 +237,42 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Einführung und Schriftgröße");
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend() });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(300);
+      check("Einführung nicht vor der Zustimmung", !(await p.isVisible("#intro")));
+      await p.check("#consentCheck"); await p.fill("#pinInput", PIN); await p.click("#consentAccept"); await p.waitForTimeout(300);
+      check("Einführung nach der ersten Zustimmung", await p.isVisible("#intro") && (await p.textContent("#introTitle")) === "Start");
+      await p.click("#introNext"); await p.click("#introNext");
+      check("Letzter Schritt: „Los geht's“, ohne Überspringen", (await p.textContent("#introNext")) === "Los geht's" && !(await p.isVisible("#introSkip")));
+      await p.click("#introNext"); await p.reload(); await p.waitForTimeout(700);
+      check("Einführung nur einmal", !(await p.isVisible("#intro")));
+      await p.click("#introOpen"); await p.waitForTimeout(100);
+      check("Einführung über Fußzeile erneut aufrufbar", await p.isVisible("#intro"));
+      await p.keyboard.press("Escape");
+      check("Esc schließt", !(await p.isVisible("#intro")));
+      await p.click("#textSize");
+      check("Größere Schrift an", await p.evaluate(() => document.documentElement.classList.contains("text-large")) && (await p.getAttribute("#textSize", "aria-pressed")) === "true");
+      await p.reload(); await p.waitForTimeout(300);
+      check("Schriftgröße gemerkt", await p.evaluate(() => document.documentElement.classList.contains("text-large")));
+      const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check("Große Schrift: kein seitliches Scrollen", overflow <= 0, overflow);
+      await p.click("#textSize");
+      check("Wieder normale Schrift", !(await p.evaluate(() => document.documentElement.classList.contains("text-large"))));
+      check("Keine Skriptfehler", !p.errors.length, p.errors);
+      await ctx.close();
+    }
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend() });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${STAFF}#hausmeister`); await p.waitForTimeout(300);
+      await p.check("#consentCheck"); await p.click("#consentAccept"); await p.waitForTimeout(400);
+      check("Hausmeister bekommt keine Bewohner-Einführung", !(await p.isVisible("#intro")));
+      await ctx.close();
+    }
+
     console.log("--- Fehlerüberwachung");
     {
       const ctx = await newContext(browser, { backend: fakeBackend() });

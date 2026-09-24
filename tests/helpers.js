@@ -77,6 +77,7 @@ async function newContext(browser, { backend, preset, lang, width = 390, height 
     if (preset === "resident") {
       localStorage.setItem("mieterapp.consent", JSON.stringify({ v: CONSENT_VERSION, at: Date.now() }));
       localStorage.setItem("mieterapp.pin", JSON.stringify({ pin: PIN, hash: PIN_HASH }));
+      localStorage.setItem("mieterapp.intro", JSON.stringify({ seen: Date.now() }));
     }
     if (lang) localStorage.setItem("mieterapp.lang", lang);
   }, { preset, lang, PIN, PIN_HASH, CONSENT_VERSION });
@@ -98,6 +99,7 @@ async function acceptConsent(page, pin = PIN) {
   if (await page.isVisible("#pinInput")) await page.fill("#pinInput", pin);
   await page.click("#consentAccept");
   await page.waitForTimeout(300);
+  if (await page.isVisible("#intro")) { await page.click("#introSkip"); await page.waitForTimeout(100); }
 }
 
 module.exports = { ROOT, PIN, PIN_HASH, check, summary, startServer, launch, newContext, newPage, acceptConsent };
