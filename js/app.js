@@ -1604,6 +1604,7 @@
       await loadScript("vendor/html5-qrcode.min.js");
       scanner = new window.Html5Qrcode("scannerView", {
         formatsToSupport: [window.Html5QrcodeSupportedFormats.QR_CODE], verbose: false,
+        useBarCodeDetectorIfSupported: true, // schnelle eingebaute Erkennung (Android/Chrome)
       });
       await scanner.start(
         { facingMode: "environment" }, // zwingend Rückkamera
@@ -1684,21 +1685,19 @@
       action: "logCleaning", areaToken: area.code, activity: form.elements.activity.value,
       note: form.elements.note.value.trim(), timestamp: scanCtx.time, manual: scanCtx.manual,
     };
+    // Sofort bestätigen und im Hintergrund senden (Google braucht oft mehrere Sekunden).
+    // Die Scan-Uhrzeit steht im Nachweis, deshalb ist spätes Senden unkritisch.
     try {
       entry.photo = await readPhoto(form.elements.foto.files[0]);
-      await staffPost(entry);
-      addToday(area.ort, entry.activity, false);
-      showScanDone(`${area.ort} – ${entry.activity}`, false);
-      resetScanForm();
     } catch (err) {
-      if (err.userMessage) { toast(err.userMessage, "error", 7000); return; }
-      queueStaffEntry(entry);
-      addToday(area.ort, entry.activity, true);
-      showScanDone("Ohne Netz gespeichert – wird automatisch gesendet.", true);
-      resetScanForm();
-    } finally {
-      btn.disabled = false;
+      entry.photo = null;
     }
+    queueStaffEntry(entry);
+    addToday(area.ort, entry.activity, true);
+    showScanDone(`${area.ort} – ${entry.activity}`, false);
+    resetScanForm();
+    btn.disabled = false;
+    flushStaffQueue();
   }
 
   function queueStaffEntry(entry) {
@@ -1712,6 +1711,7 @@
   }
 
   let flushing = false;
+  let flushWarned = false;
   async function flushStaffQueue() {
     const q = readJson(STAFF_QUEUE_KEY) || [];
     if (flushing || !q.length || !isStaff() || !navigator.onLine) return;
@@ -1721,11 +1721,15 @@
         try {
           await staffPost(q[0]);
         } catch (err) {
-          if (!err.userMessage) break; // weiterhin kein Netz
+          if (!err.userMessage) { // kein Netz: Hinweis einmal, später erneut versuchen
+            if (!flushWarned) { flushWarned = true; toast("Kein Netz – Nachweise werden gesendet, sobald wieder Verbindung besteht.", "error", 6000); }
+            break;
+          }
           toast(`Nachweis verworfen: ${err.userMessage}`, "error", 7000);
         }
         q.shift();
         writeJson(STAFF_QUEUE_KEY, q);
+        flushWarned = false;
       }
     } finally {
       flushing = false;
@@ -1889,6 +1893,14 @@
   function initStaff() {
     captureStaffParams();
     renderStaff();
+    // QR-Code mit der Handy-Kamera gescannt: sofort das Formular zeigen (Orte sind gespeichert),
+    // nicht erst auf die Anmeldung beim Server warten.
+    const cached = staff();
+    if (pendingScan && cached && cached.areas) {
+      const code = pendingScan;
+      pendingScan = null;
+      setTimeout(() => handleScanCode(code, false), 0);
+    }
     $$("#staffTabs input").forEach((r) => r.addEventListener("change", () => selectStaffPane(r.value)));
     $("#scanBtn").addEventListener("click", startScan);
     $("#scanCancel").addEventListener("click", stopScan);
