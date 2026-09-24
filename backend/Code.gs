@@ -102,7 +102,7 @@ const CONFIG = {
   SITE_NAME: "WEG Wartenberger Dorfkrug",
   SENDER_NAME: "Willbrandt und Kompagnon",
   // Adresse der App (für die persönlichen Links der Mitarbeiter und die QR-Codes).
-  APP_URL: "https://mirkowill.github.io/Wartenberg-/",
+  APP_URL: "https://app.willbrandt-kompagnon.de/",
   // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
   CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
   // Mitarbeiternummern: feste Nummern plus STAFF_LINKS Nummern ab STAFF_FIRST_NR.

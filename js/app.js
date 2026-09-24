@@ -2408,7 +2408,7 @@
     // Schutz vor Clickjacking: Die App darf nicht in fremden Seiten eingebettet laufen.
     if (window.top !== window.self) {
       document.body.innerHTML = '<p style="padding:24px;font:18px sans-serif">Bitte die Mieter-App direkt öffnen: '
-        + '<a href="https://mirkowill.github.io/Wartenberg-/" target="_top" rel="noopener">mirkowill.github.io/Wartenberg-</a></p>';
+        + '<a href="https://app.willbrandt-kompagnon.de/" target="_top" rel="noopener">app.willbrandt-kompagnon.de</a></p>';
       return;
     }
     $("#objectName").textContent = OBJ.key ? OBJ.label : t_("Bitte Adresse wählen");

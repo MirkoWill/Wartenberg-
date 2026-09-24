@@ -166,7 +166,7 @@ check('Unbekannte Art abgelehnt', !post({ ...base, action: 'submitMeterReadings'
 ctx.setup();
 const staff = sheets['Mitarbeiter'].grid;
 check('Mitarbeiter: 007, 008, 001, 100–119 ohne Namen', staff.length === 24 && staff[1][0] === '007' && staff[1][1] === 'Verwaltung' && staff[2][0] === '008' && staff[2][1] === 'Verwaltung' && staff[3][0] === '001' && staff[4][0] === '100' && staff[23][0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
-check('Links mit Token', /^https:\/\/mirkowill\.github\.io\/Wartenberg-\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[4][4]), staff[4][4]);
+check('Links mit Token', /^https:\/\/app\.willbrandt-kompagnon\.de\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[4][4]), staff[4][4]);
 ctx.setup();
 check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 24);
 { // Blatt mit 007/001 aus alter Version + leere Kästchen bis Zeile 40 → 008 direkt unter die letzte Nummer
