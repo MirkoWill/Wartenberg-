@@ -33,6 +33,10 @@ window.APP_CONFIG = {
   TRANSIT_REFRESH_SECONDS: 60,
   TRANSIT_RESULTS: 10,
 
+  // Wetter auf der Startseite: eigene Hinweise ab dieser Höchst- bzw. Tiefsttemperatur (°C) in den nächsten 3 Tagen.
+  // Amtliche Warnungen des Deutschen Wetterdienstes werden zusätzlich immer angezeigt.
+  WEATHER: { hot: 30, cold: -10 },
+
   // Max. Kantenlänge (px) für Fotos, bevor sie Base64-kodiert werden.
   PHOTO_MAX_SIZE: 1600,
   PHOTO_QUALITY: 0.8,

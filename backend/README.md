@@ -144,6 +144,15 @@ Wird ein erledigter Auftrag wieder geöffnet, wird „Erledigt am“ geleert.
 
 **Morgen-Mail um 7 Uhr** an `NOTIFY_EMAIL` – **nur**, wenn Aufträge überfällig oder bald fällig sind.
 
+## Wetter auf der Startseite
+
+Das Script holt stündlich die Vorhersage für 3 Tage und die amtlichen Warnungen des **Deutschen Wetterdienstes**
+(über den freien Dienst Bright Sky, ohne Schlüssel, kostenlos) und liefert sie mit „Aktuelles“ an die App. Die Handys
+verbinden sich nicht selbst mit einem Wetterdienst. Standort: `CONFIG.WEATHER` (lat/lon).
+Die App zeigt zusätzlich eigene Hinweise ab 30 °C (Hitze) bzw. ab −10 °C (strenger Frost) – änderbar in
+`js/config.js` unter `WEATHER`. Ist der Wetterdienst gestört, fehlt nur die Wetteranzeige.
+Beim ersten Ausführen nach dem Einspielen fragt Google einmal nach der Berechtigung „Verbindung zu einem externen Dienst“.
+
 ## Statistik mit Looker Studio (kostenlos) 💻 am Computer
 
 Das Script baut jede Nacht (und per Menü **Mieter-App → Auswertung aktualisieren**) zwei Blätter, die sich direkt als

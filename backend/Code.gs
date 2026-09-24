@@ -117,6 +117,9 @@ const CONFIG = {
     Elektroraum: { react: { workdaysBeforeAppointment: 1 }, done: { appointment: true } },
   },
   SLA_WARN_HOURS: 24,
+  // Wetter für die Startseite: Daten des Deutschen Wetterdienstes über Bright Sky (kostenlos, ohne Schlüssel).
+  // Abruf nur durch dieses Script (1× pro Stunde, zwischengespeichert) – die Handys verbinden sich nicht mit Wetterdiensten.
+  WEATHER: { lat: 52.574, lon: 13.514, days: 3, cacheMinutes: 60 },
   STAFF_FIRST_NR: 100,
   STAFF_LINKS: 20,
   // Löschkonzept: Aufbewahrung in Jahren (offene Vorgänge werden nie gelöscht). Täglich um 3 Uhr.
@@ -533,7 +536,68 @@ function getNews(obj) {
     .sort((a, b) => (b.important - a.important) || b.from.localeCompare(a.from));
   let care = null;
   try { care = residentCareInfo(object); } catch (err) { console.error("Reinigungsinfo:", err); }
-  return { ok: true, items: items.slice(0, 10), care };
+  let weather = null;
+  try { weather = getWeather(); } catch (err) {
+    console.error("Wetter:", err);
+    CacheService.getScriptCache().put("weather", "null", 600); // Dienst gestört: 10 Min. nicht erneut versuchen
+  }
+  return { ok: true, items: items.slice(0, 10), care, weather };
+}
+
+/**
+ * Wetter der nächsten Tage + amtliche DWD-Warnungen für den Standort.
+ * Ergebnis: { days: [{ date, icon, min, max, rain }], alerts: [{ event, headline, severity, onset, expires, instruction }] }
+ */
+function getWeather() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get("weather");
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* neu laden */ } }
+  const w = CONFIG.WEATHER;
+  const ymd = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+  const first = new Date();
+  const last = new Date(first.getTime() + w.days * 86400000);
+  const base = "https://api.brightsky.dev";
+  const q = `lat=${w.lat}&lon=${w.lon}`;
+  const [wr, ar] = UrlFetchApp.fetchAll([
+    { url: `${base}/weather?${q}&date=${ymd(first)}&last_date=${ymd(last)}&tz=${encodeURIComponent(CONFIG.TIMEZONE)}`, muteHttpExceptions: true },
+    { url: `${base}/alerts?${q}&tz=${encodeURIComponent(CONFIG.TIMEZONE)}`, muteHttpExceptions: true },
+  ]);
+  if (wr.getResponseCode() !== 200) throw new Error(`Wetterdienst antwortet mit ${wr.getResponseCode()}`);
+  const hours = (JSON.parse(wr.getContentText()).weather || []).filter((h) => h && h.timestamp);
+  // Tagessymbol: Niederschlag/Gewitter zählt, wenn er tagsüber mind. 2 Stunden vorkommt, sonst das häufigste Symbol.
+  const WET = ["thunderstorm", "hail", "snow", "sleet", "rain"];
+  const byDay = {};
+  hours.forEach((h) => { const d = String(h.timestamp).slice(0, 10); (byDay[d] = byDay[d] || []).push(h); });
+  const days = Object.keys(byDay).sort().slice(0, w.days).map((date) => {
+    const list = byDay[date];
+    const temps = list.map((h) => h.temperature).filter((t) => typeof t === "number");
+    const daytime = list.filter((h) => { const hr = Number(String(h.timestamp).slice(11, 13)); return hr >= 7 && hr <= 20; });
+    const count = {};
+    (daytime.length ? daytime : list).forEach((h) => { if (h.icon) count[h.icon] = (count[h.icon] || 0) + 1; });
+    let icon = WET.find((i) => (count[i] || 0) >= 2);
+    if (!icon) icon = Object.keys(count).sort((a, b) => count[b] - count[a])[0] || "";
+    const rain = list.reduce((a, h) => a + (typeof h.precipitation === "number" ? h.precipitation : 0), 0);
+    return {
+      date, icon: String(icon).replace(/-night$/, "-day"),
+      min: temps.length ? Math.round(Math.min.apply(null, temps)) : null,
+      max: temps.length ? Math.round(Math.max.apply(null, temps)) : null,
+      rain: Math.round(rain * 10) / 10,
+    };
+  });
+  let alerts = [];
+  if (ar.getResponseCode() === 200) {
+    alerts = (JSON.parse(ar.getContentText()).alerts || [])
+      .filter((a) => a && a.status !== "test" && ["moderate", "severe", "extreme"].indexOf(a.severity) !== -1)
+      .slice(0, 5)
+      .map((a) => ({
+        event: plain(a.event_de, 80), headline: plain(a.headline_de, 160), headlineEn: plain(a.headline_en, 160),
+        severity: a.severity, onset: String(a.onset || ""), expires: String(a.expires || ""),
+        instruction: plain(a.instruction_de, 600),
+      }));
+  }
+  const out = { days, alerts, at: new Date().toISOString() };
+  cache.put("weather", JSON.stringify(out), w.cacheMinutes * 60);
+  return out;
 }
 
 /* ==========================================================================

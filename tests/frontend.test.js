@@ -33,7 +33,7 @@ function fakeBackend(state = {}) {
     }
     const pin = state.pin || PIN;
     if (d.pin !== pin && !staff) return { ok: false, error: "PIN ungültig", code: "pin" };
-    if (d.action === "news") return { ok: true, items: state.news || [], care: state.care || null };
+    if (d.action === "news") return { ok: true, items: state.news || [], care: state.care || null, weather: state.weather || null };
     if (d.action === "status") return { ok: true, items: [] };
     return { ok: true, id: d.action === "submitMeterReadings" ? "E-260924-ABCD" : "T-260924-ABCD", count: 1 };
   };
@@ -284,6 +284,42 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Wetter");
+    {
+      const day = (off) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + off * 86400000));
+      const hot = { at: new Date().toISOString(), alerts: [], days: [
+        { date: day(-1), icon: "rain", min: 5, max: 9 },
+        { date: day(0), icon: "clear-day", min: 19, max: 31 }, { date: day(1), icon: "thunderstorm", min: 20, max: 34 },
+        { date: day(2), icon: "cloudy", min: 15, max: 22 }, { date: day(3), icon: "snow", min: 1, max: 2 }] };
+      const state = { weather: hot };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForSelector("#weatherBox .weather__day");
+      const names = await p.$$eval(".weather__name", (els) => els.map((e) => e.textContent));
+      check("Wetter: 3 Tage ab heute (Vortag ausgeblendet)", names.length === 3 && names[0] === "Heute" && names[1] === "Morgen", names);
+      check("Wetter: Symbole und Temperaturen", /☀️/.test(await p.textContent(".weather__days")) && /⛈️/.test(await p.textContent(".weather__days")) && /31°/.test(await p.textContent(".weather__days")));
+      check("Hitze-Hinweis ab 30 °C mit Höchstwert", /Hitze: bis 34 °C/.test(await p.textContent("#weatherBox")) && await p.isVisible(".weather__warn--heat"));
+      check("Quelle DWD genannt", /Deutscher Wetterdienst/.test(await p.textContent(".weather__src")));
+      await ctx.close();
+
+      state.weather = { at: new Date().toISOString(), days: [{ date: day(0), icon: "snow", min: -14, max: -6 }, { date: day(1), icon: "snow", min: -12, max: -5 }],
+        alerts: [{ event: "STRENGER FROST", headline: "Amtliche WARNUNG vor STRENGEM FROST", headlineEn: "Official WARNING of SEVERE FROST", severity: "moderate", expires: new Date(Date.now() + 86400000).toISOString() }] };
+      const ctx2 = await newContext(browser, { backend: fakeBackend(state), preset: "resident", lang: "en" });
+      const p2 = await newPage(ctx2);
+      await p2.goto(`${base}?obj=lind6#notfall`); await p2.waitForSelector("#weatherBox .weather__warn");
+      const txt = await p2.textContent("#weatherBox");
+      check("Frost: DWD-Warnung (englisch), kein doppelter eigener Frost-Hinweis", /Official WARNING of SEVERE FROST/.test(txt) && /valid until/.test(txt) && !(await p2.isVisible(".weather__warn--cold")) && (await p2.$$(".weather__warn")).length === 1, txt);
+      check("Wetter übersetzt", /Today/.test(txt) && /Source: Deutscher Wetterdienst/.test(txt));
+      await ctx2.close();
+
+      state.weather = { at: new Date(Date.now() - 30 * 3600000).toISOString(), days: [{ date: day(0), icon: "rain", min: 1, max: 2 }], alerts: [] };
+      const ctx3 = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p3 = await newPage(ctx3);
+      await p3.goto(`${base}?obj=lind6#notfall`); await p3.waitForTimeout(800);
+      check("Veraltetes Wetter (> 24 Std.) wird nicht gezeigt", !(await p3.isVisible("#weatherBox")) && p3.errors.length === 0, p3.errors);
+      await ctx3.close();
+    }
+
     console.log("--- Einführung und Schriftgröße");
     {
       const ctx = await newContext(browser, { backend: fakeBackend() });
@@ -344,7 +380,7 @@ function makeQrVideo(text) {
         if (d.action === "hmLogin") return { ok: true, user: { name: X, role: "Verwaltung" }, areas: [{ code: "TG", ort: X, activity: X }], activities: [X] };
         if (d.action === "adminOverview") return { ok: true, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
         if (d.action === "getTasks") return { ok: true, tasks: [{ id: X, source: X, type: X, status: "offen", entrance: X, wohnung: X, name: X, contact: "javascript:window.__xss=1", details: X, ort: X, created: X, owner: X }] };
-        if (d.action === "news") return { ok: true, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
+        if (d.action === "news") return { ok: true, weather: { at: new Date().toISOString(), days: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()), icon: X, min: X, max: 40 }, { date: X }], alerts: [{ event: X, headline: X, headlineEn: X, severity: X, expires: X }, X] }, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
         if (d.action === "status") return { ok: true, items: [{ id: "T-260924-ABCD", type: X, status: X, created: X }] };
         return { ok: false, error: X };
       };
