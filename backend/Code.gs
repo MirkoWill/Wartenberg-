@@ -21,7 +21,7 @@ const CONFIG = {
       name: "Tickets",
       headers: ["ID", "Eingang", "Typ", "Status", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Name",
         "Termin", "Details", "Ort", "Telefon/Kontakt", "Foto", "Erledigt am", "Notiz Verwaltung",
-        "Erledigt-Code", "Zuständig"],
+        "Erledigt-Code", "Zuständig", "In Arbeit seit", "Bearbeitet von"],
     },
     meter: {
       name: "Zählerstände",
@@ -61,7 +61,18 @@ const CONFIG = {
     staffDefects: {
       name: "Mängel Hausmeister",
       headers: ["ID", "Eingang", "Erfasst von (Nr)", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
-        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig"],
+        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig", "In Arbeit seit", "Bearbeitet von"],
+    },
+    // Für Looker Studio / Auswertungen – werden nachts und per Menü neu aufgebaut (nicht von Hand bearbeiten)
+    analytics: {
+      name: "Auswertung Aufträge",
+      headers: ["ID", "Quelle", "Art", "Aufgang", "Zuständig", "Status", "Dringend", "Eingang", "In Arbeit seit",
+        "Erledigt am", "Reaktion fällig", "Erledigung fällig", "Reaktionszeit (Std.)", "Durchlaufzeit (Tage)",
+        "SLA Reaktion", "SLA Erledigung", "Ampel", "Monat"],
+    },
+    analyticsCleaning: {
+      name: "Auswertung Reinigung",
+      headers: ["Datum", "Tätigkeit", "Ort", "Soll", "Ist", "Erfüllt", "Monat"],
     },
     // Fehlerüberwachung: Serverfehler und von der App gemeldete Fehler (90 Tage)
     errors: {
@@ -95,7 +106,17 @@ const CONFIG = {
   // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
   CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
   // Mitarbeiternummern: feste Nummern plus STAFF_LINKS Nummern ab STAFF_FIRST_NR.
-  STAFF_FIXED: [["007", "Verwaltung"], ["001", "Hausmeister"]], // 007 Hausverwaltung, 001 Leitung Hausmeisterdienst
+  STAFF_FIXED: [["007", "Verwaltung"], ["008", "Verwaltung"], ["001", "Hausmeister"]], // 007/008 Verwaltung, 001 Leitung Hausmeisterdienst
+  // Service-Ziele (SLA): Reaktion = Status „in Arbeit“ (oder erledigt), Erledigung = Status „erledigt“.
+  // days = Kalendertage, workdays = Mo–Fr. Elektroraum: bestätigt 1 Werktag vor dem Termin, erledigt am Termin.
+  SLA: {
+    urgent: { react: { days: 1 }, done: { days: 3 } },
+    Mangel: { react: { workdays: 3 }, done: { days: 14 } },
+    "Mangel (intern)": { react: { workdays: 3 }, done: { days: 14 } },
+    Klingelschild: { react: { workdays: 3 }, done: { workdays: 10 } },
+    Elektroraum: { react: { workdaysBeforeAppointment: 1 }, done: { appointment: true } },
+  },
+  SLA_WARN_HOURS: 24,
   STAFF_FIRST_NR: 100,
   STAFF_LINKS: 20,
   // Löschkonzept: Aufbewahrung in Jahren (offene Vorgänge werden nie gelöscht). Täglich um 3 Uhr.
@@ -176,6 +197,7 @@ function onOpen() {
     .addItem("Reinigungsplan heute prüfen (Test)", "checkPlanFulfilment")
     .addItem("Mitarbeiter-Links ergänzen", "ensureStaffLinks")
     .addSeparator()
+    .addItem("Auswertung aktualisieren", "rebuildAnalyticsNow")
     .addItem("Systemprüfung jetzt", "healthCheckNow")
     .addItem("Alte Daten jetzt löschen (Löschkonzept)", "cleanupNow")
     .addToUi();
@@ -843,6 +865,7 @@ function completeTicketPage(q) {
   try {
     sheet.getRange(rowIndex + 1, c("Status") + 1).setValue("erledigt");
     sheet.getRange(rowIndex + 1, c("Erledigt am") + 1).setValue(new Date());
+    if (c("Bearbeitet von") !== -1) sheet.getRange(rowIndex + 1, c("Bearbeitet von") + 1).setValue("Mail-Link");
   } finally {
     lock.releaseLock();
   }
@@ -875,6 +898,8 @@ function donePage(title, text, action) {
    ========================================================================== */
 
 const STAFF_ACTIONS = {
+  adminOverview: (p, user) => adminOverview(p, user),
+  adminUpdateTask: (p, user) => adminUpdateTask(p, user),
   hmLogin: (p, user) => staffLogin(user),
   logCleaning: (p, user) => logCleaning(p, user),
   getTasks: (p, user) => getTasks(p, user),
@@ -944,6 +969,7 @@ function setupPortalSheets() {
   ensureStaffLinks();
   ensureDailyCheckTrigger();
   ensureMaintenanceTrigger();
+  ensureMorningTrigger();
   CacheService.getScriptCache().removeAll(["areas", "staff"]);
 }
 
@@ -1112,7 +1138,8 @@ function completeTask(p, user) {
     if (!row || !mayHandle(user, ownerOf(row, row.Typ || "Mangel (intern)"))) throw userError("Auftrag nicht gefunden");
     if (row.Status !== "erledigt") {
       sheet.getRange(row._row, def.headers.indexOf("Status") + 1).setValue("erledigt");
-      sheet.getRange(row._row, def.headers.indexOf("Erledigt am") + 1).setValue(new Date());
+      applyStatusTimestamps(sheet, def, row._row, "erledigt", row);
+      sheet.getRange(row._row, def.headers.indexOf("Bearbeitet von") + 1).setValue(str(user.name, 40));
     }
   } finally {
     lock.releaseLock();
@@ -1271,22 +1298,34 @@ function syncPlanToCalendarCore() {
 }
 
 /** Tägliche Kontrolle (Trigger 19 Uhr): Geplante Tätigkeiten von heute ohne Nachweis → E-Mail. */
-function checkPlanFulfilment() {
-  const today = berlinToday();
+/**
+ * Soll/Ist der eintägigen Plan-Einträge eines Tages: [{ activity, ort, done }].
+ * Zeiträume (z. B. Winterdienst) werden nicht geprüft.
+ */
+function planStatusForDay(day, areas, allScans, plan) {
   const key = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
-  const areas = activeAreas();
-  const scans = sheetObjects(CONFIG.SHEETS.cleaning).filter((s) => s["Zeitpunkt (Scan)"] instanceof Date
-    && key(s["Zeitpunkt (Scan)"]) === key(today));
+  const k = key(day);
+  // Tagesschlüssel je Nachweis nur einmal berechnen (Auswertung ruft dies für 365 Tage auf)
+  allScans.forEach((s) => { if (s._day === undefined) s._day = s["Zeitpunkt (Scan)"] instanceof Date ? key(s["Zeitpunkt (Scan)"]) : ""; });
+  const scans = allScans.filter((s) => s._day === k);
   const done = (activity, area) => scans.some((s) => String(s["Tätigkeit"]).toLowerCase() === activity.toLowerCase()
     && (!area || String(s["Ort-Code"]).toUpperCase() === area.code.toUpperCase()));
-
-  const missing = [];
-  planRows().filter((r) => key(r.from) === key(today) && key(r.to) === key(today)).forEach((r) => {
+  const out = [];
+  plan.filter((r) => key(r.from) === k && key(r.to) === k).forEach((r) => {
     const targets = planAreas(r.ort, areas);
-    if (targets === null) { if (!done(r.activity, null)) missing.push(`${r.activity} (${r.ort || "ohne Ort"})`); return; }
-    if (!targets.length) { if (!done(r.activity, null)) missing.push(`${r.activity} – ${r.ort}`); return; }
-    targets.forEach((a) => { if (!done(r.activity, a)) missing.push(`${r.activity} – ${a.ort}`); });
+    if (targets === null || !targets.length) {
+      out.push({ activity: r.activity, ort: r.ort || "ohne Ort", done: done(r.activity, null) });
+      return;
+    }
+    targets.forEach((a) => out.push({ activity: r.activity, ort: a.ort, done: done(r.activity, a) }));
   });
+  return out;
+}
+
+function checkPlanFulfilment() {
+  const today = berlinToday();
+  const missing = planStatusForDay(today, activeAreas(), sheetObjects(CONFIG.SHEETS.cleaning), planRows())
+    .filter((x) => !x.done).map((x) => `${x.activity} – ${x.ort}`);
   if (missing.length) {
     notify(`Fehlende Nachweise heute (${missing.length})`, [
       `Für heute (${Utilities.formatDate(today, CONFIG.TIMEZONE, "dd.MM.yyyy")}) geplant, aber bis jetzt ohne Scan:`, "",
@@ -1383,6 +1422,7 @@ function ensureMaintenanceTrigger() {
 function dailyMaintenance() {
   let removed = null;
   try { removed = cleanupOldData(); } catch (err) { logServerError(err, "Löschkonzept"); }
+  try { rebuildAnalytics(); } catch (err) { logServerError(err, "Auswertung"); }
   healthCheck({ removed });
 }
 
@@ -1492,7 +1532,7 @@ function healthCheck(extra) {
     if (!ss.getSheetByName(CONFIG.SHEETS[k].name)) issues.push(`Blatt „${CONFIG.SHEETS[k].name}“ fehlt – setup ausführen.`);
   });
   const handlers = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
-  ["checkPlanFulfilment", "dailyMaintenance"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
+  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
   if (planRows().length) { try { findCalendar(); } catch (e) { issues.push(e.userMessage || e.message); } }
   if (!activeAreas().length) issues.push("Keine aktiven QR-Orte.");
 
@@ -1520,5 +1560,287 @@ function healthCheck(extra) {
 function healthCheckNow() {
   const r = healthCheck();
   showResult("Systemprüfung", [...r.issues, ...r.info].join("\n") || "Alles in Ordnung.");
+}
+
+/* ==========================================================================
+   Cockpit für die Verwaltung (007/008): SLA-Ampel, Aufträge steuern, Kennzahlen,
+   Auswertungsblätter für Looker Studio, Morgen-Mail bei Überfälligen
+   ========================================================================== */
+
+function requireAdmin(user) {
+  if (!user || user.role !== "Verwaltung") throw userError("Nur für die Verwaltung.", "staff");
+}
+
+/** Datum + n Werktage (Mo–Fr), Uhrzeit bleibt. Start am Wochenende zählt ab Montag. */
+function addWorkdays(date, n) {
+  const d = new Date(date.getTime());
+  let left = n;
+  while (left > 0) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) left--;
+  }
+  return d;
+}
+
+function subtractWorkdays(date, n) {
+  const d = new Date(date.getTime());
+  let left = n;
+  while (left > 0) {
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) left--;
+  }
+  return d;
+}
+
+function endOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 0); }
+
+/** Einheitliche Sicht auf Bewohner-Tickets und interne Mängel. */
+function allTasks() {
+  const date = (v) => (v instanceof Date && !isNaN(v) ? v : cellDate(v));
+  const tickets = sheetObjects(CONFIG.SHEETS.tickets).filter((r) => r.ID).map((r) => ({
+    id: String(r.ID), kind: "ticket", source: "Bewohner", type: String(r.Typ || ""), status: String(r.Status || "offen"),
+    owner: ownerOf(r, r.Typ), created: date(r.Eingang), inWork: date(r["In Arbeit seit"]), done: date(r["Erledigt am"]),
+    termin: date(r.Termin), urgent: false, entrance: String(r.Aufgang || ""), object: String(r["Aufgang-ID"] || ""),
+    wohnung: String(r.Wohnung || ""), name: String(r.Name || ""), contact: String(r["Telefon/Kontakt"] || ""),
+    details: String(r.Details || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
+    by: String(r["Bearbeitet von"] || ""), _row: r._row,
+  }));
+  const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter((r) => r.ID).map((r) => ({
+    id: String(r.ID), kind: "defect", source: String(r["Erfasst von (Nr)"] || ""), type: "Mangel (intern)",
+    status: String(r.Status || "offen"), owner: ownerOf(r, "Mangel (intern)"), created: date(r.Eingang),
+    inWork: date(r["In Arbeit seit"]), done: date(r["Erledigt am"]), termin: null, urgent: r.Dringend === true,
+    entrance: "", object: String(r["Aufgang-ID"] || ""), wohnung: "", name: "", contact: "",
+    details: String(r.Beschreibung || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
+    by: String(r["Bearbeitet von"] || ""), _row: r._row,
+  }));
+  return tickets.concat(defects);
+}
+
+/** Fälligkeiten und Ampel eines Auftrags nach CONFIG.SLA. */
+function slaInfo(t, now) {
+  const rule = t.urgent ? CONFIG.SLA.urgent : (CONFIG.SLA[t.type] || CONFIG.SLA.Mangel);
+  const start = t.created || now;
+  const due = (spec) => {
+    if (spec.appointment || spec.workdaysBeforeAppointment) {
+      if (!t.termin) return addWorkdays(start, 3);
+      return endOfDay(spec.appointment ? t.termin : subtractWorkdays(t.termin, spec.workdaysBeforeAppointment));
+    }
+    if (spec.workdays) return addWorkdays(start, spec.workdays);
+    return new Date(start.getTime() + spec.days * 86400000);
+  };
+  const reactDue = due(rule.react);
+  const doneDue = due(rule.done);
+  const closed = t.status === "erledigt";
+  const reactAt = t.inWork || t.done || (closed ? now : null);
+  const state = (at, limit) => (at ? (at <= limit ? "ok" : "late") : (now > limit ? "overdue" : "open"));
+  const react = state(reactAt, reactDue);
+  const done = state(closed ? (t.done || now) : null, doneDue);
+  const warn = CONFIG.SLA_WARN_HOURS * 3600000;
+  let light = "green";
+  if (closed) light = "done";
+  else if (react === "overdue" || done === "overdue") light = "red";
+  else if ((react === "open" && reactDue - now < warn) || (done === "open" && doneDue - now < warn)) light = "yellow";
+  const hours = reactAt && t.created ? Math.max(0, (reactAt - t.created) / 3600000) : null;
+  const days = closed && t.done && t.created ? Math.max(0, (t.done - t.created) / 86400000) : null;
+  return { reactDue, doneDue, react, done, light, reactHours: hours, leadDays: days };
+}
+
+function isoOrEmpty(d) { return d instanceof Date && !isNaN(d) ? d.toISOString() : ""; }
+
+/** Daten für das Cockpit: Aufträge mit Ampel, Kennzahlen, Statistik. */
+function adminOverview(p, user) {
+  requireAdmin(user);
+  const now = new Date();
+  const tasks = allTasks().map((t) => Object.assign(t, { sla: slaInfo(t, now) }));
+  const since = (days) => new Date(now.getTime() - days * 86400000);
+  const recentClosed = tasks.filter((t) => t.status === "erledigt" && t.done && t.done > since(90));
+  const open = tasks.filter((t) => t.status !== "erledigt");
+  const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const slaOk = recentClosed.filter((t) => t.sla.react === "ok" && t.sla.done === "ok").length;
+
+  // Statistik: 12 Monate
+  const monthKey = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM");
+  const months = [];
+  for (let i = 11; i >= 0; i--) months.push(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 15)));
+  const perMonth = {};
+  months.forEach((m) => { perMonth[m] = { Mangel: 0, Klingelschild: 0, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 0 }; });
+  tasks.forEach((t) => { const m = t.created && monthKey(t.created); if (perMonth[m] && perMonth[m][t.type] !== undefined) perMonth[m][t.type]++; });
+  const meterBatches = {};
+  sheetObjects(CONFIG.SHEETS.meter).forEach((r) => {
+    const d = r.Eingang instanceof Date ? r.Eingang : null;
+    const id = r["Erfassungs-ID"] || r.ID;
+    if (d && !meterBatches[id]) { meterBatches[id] = true; const m = monthKey(d); if (perMonth[m]) perMonth[m].Zähler++; }
+  });
+  const scans = sheetObjects(CONFIG.SHEETS.cleaning);
+  scans.forEach((s) => { const d = s["Zeitpunkt (Scan)"]; if (d instanceof Date) { const m = monthKey(d); if (perMonth[m]) perMonth[m].Nachweise++; } });
+
+  // Meldungen je Aufgang (12 Monate)
+  const perEntrance = {};
+  tasks.filter((t) => t.created && t.created > since(365)).forEach((t) => {
+    const k = t.entrance || t.object || "ohne Aufgang";
+    perEntrance[k] = (perEntrance[k] || 0) + 1;
+  });
+
+  // Reinigungsquote 30 Tage (Plan gegen Nachweis)
+  const areas = activeAreas();
+  const plan = planRows();
+  let soll = 0, ist = 0;
+  for (let i = 1; i <= 30; i++) {
+    planStatusForDay(new Date(now.getTime() - i * 86400000), areas, scans, plan).forEach((x) => { soll++; if (x.done) ist++; });
+  }
+  const errors24 = sheetObjects(CONFIG.SHEETS.errors).filter((r) => r.Zeit instanceof Date && r.Zeit > since(1)).length;
+
+  const list = tasks.filter((t) => t.status !== "erledigt" || (t.done && t.done > since(30))).map((t) => ({
+    id: t.id, kind: t.kind, source: t.source, type: t.type, status: t.status, owner: t.owner, urgent: t.urgent,
+    created: isoOrEmpty(t.created), inWork: isoOrEmpty(t.inWork), done: isoOrEmpty(t.done), termin: isoOrEmpty(t.termin),
+    entrance: t.entrance, wohnung: t.wohnung, name: t.name, contact: t.contact, details: t.details, ort: t.ort,
+    note: t.note, by: t.by,
+    sla: { light: t.sla.light, react: t.sla.react, done: t.sla.done, reactDue: isoOrEmpty(t.sla.reactDue), doneDue: isoOrEmpty(t.sla.doneDue) },
+  }));
+  const rank = { red: 0, yellow: 1, green: 2, done: 3 };
+  list.sort((a, b) => rank[a.sla.light] - rank[b.sla.light] || String(a.sla.doneDue).localeCompare(String(b.sla.doneDue)));
+
+  return {
+    ok: true,
+    kpi: {
+      open: open.length,
+      overdue: open.filter((t) => t.sla.light === "red").length,
+      dueSoon: open.filter((t) => t.sla.light === "yellow").length,
+      avgReactHours: avg(recentClosed.map((t) => t.sla.reactHours).filter((x) => x !== null)),
+      avgLeadDays: avg(recentClosed.map((t) => t.sla.leadDays).filter((x) => x !== null)),
+      slaQuote: recentClosed.length ? slaOk / recentClosed.length : null,
+      closed90: recentClosed.length,
+      cleaningQuote: soll ? ist / soll : null, cleaningSoll: soll, cleaningIst: ist,
+      errors24,
+    },
+    months: months.map((m) => Object.assign({ month: m }, perMonth[m])),
+    perEntrance,
+    tasks: list,
+    lookerUrl: PropertiesService.getScriptProperties().getProperty("LOOKER_URL") || "",
+    time: now.toISOString(),
+  };
+}
+
+/** Status/Zuständigkeit/Notiz eines Auftrags ändern (Verwaltung). Setzt die Zeitstempel. */
+function adminUpdateTask(p, user) {
+  requireAdmin(user);
+  const id = String(p.id || "").trim();
+  const def = /^M-/.test(id) ? CONFIG.SHEETS.staffDefects : CONFIG.SHEETS.tickets;
+  const sheet = getSpreadsheet().getSheetByName(def.name);
+  const col = (h) => def.headers.indexOf(h) + 1;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const row = sheetObjects(def).find((r) => r.ID === id);
+    if (!row) throw userError("Auftrag nicht gefunden");
+    if (p.status !== undefined) {
+      if (CONFIG.STATUS_VALUES.indexOf(p.status) === -1) throw userError("Ungültiger Status");
+      sheet.getRange(row._row, col("Status")).setValue(p.status);
+      applyStatusTimestamps(sheet, def, row._row, p.status, row);
+    }
+    if (p.owner !== undefined) {
+      if (CONFIG.OWNERS.indexOf(p.owner) === -1) throw userError("Ungültige Zuständigkeit");
+      sheet.getRange(row._row, col("Zuständig")).setValue(p.owner);
+    }
+    if (p.note !== undefined) sheet.getRange(row._row, col("Notiz Verwaltung")).setValue(protectCell(str(p.note, 1000)));
+    sheet.getRange(row._row, col("Bearbeitet von")).setValue(str(user.name, 40));
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true };
+}
+
+/** Zeitstempel passend zum Status: „in Arbeit“ → In Arbeit seit; „erledigt“ → Erledigt am; wieder offen → leeren. */
+function applyStatusTimestamps(sheet, def, rowNo, status, row) {
+  const col = (h) => def.headers.indexOf(h) + 1;
+  const now = new Date();
+  const has = (h) => row && row[h] instanceof Date;
+  if ((status === "in Arbeit" || status === "erledigt") && !has("In Arbeit seit")) sheet.getRange(rowNo, col("In Arbeit seit")).setValue(now);
+  if (status === "erledigt" && !has("Erledigt am")) sheet.getRange(rowNo, col("Erledigt am")).setValue(now);
+  if (status !== "erledigt" && has("Erledigt am")) sheet.getRange(rowNo, col("Erledigt am")).setValue("");
+}
+
+/** Einfacher Trigger: Status direkt in der Tabelle geändert → Zeitstempel setzen. */
+function onEdit(e) {
+  try {
+    const sheet = e && e.range && e.range.getSheet();
+    if (!sheet) return;
+    const def = [CONFIG.SHEETS.tickets, CONFIG.SHEETS.staffDefects].find((d) => d.name === sheet.getName());
+    if (!def) return;
+    const statusCol = def.headers.indexOf("Status") + 1;
+    if (e.range.getColumn() > statusCol || e.range.getLastColumn() < statusCol) return;
+    const rows = sheetObjects(def);
+    for (let r = e.range.getRow(); r <= e.range.getLastRow(); r++) {
+      if (r < 2) continue;
+      const row = rows.find((x) => x._row === r);
+      if (!row || !row.Status) continue;
+      applyStatusTimestamps(sheet, def, r, String(row.Status), row);
+      sheet.getRange(r, def.headers.indexOf("Bearbeitet von") + 1).setValue("Tabelle");
+    }
+  } catch (err) { console.error("onEdit:", err); }
+}
+
+/** Blätter „Auswertung Aufträge“ und „Auswertung Reinigung“ für Looker Studio neu aufbauen. */
+function rebuildAnalytics() {
+  const now = new Date();
+  const ss = getSpreadsheet();
+  const monthKey = (d) => (d ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM") : "");
+  const round = (x, n) => (x === null || x === undefined ? "" : Math.round(x * Math.pow(10, n)) / Math.pow(10, n));
+  const label = { ok: "eingehalten", late: "verspätet", overdue: "überfällig", open: "offen" };
+  const ampel = { red: "rot", yellow: "gelb", green: "grün", done: "erledigt" };
+  const rows = allTasks().map((t) => {
+    const s = slaInfo(t, now);
+    return [t.id, t.source === "Bewohner" ? "Bewohner" : "Hausmeister", t.type, t.entrance || t.object, t.owner, t.status,
+      t.urgent, t.created || "", t.inWork || "", t.done || "", s.reactDue, s.doneDue, round(s.reactHours, 1),
+      round(s.leadDays, 1), label[s.react], label[s.done], ampel[s.light], monthKey(t.created)].map(protectCell);
+  });
+  writeTable(ss, CONFIG.SHEETS.analytics, rows);
+
+  const areas = activeAreas();
+  const plan = planRows();
+  const scans = sheetObjects(CONFIG.SHEETS.cleaning);
+  const cleanRows = [];
+  for (let i = 365; i >= 1; i--) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    planStatusForDay(day, areas, scans, plan).forEach((x) => cleanRows.push([day, x.activity, x.ort, 1, x.done ? 1 : 0, x.done, monthKey(day)].map(protectCell)));
+  }
+  writeTable(ss, CONFIG.SHEETS.analyticsCleaning, cleanRows);
+  return { tasks: rows.length, cleaning: cleanRows.length };
+}
+
+function writeTable(ss, def, rows) {
+  const sheet = ss.getSheetByName(def.name) || ss.insertSheet(def.name);
+  sheet.clear();
+  sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers]).setFontWeight("bold").setBackground("#eef0e6");
+  sheet.setFrozenRows(1);
+  if (rows.length) sheet.getRange(2, 1, rows.length, def.headers.length).setValues(rows);
+}
+
+function rebuildAnalyticsNow() {
+  const r = rebuildAnalytics();
+  showResult("Auswertung", `Aktualisiert: ${r.tasks} Aufträge, ${r.cleaning} Reinigungs-Soll-Einträge (365 Tage).`);
+}
+
+function ensureMorningTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "morningDigest");
+  if (!exists) ScriptApp.newTrigger("morningDigest").timeBased().everyDays(1).atHour(7).inTimezone(CONFIG.TIMEZONE).create();
+}
+
+/** Morgens 7 Uhr: Mail nur, wenn Aufträge überfällig oder heute fällig sind. */
+function morningDigest() {
+  const now = new Date();
+  const fmt = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "dd.MM. HH:mm");
+  const open = allTasks().filter((t) => t.status !== "erledigt").map((t) => Object.assign(t, { sla: slaInfo(t, now) }));
+  const red = open.filter((t) => t.sla.light === "red");
+  const yellow = open.filter((t) => t.sla.light === "yellow");
+  if (!red.length && !yellow.length) return { red: 0, yellow: 0 };
+  const line = (t) => `• ${t.id} ${t.type}${t.entrance ? " · " + t.entrance : ""}${t.wohnung ? " · " + whg(t.wohnung) : ""}`
+    + ` – ${t.owner} – ${t.sla.react === "overdue" ? "Reaktion fällig seit " + fmt(t.sla.reactDue) : "Erledigung fällig " + fmt(t.sla.doneDue)}`;
+  notify(`Guten Morgen: ${red.length} überfällig, ${yellow.length} heute fällig`, [
+    red.length ? "ÜBERFÄLLIG:" : "", ...red.map(line), red.length ? "" : "",
+    yellow.length ? "Heute/bald fällig:" : "", ...yellow.map(line), "",
+    "Details und Bearbeitung: in der App im Cockpit.",
+  ]);
+  return { red: red.length, yellow: yellow.length };
 }
 

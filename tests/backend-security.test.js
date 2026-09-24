@@ -7,7 +7,7 @@ const events = {}; let evSeq = 0;
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
 function mkSheet(name) {
-  const sh = { name, grid: [], filter: null, bgs: {},
+  const sh = { name, grid: [], filter: null, bgs: {}, getName: () => name,
     ensure(r) { while (sh.grid.length < r) sh.grid.push([]); },
     getRange(r, c, nr = 1, nc = 1) { if (typeof r === 'string') return {}; const api = {
       setValues(v) { sh.ensure(r + nr - 1); v.forEach((row, i) => row.forEach((x, j) => { sh.grid[r - 1 + i][c - 1 + j] = x; })); return api; },
@@ -164,13 +164,17 @@ quiet = false; fails = 0;
 console.log('================ PEN-TEST BACKEND ================');
 ctx.setup();
 const stf = sheets['Mitarbeiter'].grid;
-const ADM = stf[1][3], LEAD = stf[2][3], HM = stf[3][3], SPARE = stf[4][3];
-stf[3][2] = true; delete cache.staff;           // Nr. 100 vergeben, 101 bleibt Vorrat
+const ADM = stf[1][3], ADM2 = stf[2][3], LEAD = stf[3][3], HM = stf[4][3], SPARE = stf[5][3];
+stf[4][2] = true; delete cache.staff;           // Nr. 100 vergeben, 101 bleibt Vorrat
 const reset = () => Object.keys(cache).forEach((k) => delete cache[k]);
 const P = (x) => post(x); const G = (q) => ctx.doGet({ parameter: q });
 const photo2 = photo;
 
 console.log('--- A. Zugriff / Authentifizierung');
+check('A0 Cockpit nur für Verwaltung (Hausmeister/Leitung/ohne Token abgelehnt)', ['adminOverview', 'adminUpdateTask'].every((action) =>
+  P({ action, token: HM, id: 'x', status: 'erledigt' }).code === 'staff' && P({ action, token: LEAD, id: 'x' }).code === 'staff'
+  && !P({ action, pin: '13059', id: 'x' }).ok));
+check('A0 Cockpit für 007 und 008', P({ action: 'adminOverview', token: ADM }).ok && P({ action: 'adminOverview', token: ADM2 }).ok);
 check('A1 Portal ohne Token', P({ action: 'getTasks' }).code === 'staff');
 check('A2 Portal leerer/kaputter Token', ['', ' ', 'x', 'a'.repeat(23), 'g'.repeat(40), HM + 'ff', HM.toUpperCase().replace(/./g, 'z')].every((t) => !P({ action: 'getTasks', token: t }).ok));
 check('A3 Portal mit Vorrats-Token (gesperrt)', P({ action: 'getTasks', token: SPARE }).code === 'staff');

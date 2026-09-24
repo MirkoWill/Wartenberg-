@@ -7,7 +7,7 @@ const events = {}; let evSeq = 0;
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
 function mkSheet(name) {
-  const sh = { name, grid: [], filter: null, bgs: {},
+  const sh = { name, grid: [], filter: null, bgs: {}, getName: () => name,
     ensure(r) { while (sh.grid.length < r) sh.grid.push([]); },
     getRange(r, c, nr = 1, nc = 1) { if (typeof r === 'string') return {}; const api = {
       setValues(v) { sh.ensure(r + nr - 1); v.forEach((row, i) => row.forEach((x, j) => { sh.grid[r - 1 + i][c - 1 + j] = x; })); return api; },
@@ -162,26 +162,26 @@ check('Unbekannte Art abgelehnt', !post({ ...base, action: 'submitMeterReadings'
 // ================= Epic 3 – Hausmeister-Portal =================
 ctx.setup();
 const staff = sheets['Mitarbeiter'].grid;
-check('Mitarbeiter: 007, 001, 100–119 ohne Namen', staff.length === 23 && staff[1][0] === '007' && staff[1][1] === 'Verwaltung' && staff[2][0] === '001' && staff[3][0] === '100' && staff[22][0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
-check('Links mit Token', /^https:\/\/mirkowill\.github\.io\/Wartenberg-\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[3][4]), staff[3][4]);
+check('Mitarbeiter: 007, 008, 001, 100–119 ohne Namen', staff.length === 24 && staff[1][0] === '007' && staff[1][1] === 'Verwaltung' && staff[2][0] === '008' && staff[2][1] === 'Verwaltung' && staff[3][0] === '001' && staff[4][0] === '100' && staff[23][0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
+check('Links mit Token', /^https:\/\/mirkowill\.github\.io\/Wartenberg-\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[4][4]), staff[4][4]);
 ctx.setup();
-check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 23);
+check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 24);
 check('QR-Orte vorbelegt (21)', sheets['QR-Orte'].grid.length === 22 && sheets['QR-Orte'].grid.some((r) => r[1] === 'Raum Hebeanlage Lindenberger Str. 8'));
 check('Kein Keller Lind 8', !sheets['QR-Orte'].grid.some((r) => r[0] === 'KE_LIND8'));
 check('Tätigkeiten inkl. Fensterreinigung', sheets['Tätigkeiten'].grid.some((r) => r[0] === 'Fensterreinigung Aufgang'));
 check('Tages-Trigger angelegt (einmal)', triggers.filter((t) => t.getHandlerFunction() === 'checkPlanFulfilment').length === 1);
 
-const hmTok = staff[3][3], admTok = staff[1][3];
-check('Vorrats-Nummern gesperrt, 007/001 aktiv', staff[1][2] === true && staff[2][2] === true && staff[3][2] === false && staff[22][2] === false);
+const hmTok = staff[4][3], admTok = staff[1][3], adm2Tok = staff[2][3], leadTok = staff[3][3];
+check('Vorrats-Nummern gesperrt, 007/008/001 aktiv', staff[1][2] === true && staff[2][2] === true && staff[3][2] === true && staff[4][2] === false && staff[23][2] === false);
 delete cache.staff;
 check('Gesperrte Vorrats-Nummer kommt nicht rein', post({ action: 'hmLogin', token: hmTok }).code === 'staff');
-staff[3][2] = true; delete cache.staff; // Nr. 100 vergeben
+staff[4][2] = true; delete cache.staff; // Nr. 100 vergeben
 let lg = post({ action: 'hmLogin', token: hmTok });
 check('Login Hausmeister ohne PIN', lg.ok && lg.user.name === 'Nr. 100' && lg.user.role === 'Hausmeister' && lg.areas.length === 21 && lg.activities.length === 10, lg.user);
 check('Login Verwaltung', post({ action: 'hmLogin', token: admTok }).user.role === 'Verwaltung');
 check('Falscher Token abgelehnt', post({ action: 'hmLogin', token: 'abc' }).code === 'staff' && post({ action: 'hmLogin', token: 'f'.repeat(40) }).code === 'staff');
-sheets['Mitarbeiter'].grid[4][2] = false; delete cache.staff;
-check('Deaktivierter Zugang abgelehnt', post({ action: 'hmLogin', token: staff[4][3] }).code === 'staff');
+sheets['Mitarbeiter'].grid[5][2] = false; delete cache.staff;
+check('Deaktivierter Zugang abgelehnt', post({ action: 'hmLogin', token: staff[5][3] }).code === 'staff');
 
 const nowIso = new Date().toISOString();
 let sc = post({ action: 'logCleaning', token: hmTok, areaToken: 'th_lind6', activity: 'Treppenhausreinigung', timestamp: nowIso });
@@ -235,6 +235,57 @@ check('Kalender: Änderung + Löschung', /0 neu, 3 aktualisiert, 1 entfernt/.tes
 mails.length = 0;
 let miss = ctx.checkPlanFulfilment();
 check('Kontrolle: 4 Treppenhäuser fehlen, Lind 6 + Müllplatz erledigt', miss.length === 4 && !miss.some((m) => /Str\. 6/.test(m)) && !miss.some((m) => /Müllplatz/.test(m)) && mails.some((m) => /Fehlende Nachweise/.test(m.subject)), miss);
+
+// ================= Cockpit (Verwaltung) =================
+const TH = vm.runInContext('CONFIG', ctx).SHEETS.tickets.headers, tcol = (h) => TH.indexOf(h);
+const mkTicket = (id, type, created, extra = {}) => { const r = TH.map(() => ''); r[tcol('ID')] = id; r[tcol('Typ')] = type; r[tcol('Status')] = 'offen'; r[tcol('Eingang')] = created; r[tcol('Aufgang')] = 'Dorfstr. 24'; r[tcol('Wohnung')] = '5'; Object.keys(extra).forEach((k) => { r[tcol(k)] = extra[k]; }); sheets['Tickets'].grid.push(r); return r; };
+const fri = new Date(2026, 8, 18, 10, 0); // Freitag
+let si = ctx.slaInfo({ type: 'Klingelschild', status: 'offen', created: fri }, new Date(2026, 8, 21, 9, 0));
+check('SLA Klingelschild: Reaktion 3 Werktage (Fr → Mi), Erledigung 10 Werktage', si.reactDue.getDate() === 23 && si.doneDue.getDate() === 2 && si.doneDue.getMonth() === 9 && si.light === 'green', [si.reactDue, si.doneDue]);
+si = ctx.slaInfo({ type: 'Mangel (intern)', urgent: true, status: 'offen', created: fri }, new Date(2026, 8, 19, 11, 0));
+check('SLA dringend: Reaktion 1 Tag überschritten → rot', si.react === 'overdue' && si.light === 'red', si);
+si = ctx.slaInfo({ type: 'Mangel', status: 'offen', created: fri }, new Date(2026, 8, 22, 12, 0));
+check('SLA Mangel: < 24 Std. vor Reaktionsfrist → gelb', si.light === 'yellow', si);
+si = ctx.slaInfo({ type: 'Elektroraum', status: 'offen', created: fri, termin: new Date(2026, 8, 24) }, new Date(2026, 8, 22, 9, 0));
+check('SLA Elektroraum: bestätigen bis Werktag vor Termin, erledigt am Termin', si.reactDue.getDate() === 23 && si.doneDue.getDate() === 24, [si.reactDue, si.doneDue]);
+si = ctx.slaInfo({ type: 'Mangel', status: 'erledigt', created: fri, inWork: new Date(2026, 8, 19), done: new Date(2026, 8, 20) }, new Date());
+check('SLA erledigt: Reaktion/Erledigung eingehalten, Zeiten berechnet', si.react === 'ok' && si.done === 'ok' && si.light === 'done' && Math.round(si.reactHours) === 14 && Math.round(si.leadDays * 10) === 16, si);
+
+const late = mkTicket('T-LATE', 'Klingelschild', new Date(Date.now() - 20 * 86400000));
+const fresh = mkTicket('T-FRESH', 'Mangel', new Date());
+let cov = post({ action: 'adminOverview', token: admTok });
+check('Cockpit: Überfälliges oben und rot', cov.ok && cov.tasks[0].sla.light === 'red' && cov.tasks.some((x) => x.id === 'T-LATE' && x.sla.light === 'red') && cov.kpi.overdue >= 1 && cov.kpi.open >= 2, cov.tasks.slice(0, 3).map((x) => x.id + ':' + x.sla.light));
+check('Cockpit: 12 Monate Statistik, Reinigungsquote, keine Namen der Mitarbeiter', cov.months.length === 12 && 'Nachweise' in cov.months[11] && typeof cov.kpi.errors24 === 'number' && !JSON.stringify(cov).includes('Schreier'));
+check('Cockpit: Hausmeister hat keinen Zugriff', post({ action: 'adminOverview', token: hmTok }).code === 'staff');
+check('Status „in Arbeit“ setzt Zeitstempel + Bearbeiter', post({ action: 'adminUpdateTask', token: adm2Tok, id: 'T-FRESH', status: 'in Arbeit' }).ok && fresh[tcol('In Arbeit seit')] instanceof Date && fresh[tcol('Bearbeitet von')] === 'Nr. 008');
+check('Zuständigkeit + Notiz ändern (Formel wird Text)', post({ action: 'adminUpdateTask', token: admTok, id: 'T-FRESH', owner: 'Hausmeister', note: '=IMPORTXML("x")' }).ok && fresh[tcol('Zuständig')] === 'Hausmeister' && fresh[tcol('Notiz Verwaltung')].startsWith("'"));
+post({ action: 'adminUpdateTask', token: admTok, id: 'T-FRESH', status: 'erledigt' });
+check('Erledigt setzt Erledigt am', fresh[tcol('Status')] === 'erledigt' && fresh[tcol('Erledigt am')] instanceof Date);
+post({ action: 'adminUpdateTask', token: admTok, id: 'T-FRESH', status: 'offen' });
+check('Wieder offen leert Erledigt am, In Arbeit seit bleibt', fresh[tcol('Erledigt am')] === '' && fresh[tcol('In Arbeit seit')] instanceof Date);
+check('Ungültiger Status / Zuständig / Auftrag abgelehnt', !post({ action: 'adminUpdateTask', token: admTok, id: 'T-FRESH', status: 'weg' }).ok && !post({ action: 'adminUpdateTask', token: admTok, id: 'T-FRESH', owner: 'Chef' }).ok && !post({ action: 'adminUpdateTask', token: admTok, id: 'T-NIX', status: 'offen' }).ok);
+check('Intern: Mangel über Cockpit bearbeiten', post({ action: 'adminUpdateTask', token: admTok, id: md.id, status: 'in Arbeit' }).ok && sheets['Mängel Hausmeister'].grid[1][9] === 'in Arbeit' && sheets['Mängel Hausmeister'].grid[1][10] === '');
+// Status direkt in der Tabelle geändert
+const tRow = sheets['Tickets'].grid.indexOf(late) + 1;
+late[tcol('Status')] = 'in Arbeit';
+ctx.onEdit({ range: { getSheet: () => sheets['Tickets'], getColumn: () => tcol('Status') + 1, getLastColumn: () => tcol('Status') + 1, getRow: () => tRow, getLastRow: () => tRow } });
+check('Tabelle bearbeitet: Zeitstempel per onEdit', late[tcol('In Arbeit seit')] instanceof Date && late[tcol('Bearbeitet von')] === 'Tabelle');
+ctx.onEdit({ range: { getSheet: () => sheets['Reinigung'], getColumn: () => 1, getLastColumn: () => 1, getRow: () => 2, getLastRow: () => 2 } });
+check('onEdit auf anderen Blättern ohne Wirkung', true);
+late[tcol('Status')] = 'offen'; late[tcol('In Arbeit seit')] = '';
+const ra = ctx.rebuildAnalytics();
+const an = sheets['Auswertung Aufträge'].grid;
+check('Auswertung Aufträge für Looker Studio', ra.tasks === an.length - 1 && an[0][0] === 'ID' && an.some((r) => r[0] === 'T-LATE' && r[16] === 'rot' && r[15] === 'überfällig'), an.slice(0, 2));
+check('Auswertung Reinigung (365 Tage Soll/Ist)', sheets['Auswertung Reinigung'].grid[0][3] === 'Soll' && ra.cleaning === sheets['Auswertung Reinigung'].grid.length - 1);
+mails.length = 0;
+let dg = ctx.morningDigest();
+check('Morgen-Mail bei Überfälligen', dg.red >= 1 && mails.some((m) => /überfällig/.test(m.subject) && /T-LATE/.test(m.body)), mails.map((m) => m.subject));
+late[tcol('Status')] = 'erledigt';
+sheets['Tickets'].grid.forEach((r, i) => { if (i && r[tcol('Status')] !== 'erledigt') r[tcol('Status')] = 'erledigt'; });
+sheets['Mängel Hausmeister'].grid.forEach((r, i) => { if (i) r[9] = 'erledigt'; });
+mails.length = 0; dg = ctx.morningDigest();
+check('Keine Morgen-Mail, wenn nichts fällig', dg.red === 0 && mails.length === 0);
+check('Morgen-Trigger 7 Uhr angelegt', triggers.some((t) => t.getHandlerFunction() === 'morningDigest'));
 
 // Bewohner-Info
 Object.keys(cache).forEach((k) => delete cache[k]);
