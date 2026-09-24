@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=41">
+  <link rel="stylesheet" href="css/style.css?v=42">
 </head>
 <body>
   <header class="app-header">
@@ -603,6 +603,13 @@
           Seite aufgerufen; dabei gelten die Datenschutzbestimmungen des jeweiligen Anbieters.</p>
       </details>
       <details class="rule">
+        <summary>Technische Fehlerberichte</summary>
+        <p>Tritt in der App ein unerwarteter technischer Fehler auf, übermittelt die App – nur nach Ihrer Zustimmung –
+          einen kurzen Fehlerbericht an unser Google-Konto: Fehlermeldung, aufgerufene Seite der App, App-Version sowie
+          Browser- und Gerätetyp. Namen oder Eingaben sind nicht enthalten. Die Berichte dienen allein dazu, Fehler zu
+          beheben, und werden nach 90 Tagen gelöscht.</p>
+      </details>
+      <details class="rule">
         <summary>Speicherung auf Ihrem Gerät</summary>
         <p>Die App speichert im Browser Ihres Geräts die gewählte Adresse und Sprache, die Kennung der Haltestelle, die
           zuletzt geladenen Abfahrten und Hinweise, die Nummern Ihrer Meldungen (für „Meine Meldungen“), die Zugangs-PIN,
@@ -632,7 +639,13 @@
 
       <h2 class="section-title">6. Speicherdauer</h2>
       <p>Ihre Meldungen speichern wir, solange sie für die Bearbeitung Ihres Anliegens und die Verwaltung der
-        Wohnanlage erforderlich sind. Gesetzliche Aufbewahrungspflichten bleiben unberührt.</p>
+        Wohnanlage erforderlich sind, und löschen sie danach automatisch:</p>
+      <ul>
+        <li>erledigte Meldungen (Mängel, Klingelschild, Elektroraum) samt Fotos: 2 Jahre nach Erledigung,</li>
+        <li>Zählerstände samt Fotos: 3 Jahre nach dem Ablesedatum (Nachweis für die Abrechnung),</li>
+        <li>technische Fehlerberichte: nach 90 Tagen.</li>
+      </ul>
+      <p>Offene Vorgänge bleiben bis zur Erledigung gespeichert. Gesetzliche Aufbewahrungspflichten bleiben unberührt.</p>
 
       <h2 class="section-title">7. Ihre Rechte</h2>
       <p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
@@ -731,8 +744,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=41"></script>
-  <script src="js/i18n.js?v=41"></script>
-  <script src="js/app.js?v=41"></script>
+  <script src="js/config.js?v=42"></script>
+  <script src="js/i18n.js?v=42"></script>
+  <script src="js/app.js?v=42"></script>
 </body>
 </html>

@@ -63,6 +63,11 @@ const CONFIG = {
       headers: ["ID", "Eingang", "Erfasst von (Nr)", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
         "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig"],
     },
+    // Fehlerüberwachung: Serverfehler und von der App gemeldete Fehler (90 Tage)
+    errors: {
+      name: "Fehlerprotokoll",
+      headers: ["Zeit", "Quelle", "Meldung", "Details", "Ansicht", "Browser"],
+    },
     plan: {
       name: "Reinigungsplan",
       headers: ["Datum", "Bis", "Tätigkeit", "Ort", "Bemerkung", "Kalender-ID"],
@@ -93,6 +98,15 @@ const CONFIG = {
   STAFF_FIXED: [["007", "Verwaltung"], ["001", "Hausmeister"]], // 007 Hausverwaltung, 001 Leitung Hausmeisterdienst
   STAFF_FIRST_NR: 100,
   STAFF_LINKS: 20,
+  // Löschkonzept: Aufbewahrung in Jahren (offene Vorgänge werden nie gelöscht). Täglich um 3 Uhr.
+  RETENTION: {
+    ticketsDoneYears: 2,      // erledigte Bewohner-Meldungen inkl. Fotos (ab „Erledigt am“)
+    staffDefectsDoneYears: 2, // erledigte Mängel vom Hausmeister inkl. Fotos
+    meterYears: 3,            // Zählerstände inkl. Fotos (ab Ablesedatum)
+    cleaningYears: 2,         // Tätigkeitsnachweise inkl. Fotos
+    planYears: 2,             // vergangene Einträge im Reinigungsplan
+    errorLogDays: 90,         // Fehlerprotokoll
+  },
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
   // Adresse dieser Web-App (für den Erledigt-Link in E-Mails). Leer = automatisch ermitteln.
@@ -161,6 +175,9 @@ function onOpen() {
     .addItem("Reinigungsplan → Kalender übertragen", "syncPlanToCalendar")
     .addItem("Reinigungsplan heute prüfen (Test)", "checkPlanFulfilment")
     .addItem("Mitarbeiter-Links ergänzen", "ensureStaffLinks")
+    .addSeparator()
+    .addItem("Systemprüfung jetzt", "healthCheckNow")
+    .addItem("Alte Daten jetzt löschen (Löschkonzept)", "cleanupNow")
     .addToUi();
 }
 
@@ -194,6 +211,7 @@ function doPost(e) {
       case "submitMeterReading": // ältere App-Version
         rateLimit("submit", CONFIG.LIMITS.submitsPerHour, 3600);
         return json(submitMeterReadings(Object.assign({}, p, { meters: [p] })));
+      case "reportError": return json(reportClientError(p));
       default: return json({ ok: false, error: "Unbekannte Aktion" });
     }
   } catch (err) {
@@ -512,7 +530,7 @@ function userError(message, code) {
 }
 
 function errorJson(err) {
-  if (!err.userMessage) console.error(err);
+  if (!err.userMessage) { console.error(err); logServerError(err, "Server"); }
   const out = { ok: false, error: err.userMessage || "Serverfehler" };
   if (err.code) out.code = err.code;
   return json(out);
@@ -925,6 +943,7 @@ function setupPortalSheets() {
 
   ensureStaffLinks();
   ensureDailyCheckTrigger();
+  ensureMaintenanceTrigger();
   CacheService.getScriptCache().removeAll(["areas", "staff"]);
 }
 
@@ -1351,3 +1370,155 @@ function kalenderTest() {
     }
   } catch (e) { log("6. Blatt lesen", "Fehler " + e.message); }
 }
+
+/* ==========================================================================
+   Löschkonzept und Wartung (täglich 3 Uhr): alte Daten löschen, Systemprüfung
+   ========================================================================== */
+
+function ensureMaintenanceTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "dailyMaintenance");
+  if (!exists) ScriptApp.newTrigger("dailyMaintenance").timeBased().everyDays(1).atHour(3).inTimezone(CONFIG.TIMEZONE).create();
+}
+
+function dailyMaintenance() {
+  let removed = null;
+  try { removed = cleanupOldData(); } catch (err) { logServerError(err, "Löschkonzept"); }
+  healthCheck({ removed });
+}
+
+/** Drive-Datei zu einem Foto-Link in den Papierkorb legen (Google löscht ihn nach 30 Tagen endgültig). */
+function trashPhoto(url) {
+  const m = /\/d\/([\w-]{20,})|[?&]id=([\w-]{20,})/.exec(String(url || ""));
+  if (!m) return false;
+  try { DriveApp.getFileById(m[1] || m[2]).setTrashed(true); return true; } catch (e) { return false; }
+}
+
+/**
+ * Löscht Zeilen, für die keep(row) false ergibt, samt Foto (Spalte „Foto“). Von unten nach oben,
+ * damit sich die Zeilennummern beim Löschen nicht verschieben. Gibt die Anzahl zurück.
+ */
+function deleteRowsWhere(def, isOld) {
+  const sheet = getSpreadsheet().getSheetByName(def.name);
+  if (!sheet) return 0;
+  const rows = sheetObjects(def).filter(isOld);
+  if (!rows.length) return 0;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    rows.sort((a, b) => b._row - a._row).forEach((r) => {
+      if (r.Foto) trashPhoto(r.Foto);
+      sheet.deleteRow(r._row);
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  return rows.length;
+}
+
+/** Alte Daten nach CONFIG.RETENTION löschen. Offene Vorgänge bleiben immer erhalten. */
+function cleanupOldData() {
+  const R = CONFIG.RETENTION;
+  const now = new Date();
+  const before = (years) => new Date(now.getFullYear() - years, now.getMonth(), now.getDate());
+  const date = (v) => (v instanceof Date && !isNaN(v) ? v : cellDate(v));
+  // Nur mit gültigem Datum löschen – fehlt es oder ist es unlesbar, bleibt die Zeile stehen.
+  const older = (d, limit) => !!d && d < limit;
+  const doneBefore = (limit) => (r) => r.Status === "erledigt" && older(date(r["Erledigt am"]) || date(r.Eingang), limit);
+  const result = {
+    tickets: deleteRowsWhere(CONFIG.SHEETS.tickets, doneBefore(before(R.ticketsDoneYears))),
+    staffDefects: deleteRowsWhere(CONFIG.SHEETS.staffDefects, doneBefore(before(R.staffDefectsDoneYears))),
+    meter: deleteRowsWhere(CONFIG.SHEETS.meter, (r) => older(date(r.Ablesedatum) || date(r.Eingang), before(R.meterYears))),
+    cleaning: deleteRowsWhere(CONFIG.SHEETS.cleaning, (r) => older(date(r["Zeitpunkt (Scan)"]), before(R.cleaningYears))),
+    plan: deleteRowsWhere(CONFIG.SHEETS.plan, (r) => older(date(r.Bis) || date(r.Datum), before(R.planYears))),
+    errors: deleteRowsWhere(CONFIG.SHEETS.errors, (r) => older(date(r.Zeit), new Date(now.getTime() - R.errorLogDays * 86400000))),
+  };
+  if (result.meter) { try { rebuildMeterOverview(); } catch (e) { console.error(e); } }
+  const total = Object.keys(result).reduce((n, k) => n + result[k], 0);
+  if (total) Logger.log("Löschkonzept: " + JSON.stringify(result));
+  return result;
+}
+
+function cleanupNow() {
+  const r = cleanupOldData();
+  showResult("Löschkonzept", `Gelöscht: ${r.tickets} Meldungen, ${r.staffDefects} interne Mängel, ${r.meter} Zählerstände, `
+    + `${r.cleaning} Nachweise, ${r.plan} Plan-Einträge, ${r.errors} Fehlereinträge (jeweils samt Fotos).`);
+}
+
+/* ---------- Fehlerüberwachung ---------- */
+
+function errorRow(source, message, details, view, browser) {
+  return [new Date(), source, str(message, 300), str(details, 500), str(view, 40), str(browser, 200)];
+}
+
+/** Unerwarteten Serverfehler protokollieren und (höchstens alle 3 Std.) sofort per Mail melden. */
+function logServerError(err, context) {
+  try {
+    const msg = String((err && err.message) || err);
+    appendRow(CONFIG.SHEETS.errors.name, errorRow(`Server: ${context || ""}`, msg, String((err && err.stack) || "").slice(0, 500), "", ""));
+    if (withinLimit("errorMail", 1, 10800)) {
+      notify("Fehler im Backend", [`${context || "Server"}: ${msg}`, "", "Details im Blatt „Fehlerprotokoll“. Weitere Fehler der nächsten 3 Stunden nur dort."]);
+    }
+  } catch (e) { console.error("Fehlerprotokoll nicht möglich:", e); }
+}
+
+/** Von der App gemeldeter Fehler (nur mit PIN/Zugang, begrenzt, gleiche Meldung nur 1× pro Stunde). */
+function reportClientError(p) {
+  const msg = String(p.message || "").slice(0, 300);
+  if (!msg || !withinLimit("clientError", 30, 3600)) return { ok: true };
+  const cache = CacheService.getScriptCache();
+  const key = "ce_" + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, msg)).slice(0, 20);
+  if (cache.get(key)) return { ok: true };
+  cache.put(key, "1", 3600);
+  appendRow(CONFIG.SHEETS.errors.name, errorRow("App", msg, `${p.source || ""} · Version ${p.version || "?"}`, p.view, p.browser));
+  return { ok: true };
+}
+
+/**
+ * Tägliche Systemprüfung. Mail an NOTIFY_EMAIL nur bei Problemen oder neuen Fehlern.
+ * Gibt die Liste der Hinweise zurück.
+ */
+function healthCheck(extra) {
+  const issues = [];
+  const info = [];
+  const props = PropertiesService.getScriptProperties();
+  if (!(props.getProperty("NOTIFY_EMAIL") || "").trim()) issues.push("Script-Eigenschaft NOTIFY_EMAIL fehlt – es kommen keine Benachrichtigungen an.");
+  try {
+    const q = MailApp.getRemainingDailyQuota();
+    if (q < CONFIG.LIMITS.mailReserve) issues.push(`Mail-Kontingent fast aufgebraucht (noch ${q} heute).`);
+  } catch (e) { issues.push("Mail-Kontingent nicht abrufbar: " + e.message); }
+  try { DriveApp.getFolderById(props.getProperty("PHOTO_FOLDER_ID")); } catch (e) { issues.push("Foto-Ordner nicht erreichbar – setup ausführen."); }
+  const ss = getSpreadsheet();
+  Object.keys(CONFIG.SHEETS).forEach((k) => {
+    if (!ss.getSheetByName(CONFIG.SHEETS[k].name)) issues.push(`Blatt „${CONFIG.SHEETS[k].name}“ fehlt – setup ausführen.`);
+  });
+  const handlers = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
+  ["checkPlanFulfilment", "dailyMaintenance"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
+  if (planRows().length) { try { findCalendar(); } catch (e) { issues.push(e.userMessage || e.message); } }
+  if (!activeAreas().length) issues.push("Keine aktiven QR-Orte.");
+
+  const since = new Date(Date.now() - 86400000);
+  const errs = sheetObjects(CONFIG.SHEETS.errors).filter((r) => r.Zeit instanceof Date && r.Zeit > since);
+  if (errs.length) {
+    issues.push(`${errs.length} Fehler in den letzten 24 Stunden (Blatt „Fehlerprotokoll“):`);
+    errs.slice(-5).forEach((r) => issues.push(`   • ${r.Quelle}: ${String(r.Meldung).slice(0, 120)}`));
+  }
+  const old = new Date(Date.now() - 14 * 86400000);
+  const stale = sheetObjects(CONFIG.SHEETS.tickets).filter((r) => r.Status && r.Status !== "erledigt" && r.Eingang instanceof Date && r.Eingang < old);
+  if (stale.length) info.push(`${stale.length} Meldung(en) seit über 14 Tagen offen.`);
+  const removed = extra && extra.removed;
+  if (removed) {
+    const n = Object.keys(removed).reduce((a, k) => a + removed[k], 0);
+    if (n) info.push(`Löschkonzept: ${n} alte Einträge gelöscht (${JSON.stringify(removed)}).`);
+  }
+  if (issues.length) {
+    notify(`Systemprüfung: ${issues.filter((i) => !/^\s+•/.test(i)).length} Hinweis(e)`, [...issues, info.length ? "" : null, ...info]);
+  }
+  Logger.log([...issues, ...info].join("\n") || "Systemprüfung: alles in Ordnung.");
+  return { issues, info };
+}
+
+function healthCheckNow() {
+  const r = healthCheck();
+  showResult("Systemprüfung", [...r.issues, ...r.info].join("\n") || "Alles in Ordnung.");
+}
+
