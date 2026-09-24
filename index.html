@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=34">
+  <link rel="stylesheet" href="css/style.css?v=35">
 </head>
 <body>
   <header class="app-header">
@@ -595,8 +595,10 @@
       <details class="rule">
         <summary>Speicherung auf Ihrem Gerät</summary>
         <p>Die App speichert im Browser Ihres Geräts die gewählte Adresse und Sprache, die Kennung der Haltestelle, die
-          zuletzt geladenen Abfahrten und Hinweise, die Nummern Ihrer Meldungen (für „Meine Meldungen“), die Anzahl von PIN-Fehlversuchen und – für die
-          Dauer der Sitzung – Ihre Zustimmung zu diesen Hinweisen sowie die Zugangs-PIN. Für „Meine Meldungen“ fragt die App bei unserem
+          zuletzt geladenen Abfahrten und Hinweise, die Nummern Ihrer Meldungen (für „Meine Meldungen“), die Zugangs-PIN,
+          die Anzahl von PIN-Fehlversuchen und Ihre Zustimmung zu diesen Hinweisen. Die Zustimmung gilt 30 Tage und wird
+          danach sowie bei jeder Änderung dieser Hinweise erneut abgefragt; Sie können sie unter „Ihre Rechte“ jederzeit
+          auf dem Gerät widerrufen. Für „Meine Meldungen“ fragt die App bei unserem
           Google-Konto nur Art, Status und Datum Ihrer Meldungen ab. Wenn Sie
           „Wohnung und Name auf diesem Gerät merken“ angehakt lassen, werden außerdem Wohnung, Name und Ihre
           Zählernummern gespeichert, damit Sie diese nicht erneut eingeben müssen. Diese Angaben verlassen Ihr Gerät
@@ -625,9 +627,10 @@
       <h2 class="section-title">7. Ihre Rechte</h2>
       <p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
         Datenübertragbarkeit und Widerspruch. Eine erteilte Einwilligung können Sie jederzeit mit Wirkung für die
-        Zukunft widerrufen, etwa formlos per E-Mail. Außerdem können Sie sich bei einer Datenschutz-Aufsichtsbehörde
-        beschweren, z. B. bei der Berliner Beauftragten für Datenschutz und Informationsfreiheit,
-        Alt-Moabit 59–61, 10555 Berlin.</p>
+        Zukunft widerrufen, etwa formlos per E-Mail oder direkt hier auf diesem Gerät. Außerdem können Sie sich bei
+        einer Datenschutz-Aufsichtsbehörde beschweren, z. B. bei der Berliner Beauftragten für Datenschutz und
+        Informationsfreiheit, Alt-Moabit 59–61, 10555 Berlin.</p>
+      <button class="btn btn--ghost btn--block" id="consentRevoke" type="button">Zustimmung widerrufen und PIN auf diesem Gerät löschen</button>
 
       <h2 class="section-title">8. Hinweis zu Ihren Eingaben</h2>
       <p>Bitte geben Sie in Formularen nur die Angaben an, die für Ihr Anliegen erforderlich sind, und
@@ -655,7 +658,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <!-- ============ Zustimmung (bei jedem App-Start) ============ -->
+  <!-- ============ Zustimmung (alle 30 Tage und bei geänderten Hinweisen) ============ -->
   <div class="consent" id="consent" role="dialog" aria-modal="true" aria-labelledby="consentTitle" hidden>
     <div class="consent__box">
       <div class="consent__step" id="consentAsk">
@@ -718,8 +721,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=34"></script>
-  <script src="js/i18n.js?v=34"></script>
-  <script src="js/app.js?v=34"></script>
+  <script src="js/config.js?v=35"></script>
+  <script src="js/i18n.js?v=35"></script>
+  <script src="js/app.js?v=35"></script>
 </body>
 </html>
