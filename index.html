@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <!-- Sicherheit: nur eigene Skripte; Daten nur an Apps Script und transport.rest; Einbettung nur aponet -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://*.transport.rest; frame-src https://www.aponet.de https://aponet.de; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <!-- Sicherheit: nur eigene Skripte; Daten nur an Apps Script und transport.rest; keine eingebetteten Fremdseiten -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://*.transport.rest; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="theme-color" content="#f8f8f8">
   <meta name="description" content="Mieter-App der Wohnanlage: Notfallnummern, Abfahrten, Dokumente und Services.">
@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=28">
+  <link rel="stylesheet" href="css/style.css?v=29">
 </head>
 <body>
   <header class="app-header">
@@ -110,14 +110,6 @@
       <!-- Kiez -->
       <h2 class="section-title" id="kiez">Kiez-Guide</h2>
       <div id="kiezList"></div>
-
-      <!-- Apotheken-Notdienst -->
-      <h2 class="section-title" id="apotheke">Apotheken-Notdienst</h2>
-      <p class="muted small">Notdienst-Apotheken rund um 13059 Berlin, tagesaktuell von aponet.de.</p>
-      <div class="card iframe-card">
-        <iframe id="pharmacyFrame" title="Apotheken-Notdienst 13059 Berlin" loading="lazy" referrerpolicy="no-referrer"></iframe>
-        <a class="btn btn--ghost btn--block" id="pharmacyLink" href="#" target="_blank" rel="noopener">In neuem Fenster öffnen</a>
-      </div>
 
       <!-- Dokumente -->
       <h2 class="section-title">Dokumente</h2>
@@ -581,12 +573,6 @@
           Betreiber des Dienstes übermittelt. Es werden keine Eingaben von Ihnen übertragen.</p>
       </details>
       <details class="rule">
-        <summary>Apotheken-Notdienst – aponet.de</summary>
-        <p>Auf der Seite „Infos“ wird die Notdienstsuche von aponet.de eingebettet. Beim Öffnen dieser Seite
-          stellt Ihr Gerät eine Verbindung zu aponet.de her; dabei wird u. a. Ihre IP-Adresse übermittelt.
-          Es gelten die Datenschutzhinweise von aponet.de.</p>
-      </details>
-      <details class="rule">
         <summary>Hausmeister-Portal und Reinigungsnachweise</summary>
         <p>Der Hausmeisterdienst dokumentiert erledigte Arbeiten (z. B. Treppenhausreinigung) per QR-Code in einem
           eigenen, mit persönlichem Link geschützten Bereich der App. Gespeichert werden eine Mitarbeiternummer
@@ -683,7 +669,6 @@
           <li><strong>GitHub</strong>: Bereitstellung der App</li>
           <li><strong>Google</strong>: Speicherung Ihrer Meldungen und Fotos</li>
           <li><strong>transport.rest</strong>: Live-Abfahrtszeiten</li>
-          <li><strong>aponet.de</strong>: Apotheken-Notdienst</li>
           <li><strong>WhatsApp</strong>: Nachrichten an die Hausverwaltung, nur wenn Sie diese Funktion wählen</li>
           <li><strong>Hausmeisterdienst</strong>: erhält die für einen Auftrag nötigen Angaben (z. B. Klingelschild)</li>
         </ul>
@@ -728,8 +713,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=28"></script>
-  <script src="js/i18n.js?v=28"></script>
-  <script src="js/app.js?v=28"></script>
+  <script src="js/config.js?v=29"></script>
+  <script src="js/i18n.js?v=29"></script>
+  <script src="js/app.js?v=29"></script>
 </body>
 </html>

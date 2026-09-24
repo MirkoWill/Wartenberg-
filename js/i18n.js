@@ -274,6 +274,7 @@ window.I18N = {
     "Schnitt Bepflanzung": ["Pruning plants", "Обрезка растений", "Обрізка рослин", "Prořez zeleně"],
     "Reparatur / Wartung": ["Repair / maintenance", "Ремонт / обслуживание", "Ремонт / обслуговування", "Oprava / údržba"],
     "Der Server hat den Zugang abgelehnt. Bitte später erneut versuchen oder die Hausverwaltung informieren.": ["The server refused access. Please try again later or inform the property management.", "Сервер отклонил доступ. Повторите попытку позже или сообщите управляющей компании.", "Сервер відхилив доступ. Спробуйте пізніше або повідомте керуючу компанію.", "Server odmítl přístup. Zkuste to později nebo informujte správu domu."],
+    "Apotheken-Notdienst in der Nähe (aponet.de) ↗": ["Emergency pharmacies nearby (aponet.de) ↗", "Дежурные аптеки рядом (aponet.de) ↗", "Чергові аптеки поруч (aponet.de) ↗", "Pohotovostní lékárny v okolí (aponet.de) ↗"],
     "Zugangs-PIN": ["Access PIN", "PIN-код доступа", "PIN-код доступу", "Přístupový PIN"],
     "(steht auf dem Aushang im Hausflur)": ["(shown on the notice in the hallway)", "(указан на объявлении в подъезде)", "(вказаний на оголошенні в під'їзді)", "(je uveden na vývěsce v chodbě)"],
     "Bitte die 5-stellige PIN eingeben.": ["Please enter the 5-digit PIN.", "Введите 5-значный PIN-код.", "Введіть 5-значний PIN-код.", "Zadejte prosím pětimístný PIN."],
