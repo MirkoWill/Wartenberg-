@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=33">
+  <link rel="stylesheet" href="css/style.css?v=34">
 </head>
 <body>
   <header class="app-header">
@@ -323,12 +323,12 @@
     <section class="view" data-view="services" data-title="Services" hidden>
       <p class="lead">Was möchten Sie erledigen?</p>
       <div class="tile-grid">
-        <a class="tile" href="#wasser"><span class="tile__icon">💧</span><span class="tile__label">Zählerstände melden</span></a>
-        <a class="tile" href="#strom"><span class="tile__icon">⚡</span><span class="tile__label">Zugang Stromzähler</span></a>
-        <a class="tile" href="#elektro"><span class="tile__icon">🔧</span><span class="tile__label">Techniker anmelden</span></a>
-        <a class="tile" href="#klingel"><span class="tile__icon">🔔</span><span class="tile__label">Klingelschild</span></a>
-        <a class="tile" href="#mangel"><span class="tile__icon">🛠️</span><span class="tile__label">Mangel melden</span></a>
-        <a class="tile tile--status" href="#meldungen"><span class="tile__icon">📋</span><span class="tile__label">Meine Meldungen</span></a>
+        <a class="tile" href="#wasser"><span class="tile__icon">💧</span><span class="tile__label">Zählerstände melden</span><span class="tile__sub">Wasser &amp; Heizung, mit Foto</span></a>
+        <a class="tile" href="#mangel"><span class="tile__icon">🛠️</span><span class="tile__label">Mangel melden</span><span class="tile__sub">Schaden im Haus, gern mit Foto</span></a>
+        <a class="tile" href="#elektro"><span class="tile__icon">🔧</span><span class="tile__label">Techniker anmelden</span><span class="tile__sub">Zugang Elektroraum für Telekom &amp; Co.</span></a>
+        <a class="tile" href="#klingel"><span class="tile__icon">🔔</span><span class="tile__label">Klingelschild</span><span class="tile__sub">Namensschild ändern lassen</span></a>
+        <a class="tile" href="#strom"><span class="tile__icon">⚡</span><span class="tile__label">Zugang Stromzähler</span><span class="tile__sub">per WhatsApp anfragen</span></a>
+        <a class="tile tile--status" href="#meldungen"><span class="tile__icon">📋</span><span class="tile__label">Meine Meldungen</span><span class="tile__sub">Bearbeitungsstand ansehen</span></a>
       </div>
     </section>
 
@@ -647,9 +647,9 @@
 
   <nav class="tabbar" aria-label="Hauptnavigation">
     <a class="tabbar__item" href="#notfall" data-tab="notfall"><span aria-hidden="true">🚨</span>Notfall</a>
-    <a class="tabbar__item" href="#oepnv" data-tab="oepnv"><span aria-hidden="true">🚆</span>Abfahrten</a>
-    <a class="tabbar__item" href="#infos" data-tab="infos"><span aria-hidden="true">📄</span>Infos</a>
     <a class="tabbar__item" href="#services" data-tab="services"><span aria-hidden="true">🧰</span>Services</a>
+    <a class="tabbar__item" href="#infos" data-tab="infos"><span aria-hidden="true">📄</span>Infos</a>
+    <a class="tabbar__item" href="#oepnv" data-tab="oepnv"><span aria-hidden="true">🚆</span>Abfahrten</a>
     <a class="tabbar__item" href="#hausmeister" data-tab="hausmeister" id="staffTab" hidden><span aria-hidden="true">🧹</span>Hausmeister</a>
   </nav>
 
@@ -664,6 +664,10 @@
         <h2 class="consent__title" id="consentTitle">Bevor es losgeht</h2>
         <p>Diese App ist ein freiwilliges Serviceangebot für die Bewohnerinnen und Bewohner der
           WEG Wartenberger Dorfkrug. Wir verzichten auf Cookies, Tracking und Werbung.</p>
+        <p>Ihre Meldungen und Fotos speichern wir bei Google; dabei ist eine Verarbeitung auch in den USA nicht
+          auszuschließen.</p>
+        <details class="consent__more">
+        <summary>Welche Dienste wir nutzen und was übertragen wird</summary>
         <p>Für einzelne Funktionen arbeiten wir mit etablierten externen Diensten zusammen:</p>
         <ul class="consent__list">
           <li><strong>GitHub</strong>: Bereitstellung der App</li>
@@ -676,6 +680,7 @@
           an diese Anbieter übermittelt. Eine Verarbeitung auch außerhalb der EU, insbesondere in den USA, ist
           nicht auszuschließen. Die interne Datenverarbeitung dieser Anbieter liegt außerhalb unseres
           Einflussbereichs; es gelten ergänzend deren Datenschutzbestimmungen.</p>
+        </details>
         <p class="consent__links"><a href="#datenschutz">Datenschutzerklärung</a> · <a href="#impressum">Impressum</a></p>
 
         <div class="consent__pin" id="consentPin">
@@ -713,8 +718,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=33"></script>
-  <script src="js/i18n.js?v=33"></script>
-  <script src="js/app.js?v=33"></script>
+  <script src="js/config.js?v=34"></script>
+  <script src="js/i18n.js?v=34"></script>
+  <script src="js/app.js?v=34"></script>
 </body>
 </html>

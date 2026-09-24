@@ -920,3 +920,19 @@ body.lang-de .i18n-note { display: none; }
 }
 .kiez-link { margin-top: 8px; }
 .badge--owner { background: var(--c-surface); border: 1px solid var(--c-border); font-weight: 600; }
+
+/* UX: Erklärzeile auf den Service-Kacheln */
+.tile__sub { font-size: 14px; line-height: 1.3; color: var(--c-muted, #5c6152); margin-top: -2px; }
+/* UX: Zustimmung – Details aufklappbar */
+.consent__more { margin: 0 0 12px; border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-surface); }
+.consent__more > summary { cursor: pointer; padding: 12px 14px; font-weight: 600; font-size: 16px; color: var(--c-primary); list-style: none; }
+.consent__more > summary::-webkit-details-marker { display: none; }
+.consent__more > summary::after { content: " +"; }
+.consent__more[open] > summary::after { content: " –"; }
+.consent__more > :not(summary) { margin-left: 14px !important; margin-right: 14px !important; }
+.consent__more[open] { padding-bottom: 4px; }
+/* UX: Foto-Auswahl im Stil der App */
+input[type="file"]::file-selector-button {
+  margin-right: 12px; padding: 10px 14px; border: 1.5px solid var(--c-primary); border-radius: var(--radius);
+  background: var(--c-surface); color: var(--c-primary); font: inherit; font-weight: 700; cursor: pointer;
+}
