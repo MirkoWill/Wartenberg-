@@ -169,7 +169,7 @@ function doPost(e) {
       const user = authStaff(p.token);
       return json(STAFF_ACTIONS[p.action](p, user));
     }
-    requirePin(p.pin);
+    requirePin(p.pin, p.token);
 
     // Honeypot: Nur Bots füllen das unsichtbare Feld aus. Still "Erfolg" melden.
     if (p.website) return json({ ok: true });
@@ -196,8 +196,8 @@ function doGet(e) {
     const q = (e && e.parameter) || {};
     if (q.action === "getTasks") return json(getTasks({}, authStaff(q.token)));
     if (q.action === "done") return completeTicketPage(q);
-    if (q.action === "status") { requirePin(q.pin); return json(getStatus(q.ids)); }
-    if (q.action === "news") { requirePin(q.pin); return json(getNews(q.obj)); }
+    if (q.action === "status") { requirePin(q.pin, q.token); return json(getStatus(q.ids)); }
+    if (q.action === "news") { requirePin(q.pin, q.token); return json(getNews(q.obj)); }
     return json({ ok: true, service: "mieter-app" });
   } catch (err) {
     return errorJson(err);
@@ -508,9 +508,11 @@ function appPin() {
  * Prüft die App-PIN. Fehlversuche werden (für alle Nutzer zusammen) gezählt; ab
  * CONFIG.LIMITS.pinFailsPer15Min ist 15 Minuten lang keine Prüfung möglich (gegen Durchprobieren).
  */
-function requirePin(pin) {
+function requirePin(pin, staffToken) {
   const expected = appPin();
   if (!expected) return;
+  // Hausmeister/Verwaltung mit persönlichem Link brauchen keine PIN.
+  if (staffToken) { try { authStaff(staffToken); return; } catch (e) { /* weiter mit PIN-Prüfung */ } }
   const cache = CacheService.getScriptCache();
   const fails = Number(cache.get("pinFails") || 0);
   if (fails >= CONFIG.LIMITS.pinFailsPer15Min) {
@@ -1061,10 +1063,15 @@ function submitStaffDefect(p, user) {
 /** Datum aus Zelle (Datum oder Text „dd.mm.yyyy“ / „yyyy-mm-dd“) → Date ohne Uhrzeit oder null. */
 function cellDate(v) {
   if (v instanceof Date && !isNaN(v)) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  if (typeof v === "number" && v > 30000 && v < 80000) { // Excel-Seriennummer (Tage seit 30.12.1899)
+    const d = new Date(1899, 11, 30);
+    d.setDate(d.getDate() + Math.floor(v));
+    return d;
+  }
   const s = String(v || "").trim();
-  let m = /^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/.exec(s);
+  let m = /(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})(?!\d)/.exec(s); // auch „Mi., 07.10.2026“
   if (m) return new Date(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1]);
-  m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  m = /(\d{4})-(\d{2})-(\d{2})/.exec(s);
   return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
 }
 
@@ -1099,14 +1106,41 @@ function planAreas(ortText, areas) {
 }
 
 function findCalendar() {
-  const id = PropertiesService.getScriptProperties().getProperty("CALENDAR_ID");
+  const id = (PropertiesService.getScriptProperties().getProperty("CALENDAR_ID") || "").trim();
   const cal = id ? CalendarApp.getCalendarById(id) : (CalendarApp.getCalendarsByName(CONFIG.CALENDAR_NAME) || [])[0];
-  if (!cal) throw new Error(`Kalender „${CONFIG.CALENDAR_NAME}“ nicht gefunden. Bitte anlegen oder CALENDAR_ID setzen.`);
+  if (!cal) {
+    const names = CalendarApp.getAllCalendars().map((c) => `„${c.getName()}“`).join(", ");
+    throw userError(id
+      ? `Kalender mit der ID ${id} (Script-Eigenschaft CALENDAR_ID) nicht gefunden oder kein Schreibzugriff.`
+      : `Kalender „${CONFIG.CALENDAR_NAME}“ nicht gefunden. Dieses Google-Konto sieht nur: ${names || "(keine)"}. `
+        + "Den Kalender in diesem Konto anlegen bzw. mit „Änderungen vornehmen“ freigeben, oder die Kalender-ID als "
+        + "Script-Eigenschaft CALENDAR_ID eintragen.");
+  }
   return cal;
+}
+
+/** Menü: Ergebnis bzw. Fehler als Hinweisfenster in der Tabelle anzeigen. */
+function showResult(title, text) {
+  Logger.log(`${title}: ${text}`);
+  try { SpreadsheetApp.getUi().alert(title, text, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { /* ohne Tabelle */ }
 }
 
 /** Überträgt das Blatt „Reinigungsplan“ in den Google-Kalender (neu, geändert, gelöscht). */
 function syncPlanToCalendar() {
+  try {
+    return showPlanSyncResult(syncPlanToCalendarCore());
+  } catch (err) {
+    showResult("Reinigungsplan – Fehler", err.userMessage || String(err.message || err));
+    return String(err.message || err);
+  }
+}
+
+function showPlanSyncResult(msg) {
+  showResult("Reinigungsplan → Kalender", msg);
+  return msg;
+}
+
+function syncPlanToCalendarCore() {
   const cal = findCalendar();
   const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.plan.name);
   const idCol = CONFIG.SHEETS.plan.headers.indexOf("Kalender-ID") + 1;
@@ -1137,9 +1171,17 @@ function syncPlanToCalendar() {
   cal.getEvents(start, end).forEach((ev) => {
     if (String(ev.getDescription()).indexOf(PLAN_TAG) !== -1 && !keep[ev.getId()]) { ev.deleteEvent(); removed++; }
   });
-  const msg = `Kalender „${cal.getName()}“: ${created} neu, ${updated} aktualisiert, ${removed} entfernt.`;
-  Logger.log(msg);
-  try { SpreadsheetApp.getActive().toast(msg, "Reinigungsplan", 8); } catch (e) { /* ohne Tabelle geöffnet */ }
+  // Zeilen mit Inhalt, die nicht übertragen werden konnten (Datum oder Tätigkeit fehlt/unlesbar).
+  const valid = {};
+  rows.forEach((r) => { valid[r.row] = true; });
+  const skipped = sheetObjects(CONFIG.SHEETS.plan)
+    .filter((r) => !valid[r._row] && [r.Datum, r["Tätigkeit"], r.Ort].some((v) => String(v || "").trim()))
+    .map((r) => r._row);
+  let msg = `Kalender „${cal.getName()}“: ${created} neu, ${updated} aktualisiert, ${removed} entfernt.`;
+  if (!rows.length) msg += " Im Blatt „Reinigungsplan“ wurden keine gültigen Zeilen gefunden.";
+  if (skipped.length) {
+    msg += ` Nicht übertragen (Datum oder Tätigkeit fehlt bzw. Datum nicht lesbar – bitte TT.MM.JJJJ): Zeile ${skipped.slice(0, 20).join(", ")}${skipped.length > 20 ? " …" : ""}.`;
+  }
   return msg;
 }
 
