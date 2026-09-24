@@ -11,6 +11,11 @@
 (function () {
   "use strict";
 
+  // Keine automatische „App installieren“-Einblendung: Manche Handys blockieren die dabei erzeugte
+  // Android-App („für ältere Android-Version“). Die App läuft im Browser; wer ein Symbol möchte, nutzt
+  // bewusst Menü ⋮ → „Zum Startbildschirm hinzufügen“.
+  window.addEventListener("beforeinstallprompt", (e) => e.preventDefault());
+
   const CFG = window.APP_CONFIG;
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
