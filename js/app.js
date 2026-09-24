@@ -405,7 +405,7 @@
     }));
 
     $("#consentEmergency").innerHTML = contactItems(
-      OBJ.emergencyContacts.filter((c) => c.danger || /hausmeister/i.test(c.label))
+      OBJ.emergencyContacts.filter((c) => c.level || c.danger)
     );
   }
 
@@ -570,7 +570,7 @@
   function contactItems(list) {
     return list.map((c) => `
       <li>
-        <a class="contact${c.danger ? " contact--danger" : ""}" href="tel:${esc(c.phone.replace(/[^\d+]/g, ""))}">
+        <a class="contact${c.level === "danger" || c.danger ? " contact--danger" : c.level === "urgent" ? " contact--urgent" : ""}" href="tel:${esc(c.phone.replace(/[^\d+]/g, ""))}">
           <span class="contact__icon" aria-hidden="true">${esc(c.icon || "📞")}</span>
           <span class="contact__body">
             <span class="contact__label">${esc(c.label)}</span>
