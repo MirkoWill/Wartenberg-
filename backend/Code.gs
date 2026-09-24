@@ -1053,7 +1053,11 @@ function ensureStaffLinks() {
   // So öffnet ein versehentlich weitergegebener, noch unbenutzter Link nichts.
   for (let i = numbered.length; i < CONFIG.STAFF_LINKS; i++) add.push([String(next++), "Hausmeister", false]);
   if (!add.length) return;
-  sheet.getRange(sheet.getLastRow() + 1, 1, add.length, 5).setValues(add.map(([nr, role, active]) => {
+  // Hinter die letzte Zeile mit Nummer schreiben – nicht getLastRow(): leere Kästchen in „Aktiv“ zählen dort als belegt.
+  const colA = sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), 1).getValues();
+  let lastUsed = colA.length;
+  while (lastUsed > 1 && String(colA[lastUsed - 1][0]).trim() === "") lastUsed--;
+  sheet.getRange(lastUsed + 1, 1, add.length, 5).setValues(add.map(([nr, role, active]) => {
     const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
     return [nr, role, active !== false, token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
   }));
