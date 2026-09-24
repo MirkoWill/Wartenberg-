@@ -116,7 +116,17 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
   kommt eine Mail an `NOTIFY_EMAIL` („Fehlende Nachweise“). Zeiträume (z. B. Winterdienst) werden nicht geprüft.
 - Die Bewohner sehen in der App die nächsten Termine (14 Tage) und die zuletzt erledigten Arbeiten (60 Tage) für ihren Aufgang.
 
-## Cockpit für die Verwaltung (007 / 008)
+## Cockpit für Verwaltung (007 / 008) und Leitung (001)
+
+**Leitung des Hausmeisterdienstes (001, Rolle „Leitung“):** sieht im Cockpit nur die Aufträge mit
+Zuständigkeit „Hausmeister“, kann deren Status ändern (nicht Zuständigkeit/Notiz), sieht die Team-Übersicht
+(Nachweise je Mitarbeiternummer, letzte Nachweise, laut Plan nicht Erledigtes der letzten 7 Tage) und kann
+QR-Codes drucken. Keine Zählerstände, keine Fehlerprotokolle, kein Looker-Link. Die Rolle stellt `setup`
+bzw. „Mitarbeiter-Links ergänzen“ einmalig um; danach gilt die Auswahl in der Spalte „Rolle“.
+Hinweis Datenschutz: Die Team-Übersicht ist eine Leistungskontrolle der Beschäftigten des Hausmeisterdienstes –
+der Hausmeisterdienst sollte seine Mitarbeitenden darüber informieren.
+
+### Verwaltung (007 / 008)
 
 Wer mit dem persönlichen Link von **007** oder **008** angemeldet ist, sieht unten den Tab **📊 Cockpit**
 (statt „Hausmeister“). Die Hausmeister-Tools (Scannen, Mangel erfassen, QR-Druck) sind von dort verlinkt.

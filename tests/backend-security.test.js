@@ -171,9 +171,14 @@ const P = (x) => post(x); const G = (q) => ctx.doGet({ parameter: q });
 const photo2 = photo;
 
 console.log('--- A. Zugriff / Authentifizierung');
-check('A0 Cockpit nur für Verwaltung (Hausmeister/Leitung/ohne Token abgelehnt)', ['adminOverview', 'adminUpdateTask'].every((action) =>
-  P({ action, token: HM, id: 'x', status: 'erledigt' }).code === 'staff' && P({ action, token: LEAD, id: 'x' }).code === 'staff'
-  && !P({ action, pin: '13059', id: 'x' }).ok));
+check('A0 Cockpit nicht für Hausmeister/ohne Token', ['adminOverview', 'adminUpdateTask'].every((action) =>
+  P({ action, token: HM, id: 'x', status: 'erledigt' }).code === 'staff' && !P({ action, pin: '13059', id: 'x' }).ok));
+{
+  const lo = P({ action: 'adminOverview', token: LEAD });
+  check('A0 Leitung (001): nur Hausmeister-Aufträge, keine Zähler/Fehler/Looker', lo.ok && lo.role === 'Leitung' && lo.tasks.every((t) => t.owner === 'Hausmeister')
+    && lo.kpi.errors24 === null && lo.lookerUrl === '' && lo.months.every((m) => m['Zähler'] === 0) && Array.isArray(lo.team.members), lo.tasks.map((t) => t.owner));
+  check('A0 Leitung darf Zuständigkeit/Notiz nicht ändern', !P({ action: 'adminUpdateTask', token: LEAD, id: 'x', owner: 'Verwaltung' }).ok);
+}
 check('A0 Cockpit für 007 und 008', P({ action: 'adminOverview', token: ADM }).ok && P({ action: 'adminOverview', token: ADM2 }).ok);
 check('A1 Portal ohne Token', P({ action: 'getTasks' }).code === 'staff');
 check('A2 Portal leerer/kaputter Token', ['', ' ', 'x', 'a'.repeat(23), 'g'.repeat(40), HM + 'ff', HM.toUpperCase().replace(/./g, 'z')].every((t) => !P({ action: 'getTasks', token: t }).ok));

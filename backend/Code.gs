@@ -90,6 +90,13 @@ const CONFIG = {
   // Wer erledigt welchen Auftrag? Der Hausmeister sieht im Portal nur „Hausmeister“-Aufträge,
   // die Verwaltung sieht alle. Pro Auftrag in der Spalte „Zuständig“ änderbar.
   OWNERS: ["Hausmeister", "Verwaltung"],
+  // Rollen im Blatt „Mitarbeiter“: Leitung = Chef des Hausmeisterdienstes (Team-Cockpit, nur Hausmeister-Aufträge)
+  ROLES: ["Hausmeister", "Leitung", "Verwaltung"],
+  // Aufgang-IDs → lesbarer Name (für Auswertungen, z. B. Mängel vom Hausmeister)
+  ENTRANCE_NAMES: {
+    dorf24: "Dorfstr. 24", lind2: "Lindenberger Str. 2", lind4: "Lindenberger Str. 4",
+    lind6: "Lindenberger Str. 6", lind8: "Lindenberger Str. 8",
+  },
   DEFAULT_OWNER: { Elektroraum: "Verwaltung", Klingelschild: "Hausmeister", Mangel: "Verwaltung", "Mangel (intern)": "Verwaltung" },
   PHOTO_FOLDER_NAME: "Mieter-App Fotos",
   MAX_TEXT: 2000,
@@ -106,7 +113,7 @@ const CONFIG = {
   // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
   CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
   // Mitarbeiternummern: feste Nummern plus STAFF_LINKS Nummern ab STAFF_FIRST_NR.
-  STAFF_FIXED: [["007", "Verwaltung"], ["008", "Verwaltung"], ["001", "Hausmeister"]], // 007/008 Verwaltung, 001 Leitung Hausmeisterdienst
+  STAFF_FIXED: [["007", "Verwaltung"], ["008", "Verwaltung"], ["001", "Leitung"]], // 007/008 Verwaltung, 001 Leitung Hausmeisterdienst
   // Service-Ziele (SLA): Reaktion = Status „in Arbeit“ (oder erledigt), Erledigung = Status „erledigt“.
   // days = Kalendertage, workdays = Mo–Fr. Elektroraum: bestätigt 1 Werktag vor dem Termin, erledigt am Termin.
   SLA: {
@@ -1052,6 +1059,16 @@ function ensureStaffLinks() {
   // Vorrats-Nummern ab 100 sind gesperrt, bis sie vergeben werden (Haken bei „Aktiv“ setzen).
   // So öffnet ein versehentlich weitergegebener, noch unbenutzter Link nichts.
   for (let i = numbered.length; i < CONFIG.STAFF_LINKS; i++) add.push([String(next++), "Hausmeister", false]);
+  sheet.getRange(2, 2, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(CONFIG.ROLES, true).build());
+  // Einmalig: 001 (bisher „Hausmeister“) wird „Leitung“ – danach bleibt die Auswahl in der Tabelle maßgeblich.
+  const props = PropertiesService.getScriptProperties();
+  if (rows && !props.getProperty("ROLE_001_LEITUNG")) {
+    const vals = sheet.getRange(2, 1, rows, 2).getValues();
+    vals.forEach((r, i) => { if (String(r[0]) === "001" && r[1] === "Hausmeister") sheet.getRange(i + 2, 2).setValue("Leitung"); });
+    props.setProperty("ROLE_001_LEITUNG", "1");
+    CacheService.getScriptCache().remove("staff");
+  }
   if (!add.length) return;
   // Hinter die letzte Zeile mit Nummer schreiben – nicht getLastRow(): leere Kästchen in „Aktiv“ zählen dort als belegt.
   const colA = sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), 1).getValues();
@@ -1062,8 +1079,6 @@ function ensureStaffLinks() {
     return [nr, role, active !== false, token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
   }));
   sheet.getRange(2, 3, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
-  sheet.getRange(2, 2, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
-    .requireValueInList(["Hausmeister", "Verwaltung"], true).build());
   CacheService.getScriptCache().remove("staff");
 }
 
@@ -1647,7 +1662,12 @@ function healthCheckNow() {
    ========================================================================== */
 
 function requireAdmin(user) {
-  if (!user || user.role !== "Verwaltung") throw userError("Nur für die Verwaltung.", "staff");
+  if (!user || (user.role !== "Verwaltung" && user.role !== "Leitung")) throw userError("Nur für Verwaltung und Leitung.", "staff");
+}
+
+function entranceName(id) {
+  const k = String(id || "").trim();
+  return CONFIG.ENTRANCE_NAMES[k] || k;
 }
 
 /** Datum + n Werktage (Mo–Fr), Uhrzeit bleibt. Start am Wochenende zählt ab Montag. */
@@ -1679,7 +1699,8 @@ function allTasks() {
   const tickets = sheetObjects(CONFIG.SHEETS.tickets).filter((r) => r.ID).map((r) => ({
     id: String(r.ID), kind: "ticket", source: "Bewohner", type: String(r.Typ || ""), status: String(r.Status || "offen"),
     owner: ownerOf(r, r.Typ), created: date(r.Eingang), inWork: date(r["In Arbeit seit"]), done: date(r["Erledigt am"]),
-    termin: date(r.Termin), urgent: false, entrance: String(r.Aufgang || ""), object: String(r["Aufgang-ID"] || ""),
+    termin: date(r.Termin), urgent: false, object: String(r["Aufgang-ID"] || ""),
+    entrance: String(r.Aufgang || "") || entranceName(r["Aufgang-ID"]),
     wohnung: String(r.Wohnung || ""), name: String(r.Name || ""), contact: String(r["Telefon/Kontakt"] || ""),
     details: String(r.Details || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
     by: String(r["Bearbeitet von"] || ""), _row: r._row,
@@ -1688,7 +1709,7 @@ function allTasks() {
     id: String(r.ID), kind: "defect", source: String(r["Erfasst von (Nr)"] || ""), type: "Mangel (intern)",
     status: String(r.Status || "offen"), owner: ownerOf(r, "Mangel (intern)"), created: date(r.Eingang),
     inWork: date(r["In Arbeit seit"]), done: date(r["Erledigt am"]), termin: null, urgent: r.Dringend === true,
-    entrance: "", object: String(r["Aufgang-ID"] || ""), wohnung: "", name: "", contact: "",
+    entrance: entranceName(r["Aufgang-ID"]), object: String(r["Aufgang-ID"] || ""), wohnung: "", name: "", contact: "",
     details: String(r.Beschreibung || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
     by: String(r["Bearbeitet von"] || ""), _row: r._row,
   }));
@@ -1729,8 +1750,9 @@ function isoOrEmpty(d) { return d instanceof Date && !isNaN(d) ? d.toISOString()
 /** Daten für das Cockpit: Aufträge mit Ampel, Kennzahlen, Statistik. */
 function adminOverview(p, user) {
   requireAdmin(user);
+  const lead = user.role === "Leitung"; // Leitung Hausmeisterdienst: nur Hausmeister-Aufträge, keine Zähler/Fehler
   const now = new Date();
-  const tasks = allTasks().map((t) => Object.assign(t, { sla: slaInfo(t, now) }));
+  const tasks = allTasks().filter((t) => !lead || t.owner === "Hausmeister").map((t) => Object.assign(t, { sla: slaInfo(t, now) }));
   const since = (days) => new Date(now.getTime() - days * 86400000);
   const recentClosed = tasks.filter((t) => t.status === "erledigt" && t.done && t.done > since(90));
   const open = tasks.filter((t) => t.status !== "erledigt");
@@ -1745,7 +1767,7 @@ function adminOverview(p, user) {
   months.forEach((m) => { perMonth[m] = { Mangel: 0, Klingelschild: 0, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 0 }; });
   tasks.forEach((t) => { const m = t.created && monthKey(t.created); if (perMonth[m] && perMonth[m][t.type] !== undefined) perMonth[m][t.type]++; });
   const meterBatches = {};
-  sheetObjects(CONFIG.SHEETS.meter).forEach((r) => {
+  (lead ? [] : sheetObjects(CONFIG.SHEETS.meter)).forEach((r) => {
     const d = r.Eingang instanceof Date ? r.Eingang : null;
     const id = r["Erfassungs-ID"] || r.ID;
     if (d && !meterBatches[id]) { meterBatches[id] = true; const m = monthKey(d); if (perMonth[m]) perMonth[m].Zähler++; }
@@ -1767,7 +1789,7 @@ function adminOverview(p, user) {
   for (let i = 1; i <= 30; i++) {
     planStatusForDay(new Date(now.getTime() - i * 86400000), areas, scans, plan).forEach((x) => { soll++; if (x.done) ist++; });
   }
-  const errors24 = sheetObjects(CONFIG.SHEETS.errors).filter((r) => r.Zeit instanceof Date && r.Zeit > since(1)).length;
+  const errors24 = lead ? null : sheetObjects(CONFIG.SHEETS.errors).filter((r) => r.Zeit instanceof Date && r.Zeit > since(1)).length;
 
   const list = tasks.filter((t) => t.status !== "erledigt" || (t.done && t.done > since(30))).map((t) => ({
     id: t.id, kind: t.kind, source: t.source, type: t.type, status: t.status, owner: t.owner, urgent: t.urgent,
@@ -1795,12 +1817,46 @@ function adminOverview(p, user) {
     months: months.map((m) => Object.assign({ month: m }, perMonth[m])),
     perEntrance,
     tasks: list,
-    lookerUrl: PropertiesService.getScriptProperties().getProperty("LOOKER_URL") || "",
+    lookerUrl: lead ? "" : PropertiesService.getScriptProperties().getProperty("LOOKER_URL") || "",
+    role: user.role,
+    team: teamOverview(scans, areas, plan, now),
     time: now.toISOString(),
   };
 }
 
-/** Status/Zuständigkeit/Notiz eines Auftrags ändern (Verwaltung). Setzt die Zeitstempel. */
+/**
+ * Team-Übersicht aus den Tätigkeitsnachweisen (nur Mitarbeiternummern, keine Namen):
+ * je Nummer Anzahl der Nachweise (30 Tage) und letzter Nachweis, die letzten Nachweise und
+ * Plan-Einträge der letzten 7 Tage ohne Nachweis.
+ */
+function teamOverview(scans, areas, plan, now) {
+  const since = new Date(now.getTime() - 30 * 86400000);
+  const recent = scans.filter((s) => s["Zeitpunkt (Scan)"] instanceof Date && s["Zeitpunkt (Scan)"] > since)
+    .sort((a, b) => b["Zeitpunkt (Scan)"] - a["Zeitpunkt (Scan)"]);
+  const per = {};
+  recent.forEach((s) => {
+    const nr = String(s["Mitarbeiter-Nr"] || "?");
+    const x = per[nr] || (per[nr] = { nr, count: 0, manual: 0, last: s["Zeitpunkt (Scan)"].toISOString() });
+    x.count++;
+    if (/^manuell/.test(String(s.Erfassung || ""))) x.manual++;
+  });
+  const missed = [];
+  for (let i = 1; i <= 7; i++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    planStatusForDay(day, areas, scans, plan).filter((x) => !x.done)
+      .forEach((x) => missed.push({ date: Utilities.formatDate(day, CONFIG.TIMEZONE, "yyyy-MM-dd"), activity: x.activity, ort: x.ort }));
+  }
+  return {
+    members: Object.keys(per).map((k) => per[k]).sort((a, b) => b.count - a.count),
+    recent: recent.slice(0, 25).map((s) => ({
+      time: s["Zeitpunkt (Scan)"].toISOString(), nr: String(s["Mitarbeiter-Nr"] || ""), ort: plain(s.Ort, 80),
+      activity: plain(s["Tätigkeit"], 60), manual: /^manuell/.test(String(s.Erfassung || "")), note: plain(s.Notiz, 200),
+    })),
+    missed: missed.slice(0, 40),
+  };
+}
+
+/** Status/Zuständigkeit/Notiz eines Auftrags ändern (Verwaltung; Leitung nur Status). Setzt die Zeitstempel. */
 function adminUpdateTask(p, user) {
   requireAdmin(user);
   const id = String(p.id || "").trim();
@@ -1812,6 +1868,10 @@ function adminUpdateTask(p, user) {
   try {
     const row = sheetObjects(def).find((r) => r.ID === id);
     if (!row) throw userError("Auftrag nicht gefunden");
+    if (user.role === "Leitung") {
+      if (ownerOf(row, row.Typ || "Mangel (intern)") !== "Hausmeister") throw userError("Auftrag nicht gefunden");
+      if (p.owner !== undefined || p.note !== undefined) throw userError("Zuständigkeit und Notiz ändert die Verwaltung.");
+    }
     if (p.status !== undefined) {
       if (CONFIG.STATUS_VALUES.indexOf(p.status) === -1) throw userError("Ungültiger Status");
       sheet.getRange(row._row, col("Status")).setValue(p.status);

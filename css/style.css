@@ -1030,3 +1030,10 @@ html.text-large body { zoom: 1.18; }
 .weather__warn-icon { font-size: 22px; line-height: 1.2; }
 .weather__src { margin: 8px 0 0; font-size: 12px; color: var(--c-muted); text-align: right; }
 @media (prefers-color-scheme: dark) { .weather__warn--cold { background: #1d2a38; } }
+
+/* ---------- Cockpit: Team ---------- */
+.team-list, .team-missed, .team-recent { list-style: none; margin: 0 0 12px; padding: 0; }
+.team-list li { display: grid; grid-template-columns: 76px 1fr; gap: 2px 10px; padding: 10px 12px; margin-top: 8px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); }
+.team-list li .small { grid-column: 2; }
+.team-list__nr { font-weight: 800; grid-row: span 2; align-self: center; }
+.team-missed li, .team-recent li { padding: 6px 0; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; }
