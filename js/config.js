@@ -54,7 +54,7 @@ window.APP_CONFIG = {
       { label: "Hausmeister-Notdienst", sub: "GS Schreier · 0179 4073564 · Wasser, Heizung, Strom", phone: "+491794073564", icon: "🧰", level: "urgent" },
       { label: "Feuerwehr / Rettung", sub: "Lebensgefahr", phone: "112", icon: "🚒", level: "danger" },
       { label: "Polizei", sub: "Notruf", phone: "110", icon: "🚓", level: "danger" },
-      { label: "GASAG-Entstörungsdienst", sub: "Gasgeruch, Störung der Gasversorgung · 030 787272", phone: "+4930787272", icon: "🔥", level: "danger" },
+      { label: "GASAG-Entstörungsdienst", sub: "Gasgeruch, Störung der Gasversorgung · 030 787272", phone: "+4930787272", icon: "👃", level: "danger" },
       { label: "Stromnetz Berlin – Störungsdienst", sub: "Stromausfall im Haus oder in der Straße · 0800 2112525", phone: "+498002112525", icon: "⚡️", level: "urgent" },
       { label: "Willbrandt und Kompagnon", sub: "Hausverwaltung · 030 99270747", phone: "+493099270747", icon: "🏢" },
       { label: "Schlüsseldienst Günther", sub: "Schlossmontage J. Günther GmbH · Mo, Mi, Fr 8–18 · Di, Do 8–16 Uhr", phone: "+49304237223", icon: "🔑" }, // Nummer laut Branchenverzeichnis – bitte prüfen

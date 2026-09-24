@@ -3,14 +3,14 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v38";
+const CACHE_VERSION = "mieterapp-v39";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=38",
-  "./js/config.js?v=38",
-  "./js/i18n.js?v=38",
-  "./js/app.js?v=38",
+  "./css/style.css?v=39",
+  "./js/config.js?v=39",
+  "./js/i18n.js?v=39",
+  "./js/app.js?v=39",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
