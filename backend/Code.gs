@@ -100,7 +100,10 @@ const CONFIG = {
   APP_PIN: "13059",
   // Schutz vor Missbrauch der offenen Adresse (gilt für alle Nutzer zusammen):
   LIMITS: {
-    pinFailsPer15Min: 30,     // danach 15 Minuten keine PIN-Prüfung möglich
+    // Hoch angesetzt: Die PIN hängt ohnehin im Hausflur. Ein niedriger Wert ließe einen Störer mit
+    // wenigen Fehlversuchen ALLE Bewohner aussperren; so wird nur massenhaftes Durchprobieren gebremst.
+    pinFailsPer15Min: 300,
+    staffActionsPerHour: 150, // je persönlichem Zugang (Schutz, falls ein Link in falsche Hände gerät)
     submitsPerHour: 40,       // Meldungen insgesamt pro Stunde
     hausmeisterMailsPer6h: 10, // Klingelschild-Aufträge per E-Mail je 6 Stunden
     maxRequestBytes: 25 * 1024 * 1024,
@@ -176,6 +179,7 @@ function doPost(e) {
     // Hausmeister-Portal hat eigenen Zugang (persönlicher Token), alles andere braucht die App-PIN.
     if (STAFF_ACTIONS[p.action]) {
       const user = authStaff(p.token);
+      rateLimit(`staff_${user.nr}`, CONFIG.LIMITS.staffActionsPerHour, 3600);
       return json(STAFF_ACTIONS[p.action](p, user));
     }
     requirePin(p.pin, p.token);
@@ -668,7 +672,7 @@ function notify(subject, lines) {
   try {
     MailApp.sendEmail({
       to,
-      subject: `[Mieter-App] ${subject}`,
+      subject: oneLine(`[Mieter-App] ${subject}`),
       body: lines.filter(Boolean).join("\n") + "\n\n" + getSpreadsheet().getUrl(),
     });
   } catch (err) {
@@ -698,6 +702,11 @@ function testMail() {
 /* ==========================================================================
    Aufträge an den Hausmeister (Klingelschild) mit Erledigt-Link
    ========================================================================== */
+
+/** Betreffzeilen: keine Zeilenumbrüche/Steuerzeichen aus Eingaben, max. 200 Zeichen. */
+function oneLine(v) {
+  return String(v).replace(/[\r\n\t\u0000-\u001f]+/g, " ").slice(0, 200);
+}
 
 /** Reiner Text ohne Tabellen-Schutzzeichen, für E-Mails. */
 function plain(value, max) {
@@ -764,7 +773,7 @@ function sendBellOrder(id, code, p) {
     const replyTo = PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "";
     MailApp.sendEmail({
       to,
-      subject: `Klingelschild aktualisieren – ${plain(p.entrance, 60)}, ${whg(plain(p.wohnung, 60))} (${id})`,
+      subject: oneLine(`Klingelschild aktualisieren – ${plain(p.entrance, 60)}, ${whg(plain(p.wohnung, 60))} (${id})`),
       body,
       htmlBody,
       name: CONFIG.SENDER_NAME,
@@ -923,11 +932,13 @@ function ensureStaffLinks() {
   const add = CONFIG.STAFF_FIXED.filter(([nr]) => have.indexOf(nr) === -1).map(([nr, role]) => [nr, role]);
   const numbered = have.map(Number).filter((n) => n >= CONFIG.STAFF_FIRST_NR);
   let next = numbered.length ? Math.max.apply(null, numbered) + 1 : CONFIG.STAFF_FIRST_NR;
-  for (let i = numbered.length; i < CONFIG.STAFF_LINKS; i++) add.push([String(next++), "Hausmeister"]);
+  // Vorrats-Nummern ab 100 sind gesperrt, bis sie vergeben werden (Haken bei „Aktiv“ setzen).
+  // So öffnet ein versehentlich weitergegebener, noch unbenutzter Link nichts.
+  for (let i = numbered.length; i < CONFIG.STAFF_LINKS; i++) add.push([String(next++), "Hausmeister", false]);
   if (!add.length) return;
-  sheet.getRange(sheet.getLastRow() + 1, 1, add.length, 5).setValues(add.map(([nr, role]) => {
+  sheet.getRange(sheet.getLastRow() + 1, 1, add.length, 5).setValues(add.map(([nr, role, active]) => {
     const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
-    return [nr, role, true, token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
+    return [nr, role, active !== false, token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
   }));
   sheet.getRange(2, 3, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   sheet.getRange(2, 2, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()

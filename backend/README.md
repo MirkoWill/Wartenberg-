@@ -80,7 +80,7 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 
 | Blatt | Inhalt |
 |---|---|
-| **Mitarbeiter** | **Nur Nummern, keine Namen** (pseudonym): `007` Verwaltung, `001` Leitung Hausmeisterdienst, `100`–`119` Mitarbeiter, je mit **persönlichem Link**. Die Liste (Nr + Link) geht an den Hausmeisterdienst, der selbst festhält, wer welche Nummer hat. Link einmal am Handy öffnen, dann bleibt man angemeldet. Zugang sperren: *Aktiv* abhaken (wirkt nach spätestens 5 Minuten); für eine neue Person besser eine unbenutzte Nummer vergeben. Mehr Nummern: `STAFF_LINKS` erhöhen, dann Menü **Mieter-App → Mitarbeiter-Links ergänzen**. Rolle *Verwaltung* sieht zusätzlich „QR-Codes drucken“. |
+| **Mitarbeiter** | **Nur Nummern, keine Namen** (pseudonym): `007` Verwaltung, `001` Leitung Hausmeisterdienst, `100`–`119` Mitarbeiter, je mit **persönlichem Link**. Die Liste (Nr + Link) geht an den Hausmeisterdienst, der selbst festhält, wer welche Nummer hat. **Die Nummern ab 100 sind zunächst gesperrt** – beim Vergeben einer Nummer den Haken bei *Aktiv* setzen. Link einmal am Handy öffnen, dann bleibt man angemeldet. Zugang sperren: *Aktiv* abhaken (wirkt nach spätestens 5 Minuten); für eine neue Person besser eine unbenutzte Nummer vergeben. Mehr Nummern: `STAFF_LINKS` erhöhen, dann Menü **Mieter-App → Mitarbeiter-Links ergänzen**. Rolle *Verwaltung* sieht zusätzlich „QR-Codes drucken“. |
 | **QR-Orte** | Alle Orte mit QR-Code (Code, Ort, Bereich, Aufgang-ID, Standard-Tätigkeit). *Für Bewohner anzeigen* = erscheint bei den Bewohnern unter „Hausreinigung & Pflege“ (bei Aufgang-ID nur in diesem Aufgang, leer = alle). Neue Orte einfach als Zeile ergänzen (in der App nach spätestens 5 Minuten sichtbar); *Code* nur Buchstaben/Ziffern/_ und danach nicht mehr ändern (steht im gedruckten QR-Code). |
 | **Tätigkeiten** | Auswahlliste beim Scannen; beliebig erweiterbar. |
 | **Reinigung** | Jeder Nachweis: Scan-Zeit, Ort, Tätigkeit, Mitarbeiter-Nr, Notiz, Foto, *Erfassung* = „QR-Scan“ oder „manuell gewählt“ (QR-Code beschädigt). |
@@ -140,11 +140,14 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
 ## Sicherheit & Datenschutz
 
 - **Zugangs-PIN:** Die App fragt bei jedem Start (wie die Zustimmung) die PIN ab (3 Fehlversuche → 15 Minuten Sperre auf dem Gerät).
-  Das Backend prüft die PIN bei jeder Meldung und Statusabfrage selbst; nach 30 Fehlversuchen in 15 Minuten
-  (alle Geräte zusammen) nimmt es 15 Minuten lang keine PIN an. Der Erledigt-Link des Hausmeisters braucht keine PIN.
+  Das Backend prüft die PIN bei jeder Meldung und Statusabfrage selbst; nach 300 Fehlversuchen in 15 Minuten
+  (alle Geräte zusammen) nimmt es 15 Minuten lang keine PIN an (bewusst hoch, damit Störer nicht alle Bewohner aussperren können). Der Erledigt-Link des Hausmeisters braucht keine PIN.
 - **Missbrauchsbremse:** höchstens 40 Meldungen pro Stunde und 10 Hausmeister-Mails je 6 Stunden (insgesamt).
   Darüber hinaus werden Meldungen abgelehnt bzw. Aufträge nur in der Tabelle gespeichert (`CONFIG.LIMITS`).
 
+- **Hausmeister-Zugänge:** 150 Aktionen pro Stunde je Zugang; unbenutzte Nummern gesperrt; Abmelden löscht Aufträge
+  vom Gerät. Die Tabelle enthält die persönlichen Links – **nur mit Personen teilen, die sie wirklich brauchen**
+  (Beiräte bekommen den Kalender, nicht die Tabelle).
 - Eingaben werden serverseitig geprüft (Pflichtfelder, Werktags-Regel, Bildtyp, max. 6 MB).
 - Formel-Injection wird verhindert (Eingaben, die mit `=`, `+`, `-`, `@`, Tab oder Zeilenumbruch beginnen, werden als Text gespeichert – auch in der Zähler-Übersicht).
 - Ein unsichtbares Honeypot-Feld filtert einfache Spam-Bots.
