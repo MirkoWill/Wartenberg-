@@ -266,7 +266,11 @@ function doPost(e) {
 function doGet(e) {
   try {
     const q = (e && e.parameter) || {};
-    if (q.action === "getTasks") return json(getTasks({}, authStaff(q.token)));
+    if (q.action === "getTasks") {
+      const user = authStaff(q.token);
+      rateLimit(`staff_${user.nr}`, CONFIG.LIMITS.staffActionsPerHour, 3600); // wie bei POST
+      return json(getTasks({}, user));
+    }
     if (q.action === "done") return completeTicketPage(q);
     if (q.action === "status") { requirePin(q.pin, q.token); return json(getStatus(q.ids)); }
     if (q.action === "news") { requirePin(q.pin, q.token); return json(getNews(q.obj)); }
@@ -306,7 +310,7 @@ function submitTicket(p) {
 
   appendRow(CONFIG.SHEETS.tickets.name, [
     id, new Date(), type, CONFIG.STATUS_OPEN,
-    str(p.house, 60), str(p.entrance, 60), str(p.object, 20),
+    str(p.house, 60), str(p.entrance, 60), objectId(p.object),
     str(p.wohnung, 60), str(p.name, 80), termin, details,
     str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "", doneCode, defaultOwner(type),
   ]);
@@ -365,7 +369,7 @@ function submitMeterReadings(p) {
     const id = newId("Z");
     const photoUrl = savePhoto(m.photo, `${id}_${wohnung}_${m.raum}_${m.art}`);
     return [
-      id, now, str(p.house, 60), str(p.entrance, 60), str(p.object, 20),
+      id, now, str(p.house, 60), str(p.entrance, 60), objectId(p.object),
       wohnung, m.raum, m.art, m.nr, m.stand, str(p.name, 80), photoUrl, false, batchId, ablesedatum, m.einheit,
     ];
   });
@@ -1221,6 +1225,7 @@ function getTasks(p, user) {
 /** Auftrag im Portal als erledigt melden. */
 function completeTask(p, user) {
   const id = String(p.id || "").trim();
+  if (!id) throw userError("Auftrag nicht gefunden");
   const def = /^M-/.test(id) ? CONFIG.SHEETS.staffDefects : CONFIG.SHEETS.tickets;
   const sheet = getSpreadsheet().getSheetByName(def.name);
   const lock = LockService.getScriptLock();
@@ -1675,9 +1680,16 @@ function requireAdmin(user) {
   if (!user || (user.role !== "Verwaltung" && user.role !== "Leitung")) throw userError("Nur für Verwaltung und Leitung.", "staff");
 }
 
+/** Aufgang-ID aus der App: nur Kleinbuchstaben/Ziffern (z. B. „lind6“), sonst leer. */
+function objectId(value) {
+  const v = String(value || "").trim();
+  return /^[a-z0-9]{1,20}$/i.test(v) ? v : "";
+}
+
 function entranceName(id) {
   const k = String(id || "").trim();
-  return CONFIG.ENTRANCE_NAMES[k] || k;
+  // hasOwnProperty: Kennungen wie „constructor“ oder „__proto__“ (aus Anfragen) dürfen nichts nachschlagen
+  return Object.prototype.hasOwnProperty.call(CONFIG.ENTRANCE_NAMES, k) ? CONFIG.ENTRANCE_NAMES[k] : k;
 }
 
 /** Datum + n Werktage (Mo–Fr), Uhrzeit bleibt. Start am Wochenende zählt ab Montag. */
@@ -1870,6 +1882,7 @@ function teamOverview(scans, areas, plan, now) {
 function adminUpdateTask(p, user) {
   requireAdmin(user);
   const id = String(p.id || "").trim();
+  if (!id) throw userError("Auftrag nicht gefunden");
   const def = /^M-/.test(id) ? CONFIG.SHEETS.staffDefects : CONFIG.SHEETS.tickets;
   const sheet = getSpreadsheet().getSheetByName(def.name);
   const col = (h) => def.headers.indexOf(h) + 1;
@@ -2015,17 +2028,20 @@ function getDepartures() {
   const answer = (x, live) => ({ ok: true, time: x.time, live, departures: future(x.departures).slice(0, 15) });
   if (last && age < cfg.freshSeconds) return answer(last, true);
 
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(200)) return last ? answer(last, false) : { ok: true, time: "", live: false, departures: [] };
+  // Eigene „weiche“ Sperre im Zwischenspeicher – NICHT die Script-Sperre: hängt der Fahrplandienst,
+  // sollen Meldungen, Scans usw. trotzdem sofort gespeichert werden können.
+  const empty = { ok: true, time: "", live: false, departures: [] };
+  if (cache.get("departures_busy")) return last ? answer(last, false) : empty;
+  cache.put("departures_busy", "1", 45);
   try {
     const fresh = fetchDepartures();
     cache.put("departures", JSON.stringify(fresh), cfg.keepHours * 3600);
     return answer(fresh, true);
   } catch (err) {
     console.warn("Abfahrten:", err && err.message);
-    return last ? answer(last, false) : { ok: true, time: "", live: false, departures: [] };
+    return last ? answer(last, false) : empty;
   } finally {
-    lock.releaseLock();
+    cache.remove("departures_busy");
   }
 }
 
