@@ -311,6 +311,42 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Anmeldung über Link (langsamer Server)");
+    {
+      const state = { failLogin: 0 };
+      const be = fakeBackend(state);
+      const ctx = await newContext(browser, { backend: async (d) => {
+        if (d.action === "hmLogin") {
+          await new Promise((r) => setTimeout(r, 2500));
+          if (state.failLogin > 0) { state.failLogin--; return "abort"; }
+        }
+        return be(d);
+      } });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${ADMIN}#hausmeister`); await p.waitForTimeout(300);
+      await acceptConsent(p); await p.waitForTimeout(500);
+      check("Während der Anmeldung: „Anmeldung läuft“ statt „Link öffnen“", await p.isVisible("#staffPendingWait") && !(await p.isVisible("#staffNone")));
+      await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
+      check("Nach der Anmeldung erscheint der Bereich von selbst (ohne Seitenwechsel)", /007/.test(await p.textContent("#staffName")) && !(await p.isVisible("#staffPending")) && /Cockpit/.test(await p.textContent("#staffTab")));
+      await ctx.close();
+    }
+    {
+      const state = { failLogin: 2 };
+      const be = fakeBackend(state);
+      const ctx = await newContext(browser, { backend: async (d) => {
+        if (d.action === "hmLogin" && state.failLogin > 0) { state.failLogin--; return "abort"; }
+        return be(d);
+      } });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${ADMIN}#hausmeister`); await p.waitForTimeout(300);
+      await acceptConsent(p);
+      await p.waitForSelector("#staffRetry", { state: "visible", timeout: 10000 }).catch(() => {});
+      check("Zweimal gescheitert: „Erneut versuchen“ sichtbar", await p.isVisible("#staffRetry") && !(await p.isVisible("#staffPendingWait")));
+      await p.click("#staffRetry"); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
+      check("Erneut versuchen meldet an", /007/.test(await p.textContent("#staffName")));
+      await ctx.close();
+    }
+
     console.log("--- Abfahrten über Backend");
     {
       const inMin = (m) => new Date(Date.now() + m * 60000).toISOString();
