@@ -170,7 +170,9 @@
   let lastAppView = DEFAULT_VIEW;
 
   function showView(name) {
-    const view = $(`.view[data-view="${name}"]`) || $(`.view[data-view="${DEFAULT_VIEW}"]`);
+    // Ansicht per Vergleich suchen, nicht per Selektor: Die Adresse (#…) kann beliebigen Text enthalten.
+    const byName = (n) => $$(".view").find((v) => v.dataset.view === n);
+    const view = byName(name) || byName(DEFAULT_VIEW);
     const viewName = view.dataset.view;
     if (viewName === currentView) return;
 
@@ -190,7 +192,7 @@
     const back = $("#backBtn");
     back.hidden = !parent;
     if (parent) {
-      const parentView = $(`.view[data-view="${parent}"]`);
+      const parentView = byName(parent);
       $("#backLabel").textContent = t_(parentView ? parentView.dataset.title : "Zurück");
       back.setAttribute("aria-label", t_("Zurück zu {ziel}", { ziel: $("#backLabel").textContent }));
     }
@@ -2029,6 +2031,12 @@
      ====================================================================== */
 
   function init() {
+    // Schutz vor Clickjacking: Die App darf nicht in fremden Seiten eingebettet laufen.
+    if (window.top !== window.self) {
+      document.body.innerHTML = '<p style="padding:24px;font:18px sans-serif">Bitte die Mieter-App direkt öffnen: '
+        + '<a href="https://mirkowill.github.io/Wartenberg-/" target="_top" rel="noopener">mirkowill.github.io/Wartenberg-</a></p>';
+      return;
+    }
     $("#objectName").textContent = OBJ.key ? OBJ.label : t_("Bitte Adresse wählen");
     $("#demoBanner").hidden = !!CFG.API_URL;
     $("#siteName").textContent = CFG.SITE.name;

@@ -139,6 +139,14 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
 
 ## Sicherheit & Datenschutz
 
+**Pen-Test (lokal, vor Einspielen):** Zugriffsschutz, Rechte Hausmeister/Verwaltung, Formel-Injection in allen
+Blättern, Uploads (SVG/HTML, Größe, Dateinamen), manipulierte Nachweise, Überlastung, Erledigt-Link, Mail-Betreff sowie
+im Browser eingeschleuster Code über jede Server-Antwort, manipulierte Adressen, Einbettung in fremde Seiten und
+manipulierten Gerätespeicher – ohne offene Befunde. Bewusste Restrisiken: Die PIN ist öffentlich (Aushang); ein
+abfotografierter QR-Code lässt sich auch woanders scannen; manuell gewählte und nachgesendete Nachweise sind in der
+Spalte *Erfassung* gekennzeichnet. Wichtigster Schutz insgesamt: **2-Faktor-Anmeldung** für das Google-Konto und das
+GitHub-Konto.
+
 - **Zugangs-PIN:** Die App fragt bei jedem Start (wie die Zustimmung) die PIN ab (3 Fehlversuche → 15 Minuten Sperre auf dem Gerät).
   Das Backend prüft die PIN bei jeder Meldung und Statusabfrage selbst; nach 300 Fehlversuchen in 15 Minuten
   (alle Geräte zusammen) nimmt es 15 Minuten lang keine PIN an (bewusst hoch, damit Störer nicht alle Bewohner aussperren können). Der Erledigt-Link des Hausmeisters braucht keine PIN.
