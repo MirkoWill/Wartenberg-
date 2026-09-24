@@ -1510,7 +1510,7 @@
     const res = await fetch(CFG.API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ ...payload, token: s && s.token }),
+      body: JSON.stringify({ ...payload, token: payload.token || (s && s.token) }),
       redirect: "follow",
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1519,7 +1519,8 @@
       const err = new Error(data.error || "Fehler");
       err.userMessage = data.error;
       err.code = data.code;
-      if (data.code === "staff") { localRemove(STAFF_KEY); renderStaff(); }
+      const cur = staff();
+      if (data.code === "staff" && cur && cur.token === (payload.token || (s && s.token))) { localRemove(STAFF_KEY); renderStaff(); }
       throw err;
     }
     return data;
@@ -1543,10 +1544,15 @@
     const s = staff();
     if (!s || !CFG.API_URL) return;
     try {
-      const data = await staffPost({ action: "hmLogin" });
-      writeJson(STAFF_KEY, { ...s, user: data.user, areas: data.areas, activities: data.activities });
+      const data = await staffPost({ action: "hmLogin", token: s.token });
+      // Inzwischen abgemeldet oder anderer Zugang? Dann die verspätete Antwort verwerfen.
+      const cur = staff();
+      if (!cur || cur.token !== s.token) return;
+      writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities });
       fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
     } catch (err) {
+      const cur = staff();
+      if (!cur || cur.token !== s.token) return;
       if (err.code === "staff") toast(err.userMessage, "error", 8000);
       else if (!s.user) toast("Anmeldung nicht möglich – bitte Internetverbindung prüfen.", "error");
     }
@@ -1702,7 +1708,7 @@
 
   function queueStaffEntry(entry) {
     const q = readJson(STAFF_QUEUE_KEY) || [];
-    q.push(entry);
+    q.push({ ...entry, token: (staff() || {}).token }); // Token mitspeichern: wird auch nach Abmelden noch gesendet
     try { localStorage.setItem(STAFF_QUEUE_KEY, JSON.stringify(q)); } catch (e) {
       q[q.length - 1] = { ...entry, photo: null }; // Speicher voll: ohne Foto
       writeJson(STAFF_QUEUE_KEY, q);
@@ -1714,7 +1720,7 @@
   let flushWarned = false;
   async function flushStaffQueue() {
     const q = readJson(STAFF_QUEUE_KEY) || [];
-    if (flushing || !q.length || !isStaff() || !navigator.onLine) return;
+    if (flushing || !q.length || !navigator.onLine) return;
     flushing = true;
     try {
       while (q.length) {
@@ -1924,11 +1930,18 @@
     $("#formStaffDefect").addEventListener("submit", submitStaffDefect);
     $("#qrPrint").addEventListener("click", () => window.print());
     $("#staffLogout").addEventListener("click", () => {
-      if (!window.confirm("Auf diesem Gerät abmelden? Zum erneuten Anmelden brauchen Sie Ihren persönlichen Link.")) return;
+      const pending = (readJson(STAFF_QUEUE_KEY) || []).length;
+      const msg = "Auf diesem Gerät abmelden? Zum erneuten Anmelden brauchen Sie Ihren persönlichen Link."
+        + (pending ? ` ${pending} Nachweis(e) werden noch gesendet, sobald Netz da ist.` : "");
+      if (!window.confirm(msg)) return;
+      stopScan();
+      resetScanForm();
+      pendingScan = null;
       localRemove(STAFF_KEY);
       localRemove(STAFF_TODAY_KEY);
       renderStaff();
       location.hash = "notfall";
+      toast("Abgemeldet.", "ok");
     });
     window.addEventListener("online", flushStaffQueue);
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") flushStaffQueue(); });
