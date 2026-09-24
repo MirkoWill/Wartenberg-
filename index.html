@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=46">
+  <link rel="stylesheet" href="css/style.css?v=47">
 </head>
 <body>
   <header class="app-header">
@@ -248,8 +248,8 @@
         </div>
 
         <div class="staff-admin" id="staffAdmin" hidden>
-          <h2 class="section-title">Verwaltung</h2>
-          <a class="btn btn--primary btn--block" href="#cockpit">📊 Cockpit: Aufträge, SLA, Statistik</a>
+          <h2 class="section-title">Cockpit &amp; Werkzeuge</h2>
+          <a class="btn btn--primary btn--block" href="#cockpit">📊 Cockpit: Aufträge, SLA, Team, Statistik</a>
           <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
         </div>
 
@@ -269,7 +269,7 @@
 
     <!-- ============ QR-Codes drucken (Verwaltung) ============ -->
     <section class="view" data-view="cockpit" data-title="Cockpit" hidden>
-      <p class="muted" id="cockpitNone">Das Cockpit ist nur für die Verwaltung. Bitte mit dem persönlichen Link (007/008) anmelden.</p>
+      <p class="muted" id="cockpitNone">Das Cockpit ist nur für die Verwaltung (007/008) und die Leitung des Hausmeisterdienstes (001). Bitte mit dem persönlichen Link anmelden.</p>
       <div id="cockpitArea" hidden>
         <div class="cockpit-bar">
           <span class="muted small" id="cockpitStatus">–</span>
@@ -287,6 +287,10 @@
           <button type="button" class="chip" data-filter="done" aria-pressed="false">Erledigt (30 Tage)</button>
         </div>
         <ul class="task-list" id="cockpitList"></ul>
+
+        <h2 class="section-title">Team (30 Tage)</h2>
+        <p class="muted small">Nur Mitarbeiternummern – wer hinter einer Nummer steht, weiß nur der Hausmeisterdienst.</p>
+        <div id="cockpitTeam"></div>
 
         <h2 class="section-title">Statistik (12 Monate)</h2>
         <div id="cockpitCharts"></div>
@@ -798,8 +802,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=46"></script>
-  <script src="js/i18n.js?v=46"></script>
-  <script src="js/app.js?v=46"></script>
+  <script src="js/config.js?v=47"></script>
+  <script src="js/i18n.js?v=47"></script>
+  <script src="js/app.js?v=47"></script>
 </body>
 </html>

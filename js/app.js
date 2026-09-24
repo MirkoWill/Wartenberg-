@@ -1681,7 +1681,8 @@
       ? "manifest-hausmeister.json" : "manifest.json";
     if (manifest && manifest.getAttribute("href") !== wanted) manifest.setAttribute("href", wanted);
     $("#staffTab").hidden = !loggedIn;
-    const admin = !!(loggedIn && s.user && s.user.role === "Verwaltung");
+    // Cockpit: Verwaltung (alles) und Leitung des Hausmeisterdienstes (Hausmeister-Aufträge + Team)
+    const admin = !!(loggedIn && s.user && (s.user.role === "Verwaltung" || s.user.role === "Leitung"));
     const tab = $("#staffTab");
     if (tab.dataset.role !== String(admin)) {
       tab.dataset.role = String(admin);
@@ -1697,8 +1698,8 @@
     $("#staffArea").hidden = !(loggedIn && s.user);
     if (!loggedIn || !s.user) return;
 
-    $("#staffName").textContent = s.user.role === "Verwaltung" ? `${s.user.name} · Verwaltung` : s.user.name;
-    $("#staffAdmin").hidden = s.user.role !== "Verwaltung";
+    $("#staffName").textContent = s.user.role === "Hausmeister" ? s.user.name : `${s.user.name} · ${s.user.role}`;
+    $("#staffAdmin").hidden = !admin;
     const opts = (list, sel) => list.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
     $("#scanActivity").innerHTML = opts(s.activities || []);
     $("#scanManual").innerHTML = `<option value="">Ort wählen …</option>`
@@ -2013,8 +2014,8 @@
   async function renderQrSheet() {
     const s = staff();
     const sheet = $("#qrSheet");
-    if (!s || !s.user || s.user.role !== "Verwaltung") {
-      sheet.innerHTML = '<p class="muted">Nur für die Verwaltung.</p>';
+    if (!s || !s.user || (s.user.role !== "Verwaltung" && s.user.role !== "Leitung")) {
+      sheet.innerHTML = '<p class="muted">Nur für Verwaltung und Leitung.</p>';
       return;
     }
     try {
@@ -2047,7 +2048,7 @@
   let cockpitLoading = null;
   let cockpitFilter = "open";
 
-  function isAdmin() { return ((staff() || {}).user || {}).role === "Verwaltung"; }
+  function isAdmin() { const r = ((staff() || {}).user || {}).role; return r === "Verwaltung" || r === "Leitung"; }
 
   function loadCockpit() {
     if (!isAdmin()) return Promise.resolve();
@@ -2084,8 +2085,12 @@
       tile("Ø Reaktion", k.avgReactHours === null ? "–" : `${num(k.avgReactHours, 1)} Std.`, "", "90 Tage"),
       tile("Ø Durchlauf", k.avgLeadDays === null ? "–" : `${num(k.avgLeadDays, 1)} Tage`, "", "90 Tage"),
       tile("Reinigung laut Plan", pct(k.cleaningQuote), k.cleaningQuote === null ? "" : k.cleaningQuote >= 0.95 ? "green" : k.cleaningQuote >= 0.8 ? "yellow" : "red", `${k.cleaningIst || 0} von ${k.cleaningSoll || 0} (30 Tage)`),
-      tile("App-Fehler 24 Std.", String(k.errors24 || 0), k.errors24 ? "yellow" : ""),
+      typeof k.errors24 === "number" ? tile("App-Fehler 24 Std.", String(k.errors24), k.errors24 ? "yellow" : "") : "",
     ].join("");
+    // Leitung: keine Filter nach Zuständigkeit (sieht nur Hausmeister-Aufträge)
+    const lead = d.role === "Leitung";
+    $$('#cockpitFilter [data-filter="Hausmeister"], #cockpitFilter [data-filter="Verwaltung"]').forEach((b) => { b.hidden = lead; });
+    renderTeam(d.team);
     renderCockpitList(Array.isArray(d.tasks) ? d.tasks : []);
     renderCockpitCharts(d);
     const looker = $("#cockpitLooker");
@@ -2110,6 +2115,7 @@
     const list = tasks.filter((t) => (f === "done" ? t.status === "erledigt"
       : t.status !== "erledigt" && (f === "open" || t.sla.light === f || t.owner === f)));
     const opt = (vals, sel) => vals.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
+    const lead = ((staff() || {}).user || {}).role === "Leitung";
     const light = { red: "Überfällig", yellow: "Bald fällig", green: "Im Plan", done: "Erledigt" };
     $("#cockpitList").innerHTML = list.length ? list.map((t) => {
       const where = [t.entrance, t.wohnung ? whgLabel(t.wohnung) : "", t.ort].filter(Boolean).join(" · ");
@@ -2136,10 +2142,10 @@
             <form class="form" data-edit="${esc(t.id)}">
               <label class="field"><span class="field__label">Status</span>
                 <select name="status">${opt(["offen", "in Arbeit", "erledigt"], t.status)}</select></label>
-              <label class="field"><span class="field__label">Zuständig</span>
+              ${lead ? "" : `<label class="field"><span class="field__label">Zuständig</span>
                 <select name="owner">${opt(["Hausmeister", "Verwaltung"], t.owner)}</select></label>
               <label class="field"><span class="field__label">Notiz (nur intern)</span>
-                <textarea name="note" rows="2" maxlength="1000">${esc(t.note || "")}</textarea></label>
+                <textarea name="note" rows="2" maxlength="1000">${esc(t.note || "")}</textarea></label>`}
               <button class="btn btn--primary btn--small" type="submit">Speichern</button>
             </form>
           </details>
@@ -2152,7 +2158,9 @@
     if (!form) return;
     e.preventDefault();
     const id = form.dataset.edit;
-    const change = { status: form.elements.status.value, owner: form.elements.owner.value, note: form.elements.note.value };
+    const change = { status: form.elements.status.value };
+    if (form.elements.owner) change.owner = form.elements.owner.value; // Leitung: nur Status
+    if (form.elements.note) change.note = form.elements.note.value;
     const btn = form.querySelector('[type="submit"]');
     btn.disabled = true;
     try {
@@ -2174,6 +2182,30 @@
       btn.disabled = false;
       toast(err.userMessage || "Speichern fehlgeschlagen – bitte erneut versuchen.", "error");
     }
+  }
+
+  /** Team: Nachweise je Mitarbeiternummer, letzte Nachweise, laut Plan nicht erledigt (7 Tage). */
+  function renderTeam(team) {
+    const box = $("#cockpitTeam");
+    const t = team && typeof team === "object" ? team : {};
+    const members = Array.isArray(t.members) ? t.members : [];
+    const recent = Array.isArray(t.recent) ? t.recent : [];
+    const missed = Array.isArray(t.missed) ? t.missed : [];
+    const when = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); };
+    const day = (iso) => { const d = parseIsoDate(String(iso)); return d ? d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) : ""; };
+    box.innerHTML = `
+      ${members.length ? `<ul class="team-list">${members.map((m) => `<li>
+        <span class="team-list__nr">Nr. ${esc(m.nr)}</span>
+        <span><strong>${esc(m.count)}</strong> Nachweise${Number(m.manual) ? ` <span class="muted">(davon ${esc(m.manual)} ohne QR)</span>` : ""}</span>
+        <span class="muted small">zuletzt ${esc(when(m.last))}</span></li>`).join("")}</ul>`
+        : '<p class="muted">Keine Nachweise in den letzten 30 Tagen.</p>'}
+      ${missed.length ? `<details class="rule" open><summary>⚠️ Laut Plan nicht erledigt (letzte 7 Tage): ${missed.length}</summary>
+        <ul class="team-missed">${missed.map((x) => `<li><strong>${esc(day(x.date))}</strong> · ${esc(x.activity)} – ${esc(x.ort)}</li>`).join("")}</ul></details>`
+        : '<p class="muted small">✓ Alle geplanten Arbeiten der letzten 7 Tage sind nachgewiesen.</p>'}
+      ${recent.length ? `<details class="rule"><summary>Letzte Nachweise (${recent.length})</summary>
+        <ul class="team-recent">${recent.map((r) => `<li><span class="muted small">${esc(when(r.time))}</span>
+          <span>Nr. ${esc(r.nr)} · ${esc(r.activity)} – ${esc(r.ort)}${r.manual ? ' <span class="badge">ohne QR</span>' : ""}</span>
+          ${r.note ? `<span class="muted small">„${esc(r.note)}“</span>` : ""}</li>`).join("")}</ul></details>` : ""}`;
   }
 
   /** Einfache Balkendiagramme als SVG (keine externe Bibliothek, keine Daten an Dritte). */
@@ -2213,7 +2245,7 @@
       { key: "Klingelschild", label: "Klingelschild", color: "#6d7454" },
       { key: "Elektroraum", label: "Elektroraum", color: "#3a6ea5" },
     ]) + barChart("Reinigungsnachweise je Monat", months, [{ key: "Nachweise", label: "Nachweise (Scans)", color: "#4f7a28" }])
-      + barChart("Zählerablesungen je Monat", months, [{ key: "Zähler", label: "Meldungen Zählerstand", color: "#3a6ea5" }])
+      + (d.role === "Leitung" ? "" : barChart("Zählerablesungen je Monat", months, [{ key: "Zähler", label: "Meldungen Zählerstand", color: "#3a6ea5" }]))
       + (entrances.length ? `<figure class="chart"><figcaption>Meldungen je Aufgang (12 Monate)</figcaption>
         <ul class="hbars">${entrances.map(([name, n]) => `<li><span class="hbars__label">${esc(name)}</span>`
           + `<span class="hbars__bar"><i style="width:${Math.round(((Number(n) || 0) / maxE) * 100)}%"></i></span><span class="hbars__n">${esc(n)}</span></li>`).join("")}</ul></figure>` : "");

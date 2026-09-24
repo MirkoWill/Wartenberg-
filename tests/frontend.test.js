@@ -7,6 +7,7 @@ const { PIN, PIN_HASH, check, summary, startServer, launch, newContext, newPage,
 
 const STAFF = "a".repeat(40);
 const ADMIN = "b".repeat(40);
+const LEAD = "c".repeat(40);
 const AREAS = [
   { code: "TH_LIND6", ort: "Treppenhaus Lindenberger Str. 6", bereich: "Aufgang", aufgang: "lind6", activity: "Treppenhausreinigung" },
   { code: "MUELL", ort: "Müllplatz (außen)", bereich: "Außen", aufgang: "", activity: "Müllplatzreinigung" },
@@ -16,7 +17,7 @@ const ACTIVITIES = ["Treppenhausreinigung", "Fensterreinigung Aufgang", "Müllpl
 /** Standard-Backend: prüft PIN/Token wie das echte Backend und antwortet plausibel. */
 function fakeBackend(state = {}) {
   return (d) => {
-    const staff = { [STAFF]: { name: "Nr. 100", role: "Hausmeister" }, [ADMIN]: { name: "Nr. 007", role: "Verwaltung" } }[d.token];
+    const staff = { [STAFF]: { name: "Nr. 100", role: "Hausmeister" }, [ADMIN]: { name: "Nr. 007", role: "Verwaltung" }, [LEAD]: { name: "Nr. 001", role: "Leitung" } }[d.token];
     if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask"].includes(d.action)) {
       if (!staff) return { ok: false, error: "Kein gültiger Zugang", code: "staff" };
       if (state.offline && d.action === "logCleaning") return "abort";
@@ -25,7 +26,8 @@ function fakeBackend(state = {}) {
       if (d.action === "completeTask") { state.tasks = (state.tasks || []).filter((t) => t.id !== d.id); return { ok: true }; }
       if (d.action === "submitStaffDefect") return { ok: true, id: "M-260924-ABCD" };
       if (d.action === "adminOverview" || d.action === "adminUpdateTask") {
-        if (staff.role !== "Verwaltung") return { ok: false, error: "Nur für die Verwaltung.", code: "staff" };
+        if (staff.role === "Hausmeister") return { ok: false, error: "Nur für Verwaltung und Leitung.", code: "staff" };
+        if (staff.role === "Leitung" && state.leadOverview && d.action === "adminOverview") return state.leadOverview;
         if (d.action === "adminUpdateTask") { (state.updates = state.updates || []).push(d); return { ok: true }; }
         return state.overview || { ok: true, kpi: { open: 0, overdue: 0, dueSoon: 0, avgReactHours: null, avgLeadDays: null, slaQuote: null, closed90: 0, cleaningQuote: null, errors24: 0 }, months: [], perEntrance: {}, tasks: [], lookerUrl: "" };
       }
@@ -247,7 +249,10 @@ function makeQrVideo(text) {
         sla: { light, react: light === "red" ? "overdue" : "open", done: "open", reactDue: iso(light === "red" ? -5 : 10), doneDue: iso(100) }, ...extra });
       const state = { overview: { ok: true, kpi: { open: 2, overdue: 1, dueSoon: 1, avgReactHours: 5.5, avgLeadDays: 2.25, slaQuote: 0.8, closed90: 10, cleaningQuote: 0.95, cleaningIst: 19, cleaningSoll: 20, errors24: 0 },
         months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, Mangel: i % 3, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 2, Nachweise: 20 })),
-        perEntrance: { "Dorfstr. 24": 5, "Lindenberger Str. 6": 2 }, lookerUrl: "https://lookerstudio.google.com/reporting/abc",
+        perEntrance: { "Dorfstr. 24": 5, "Lindenberger Str. 6": 2 }, lookerUrl: "https://lookerstudio.google.com/reporting/abc", role: "Verwaltung",
+        team: { members: [{ nr: "100", count: 12, manual: 2, last: iso(-3) }, { nr: "101", count: 4, manual: 0, last: iso(-30) }],
+          recent: [{ time: iso(-3), nr: "100", ort: "Müllplatz", activity: "Müllplatzreinigung", manual: false, note: "" }],
+          missed: [{ date: "2026-09-22", activity: "Treppenhausreinigung", ort: "Treppenhaus Dorfstr. 24" }] },
         tasks: [mk("T-1", "red"), mk("T-2", "yellow", { owner: "Verwaltung", type: "Mangel" }), mk("T-3", "done", { status: "erledigt", done: iso(-2) })] } };
       const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
       const p = await newPage(ctx);
@@ -271,7 +276,29 @@ function makeQrVideo(text) {
       check("Bearbeiten sendet Status + Notiz", (state.updates || []).some((u) => u.id === "T-1" && u.status === "in Arbeit" && u.note === "Schild bestellt" && u.owner === "Hausmeister" && u.token === ADMIN), state.updates);
       check("Diagramme (3 Monats-Charts + Aufgänge)", (await p.$$("#cockpitCharts svg")).length === 3 && (await p.$$(".hbars li")).length === 2);
       check("Looker-Link", (await p.getAttribute("#cockpitLooker", "href")) === "https://lookerstudio.google.com/reporting/abc" && await p.isVisible("#cockpitLooker"));
+      check("Team: Nachweise je Nummer + verpasste Plan-Einträge", (await p.$$(".team-list li")).length === 2 && /Nr\. 100/.test(await p.textContent("#cockpitTeam")) && /nicht erledigt.*1/.test(await p.textContent("#cockpitTeam")));
       check("Keine Fehler im Cockpit", p.errors.length === 0, p.errors);
+      await ctx.close();
+    }
+    {
+      const iso = (h) => new Date(Date.now() + h * 3600000).toISOString();
+      const state = { leadOverview: { ok: true, role: "Leitung", kpi: { open: 1, overdue: 0, dueSoon: 0, avgReactHours: 3, avgLeadDays: 1, slaQuote: 1, closed90: 2, cleaningQuote: 0.9, cleaningIst: 9, cleaningSoll: 10, errors24: null },
+        months: [{ month: "2026-09", Mangel: 1, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 5 }], perEntrance: { "Dorfstr. 24": 1 }, lookerUrl: "",
+        team: { members: [{ nr: "100", count: 5, manual: 0, last: iso(-2) }], recent: [], missed: [] },
+        tasks: [{ id: "T-9", source: "Bewohner", type: "Klingelschild", status: "offen", owner: "Hausmeister", created: iso(-5), entrance: "Dorfstr. 24", wohnung: "3", details: "x", note: "", by: "",
+          sla: { light: "green", react: "open", done: "open", reactDue: iso(20), doneDue: iso(200) } }] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?hm=${LEAD}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
+      check("Leitung (001): Tab Cockpit + Werkzeuge", /Cockpit/.test(await p.textContent("#staffTab")) && await p.isVisible("#staffAdmin") && /Leitung/.test(await p.textContent("#staffName")));
+      await p.click("#staffTab"); await p.waitForSelector("#cockpitList .task");
+      check("Leitung: keine Filter nach Zuständigkeit, kein App-Fehler-/Zähler-Bereich, kein Looker", !(await p.isVisible('#cockpitFilter [data-filter="Verwaltung"]')) && (await p.$$(".kpi")).length === 7 && (await p.$$("#cockpitCharts svg")).length === 2 && !(await p.isVisible("#cockpitLooker")));
+      await p.click(".task__edit summary");
+      check("Leitung: nur Status bearbeitbar", await p.isVisible('.task__edit select[name="status"]') && !(await p.$('.task__edit select[name="owner"]')) && !(await p.$('.task__edit textarea[name="note"]')));
+      await p.selectOption('.task__edit select[name="status"]', "erledigt"); await p.click('.task__edit [type="submit"]'); await p.waitForTimeout(400);
+      check("Leitung: sendet nur Status", (state.updates || []).some((u) => u.id === "T-9" && u.status === "erledigt" && !("owner" in u) && !("note" in u)), state.updates);
+      check("Team-Bereich für Leitung", /Nr\. 100/.test(await p.textContent("#cockpitTeam")) && /Alle geplanten Arbeiten/.test(await p.textContent("#cockpitTeam")));
+      check("Keine Fehler (Leitung)", p.errors.length === 0, p.errors);
       await ctx.close();
     }
     {
@@ -378,7 +405,7 @@ function makeQrVideo(text) {
       const X = `<img src=x class=pwn onerror="window.__xss=1"><svg class=pwn onload="window.__xss=1"></svg>"'><script class=pwn>window.__xss=1</script>`;
       const evil = (d) => {
         if (d.action === "hmLogin") return { ok: true, user: { name: X, role: "Verwaltung" }, areas: [{ code: "TG", ort: X, activity: X }], activities: [X] };
-        if (d.action === "adminOverview") return { ok: true, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
+        if (d.action === "adminOverview") return { ok: true, role: X, team: { members: [{ nr: X, count: X, manual: X, last: X }, X], recent: [{ time: X, nr: X, ort: X, activity: X, manual: true, note: X }], missed: [{ date: X, activity: X, ort: X }] }, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
         if (d.action === "getTasks") return { ok: true, tasks: [{ id: X, source: X, type: X, status: "offen", entrance: X, wohnung: X, name: X, contact: "javascript:window.__xss=1", details: X, ort: X, created: X, owner: X }] };
         if (d.action === "news") return { ok: true, weather: { at: new Date().toISOString(), days: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()), icon: X, min: X, max: 40 }, { date: X }], alerts: [{ event: X, headline: X, headlineEn: X, severity: X, expires: X }, X] }, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
         if (d.action === "status") return { ok: true, items: [{ id: "T-260924-ABCD", type: X, status: X, created: X }] };

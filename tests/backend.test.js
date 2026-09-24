@@ -169,6 +169,11 @@ check('Mitarbeiter: 007, 008, 001, 100–119 ohne Namen', staff.length === 24 &&
 check('Links mit Token', /^https:\/\/app\.willbrandt-kompagnon\.de\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[4][4]), staff[4][4]);
 ctx.setup();
 check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 24);
+sheets['Mitarbeiter'].grid[3][1] = 'Hausmeister'; delete props.ROLE_001_LEITUNG; ctx.ensureStaffLinks();
+check('Bestehendes Blatt: 001 wird einmalig auf Leitung umgestellt', sheets['Mitarbeiter'].grid[3][1] === 'Leitung' && props.ROLE_001_LEITUNG === '1');
+sheets['Mitarbeiter'].grid[3][1] = 'Hausmeister'; ctx.ensureStaffLinks();
+check('Danach bleibt die Auswahl in der Tabelle maßgeblich', sheets['Mitarbeiter'].grid[3][1] === 'Hausmeister');
+sheets['Mitarbeiter'].grid[3][1] = 'Leitung';
 { // Blatt mit 007/001 aus alter Version + leere Kästchen bis Zeile 40 → 008 direkt unter die letzte Nummer
   const g = sheets['Mitarbeiter'].grid; const saved = g.map((r) => r.slice());
   const i8 = g.findIndex((r) => r[0] === '008'); g.splice(i8, 1);
@@ -268,6 +273,18 @@ let cov = post({ action: 'adminOverview', token: admTok });
 check('Cockpit: Überfälliges oben und rot', cov.ok && cov.tasks[0].sla.light === 'red' && cov.tasks.some((x) => x.id === 'T-LATE' && x.sla.light === 'red') && cov.kpi.overdue >= 1 && cov.kpi.open >= 2, cov.tasks.slice(0, 3).map((x) => x.id + ':' + x.sla.light));
 check('Cockpit: 12 Monate Statistik, Reinigungsquote, keine Namen der Mitarbeiter', cov.months.length === 12 && 'Nachweise' in cov.months[11] && typeof cov.kpi.errors24 === 'number' && !JSON.stringify(cov).includes('Schreier'));
 check('Cockpit: Hausmeister hat keinen Zugriff', post({ action: 'adminOverview', token: hmTok }).code === 'staff');
+check('001 hat Rolle Leitung', staff[3][0] === '001' && staff[3][1] === 'Leitung' && post({ action: 'hmLogin', token: leadTok }).user.role === 'Leitung');
+check('Team-Übersicht: Nachweise je Nummer, letzte Nachweise, verpasste Plan-Einträge', cov.team.members.some((m) => m.nr === '100' && m.count >= 1) && cov.team.recent.length >= 1 && cov.team.recent[0].nr && Array.isArray(cov.team.missed) && !JSON.stringify(cov.team).includes('drive.google'), cov.team.members);
+const dd24 = post({ action: 'submitStaffDefect', token: hmTok, ort: 'Treppenhaus Dorfstr. 24', beschreibung: 'Licht defekt' });
+check('Aufgang-ID wird als Name angezeigt (nicht „dorf24“)', post({ action: 'adminOverview', token: admTok }).tasks.find((x) => x.id === dd24.id).entrance === 'Dorfstr. 24');
+{
+  const lov = post({ action: 'adminOverview', token: leadTok });
+  check('Leitung: sieht Hausmeister-Aufträge + Team, keine Verwaltungs-Aufträge', lov.ok && lov.tasks.length > 0 && lov.tasks.every((x) => x.owner === 'Hausmeister') && lov.team && lov.kpi.errors24 === null);
+  const hmTask = lov.tasks.find((x) => x.status !== 'erledigt');
+  check('Leitung: Status ändern ok, Zuständigkeit nicht', post({ action: 'adminUpdateTask', token: leadTok, id: hmTask.id, status: 'in Arbeit' }).ok && !post({ action: 'adminUpdateTask', token: leadTok, id: hmTask.id, owner: 'Verwaltung' }).ok);
+  const vwTask = post({ action: 'adminOverview', token: admTok }).tasks.find((x) => x.owner === 'Verwaltung');
+  check('Leitung: Verwaltungs-Auftrag nicht änderbar', !vwTask || !post({ action: 'adminUpdateTask', token: leadTok, id: vwTask.id, status: 'erledigt' }).ok);
+}
 check('Status „in Arbeit“ setzt Zeitstempel + Bearbeiter', post({ action: 'adminUpdateTask', token: adm2Tok, id: 'T-FRESH', status: 'in Arbeit' }).ok && fresh[tcol('In Arbeit seit')] instanceof Date && fresh[tcol('Bearbeitet von')] === 'Nr. 008');
 check('Zuständigkeit + Notiz ändern (Formel wird Text)', post({ action: 'adminUpdateTask', token: admTok, id: 'T-FRESH', owner: 'Hausmeister', note: '=IMPORTXML("x")' }).ok && fresh[tcol('Zuständig')] === 'Hausmeister' && fresh[tcol('Notiz Verwaltung')].startsWith("'"));
 post({ action: 'adminUpdateTask', token: admTok, id: 'T-FRESH', status: 'erledigt' });
