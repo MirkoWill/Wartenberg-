@@ -1564,9 +1564,16 @@
   function renderStaff() {
     const s = staff();
     const loggedIn = !!(s && s.token);
+    // Angemeldet: „Zum Startbildschirm hinzufügen“ legt eine eigene Hausmeister-App an,
+    // die direkt den Hausmeister-Bereich öffnet (sonst startet das Symbol die Mieter-App).
+    const manifest = $("#appManifest");
+    const wanted = loggedIn || new URLSearchParams(location.search).get("app") === "hausmeister"
+      ? "manifest-hausmeister.json" : "manifest.json";
+    if (manifest && manifest.getAttribute("href") !== wanted) manifest.setAttribute("href", wanted);
     $("#staffTab").hidden = !loggedIn;
     $(".tabbar").classList.toggle("tabbar--5", loggedIn);
     $("#staffNone").hidden = loggedIn && !!s.user;
+    $("#staffLinkForm").hidden = loggedIn;
     $("#staffArea").hidden = !(loggedIn && s.user);
     if (!loggedIn || !s.user) return;
 
@@ -1928,6 +1935,16 @@
       $("#defectOrtFree").required = free;
     });
     $("#formStaffDefect").addEventListener("submit", submitStaffDefect);
+    $("#staffLinkForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = $("#staffLinkInput").value.trim();
+      const m = /(?:[?&]hm=)?([a-f0-9]{24,64})(?![a-f0-9])/i.exec(text);
+      if (!m) { toast("Das ist kein gültiger persönlicher Link.", "error"); return; }
+      writeJson(STAFF_KEY, { token: m[1].toLowerCase() });
+      $("#staffLinkInput").value = "";
+      renderStaff();
+      staffLogin();
+    });
     $("#qrPrint").addEventListener("click", () => window.print());
     $("#staffLogout").addEventListener("click", () => {
       const pending = (readJson(STAFF_QUEUE_KEY) || []).length;

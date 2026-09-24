@@ -87,6 +87,10 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 | **Mängel Hausmeister** | Vom Hausmeister/der Verwaltung erfasste Mängel, getrennt von den Bewohner-Tickets; Status wie bei *Tickets*. |
 | **Reinigungsplan** | Termine vom Hausmeister (siehe unten). |
 
+**Als App auf dem Startbildschirm:** Nach dem Öffnen des persönlichen Links im Browser-Menü „Zum Startbildschirm
+hinzufügen“ bzw. „App installieren“ wählen – es entsteht eine eigene App **„Hausmeister“**, die direkt den
+Hausmeister-Bereich öffnet. Fehlt dort die Anmeldung, den persönlichen Link einfach in das Feld „Link einfügen“ kopieren.
+
 **QR-Codes drucken:** Mit dem Verwaltungs-Link in der App **Hausmeister → QR-Codes drucken** → Drucken (A4, 3 Codes
 pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not geht auch die normale Handy-Kamera.
 
