@@ -104,6 +104,7 @@ const CONFIG = {
     // wenigen Fehlversuchen ALLE Bewohner aussperren; so wird nur massenhaftes Durchprobieren gebremst.
     pinFailsPer15Min: 300,
     staffActionsPerHour: 150, // je persönlichem Zugang (Schutz, falls ein Link in falsche Hände gerät)
+    mailReserve: 20,          // so viele Mails pro Tag bleiben für Hausmeister-Aufträge reserviert
     submitsPerHour: 40,       // Meldungen insgesamt pro Stunde
     hausmeisterMailsPer6h: 10, // Klingelschild-Aufträge per E-Mail je 6 Stunden
     maxRequestBytes: 25 * 1024 * 1024,
@@ -177,7 +178,7 @@ function doPost(e) {
     const p = JSON.parse(raw);
 
     // Hausmeister-Portal hat eigenen Zugang (persönlicher Token), alles andere braucht die App-PIN.
-    if (STAFF_ACTIONS[p.action]) {
+    if (p && typeof p.action === "string" && Object.prototype.hasOwnProperty.call(STAFF_ACTIONS, p.action)) {
       const user = authStaff(p.token);
       rateLimit(`staff_${user.nr}`, CONFIG.LIMITS.staffActionsPerHour, 3600);
       return json(STAFF_ACTIONS[p.action](p, user));
@@ -669,6 +670,13 @@ function checkWorkdayDate(isoDate) {
 function notify(subject, lines) {
   const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
   if (!to) return;
+  // Tageskontingent (100 Mails) für Hausmeister-Aufträge freihalten, falls jemand massenhaft Meldungen schickt.
+  try {
+    if (MailApp.getRemainingDailyQuota() < CONFIG.LIMITS.mailReserve) {
+      console.warn("Mail-Kontingent knapp – Info-Mail ausgelassen:", subject);
+      return;
+    }
+  } catch (e) { /* Kontingent unbekannt – trotzdem senden */ }
   try {
     MailApp.sendEmail({
       to,
@@ -1017,7 +1025,9 @@ function logCleaning(p, user) {
   const code = String(p.areaToken || "").trim().toUpperCase();
   const area = activeAreas().find((a) => a.code.toUpperCase() === code);
   if (!area) throw userError("Unbekannter QR-Code. Bitte an die Hausverwaltung wenden.");
-  const activity = str(p.activity, 60) || area.activity || "Reinigung";
+  const wanted = String(p.activity || "").trim() || area.activity || "Reinigung";
+  const activity = activeActivities().find((a) => a.toLowerCase() === wanted.toLowerCase());
+  if (!activity) throw userError("Unbekannte Tätigkeit. Bitte aus der Liste wählen.");
 
   // Zeitpunkt vom Gerät (auch nachträglich gesendete Offline-Scans), aber nicht in der Zukunft
   // und höchstens 7 Tage zurück.
@@ -1028,7 +1038,9 @@ function logCleaning(p, user) {
   const photoUrl = p.photo ? savePhoto(p.photo, `Nachweis_${area.code}_${Utilities.formatDate(when, CONFIG.TIMEZONE, "yyyyMMdd_HHmm")}`) : "";
   appendRow(CONFIG.SHEETS.cleaning.name, [
     when, area.code, str(String(user.nr), 10), now, str(area.ort, 120), activity,
-    str(p.note, 500), photoUrl, area.aufgang, p.manual ? "manuell gewählt" : "QR-Scan",
+    str(p.note, 500), photoUrl, area.aufgang,
+    (p.manual ? "manuell gewählt" : "QR-Scan")
+      + (Math.abs(now - when) > 30 * 60000 ? ` (nachgesendet ${Utilities.formatDate(now, CONFIG.TIMEZONE, "dd.MM. HH:mm")})` : ""),
   ]);
   return { ok: true, ort: area.ort, activity, time: when.toISOString() };
 }
