@@ -1791,6 +1791,7 @@
   }
 
   function renderTasks(tasks) {
+    const admin = ((staff() || {}).user || {}).role === "Verwaltung";
     $("#taskList").innerHTML = tasks.length ? tasks.map((t) => {
       const where = [t.entrance, t.wohnung ? whgLabel(t.wohnung) : "", t.ort].filter(Boolean).join(" · ");
       const phone = String(t.contact || "").replace(/[^\d+]/g, "");
@@ -1800,6 +1801,7 @@
             <span class="task__type">${esc(t.type)}</span>
             ${t.urgent ? '<span class="badge badge--dringend">dringend</span>' : ""}
             ${t.status === "in Arbeit" ? '<span class="badge badge--in-Arbeit">in Arbeit</span>' : ""}
+            ${admin && t.owner ? `<span class="badge badge--owner">${esc(t.owner)}</span>` : ""}
           </div>
           ${where ? `<div class="task__where">${esc(where)}</div>` : ""}
           ${t.date ? `<div class="task__date">Termin: <strong>${esc(formatDateLong(parseIsoDate(t.date)))}</strong></div>` : ""}
