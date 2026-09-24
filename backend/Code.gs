@@ -1247,3 +1247,41 @@ function residentCareInfo(object) {
     .map((r) => ({ activity: r.activity, ort: r.ort, from: ymd(r.from), to: ymd(r.to) }));
   return { last, next };
 }
+
+/**
+ * Fehlersuche Kalender: im Editor „kalenderTest“ auswählen → Ausführen → Ausführungsprotokoll ansehen.
+ * Prüft Konto, Kalender-ID, Schreibrecht (Test-Termin wird angelegt und sofort gelöscht) und das Blatt „Reinigungsplan“.
+ */
+function kalenderTest() {
+  const log = (label, value) => Logger.log(`${label}: ${value}`);
+  try { log("1. Google-Konto des Scripts", Session.getEffectiveUser().getEmail() || "(nicht ermittelbar)"); } catch (e) { log("1. Google-Konto", "Fehler " + e.message); }
+  const id = (PropertiesService.getScriptProperties().getProperty("CALENDAR_ID") || "").trim();
+  log("2. Script-Eigenschaft CALENDAR_ID", id || "(nicht gesetzt)");
+  try {
+    log("3. Kalender, die dieses Konto sieht", CalendarApp.getAllCalendars().map((c) => `${c.getName()} [${c.getId()}]`).join(" | ") || "(keine)");
+  } catch (e) { log("3. Kalenderliste", "Fehler " + e.message); }
+  let cal = null;
+  try {
+    cal = id ? CalendarApp.getCalendarById(id) : (CalendarApp.getCalendarsByName(CONFIG.CALENDAR_NAME) || [])[0];
+    log("4. Gefundener Kalender", cal ? `${cal.getName()} [${cal.getId()}]` : "KEINER – ID/Name passt nicht oder keine Freigabe");
+  } catch (e) { log("4. Kalender suchen", "Fehler " + e.message); }
+  if (cal) {
+    try {
+      const ev = cal.createAllDayEvent("Test Mieter-App (wird gelöscht)", new Date());
+      log("5. Schreibtest", "OK – Termin angelegt");
+      ev.deleteEvent();
+      log("5b. Löschen", "OK");
+    } catch (e) { log("5. Schreibtest", "FEHLER " + e.message + " → Kalender nur lesbar freigegeben?"); }
+  }
+  try {
+    const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.plan.name);
+    log("6. Blatt „Reinigungsplan“", sheet ? `${Math.max(sheet.getLastRow() - 1, 0)} Zeilen, Kopfzeile: ${sheet.getRange(1, 1, 1, sheet.getLastColumn() || 1).getValues()[0].join(" | ")}` : "FEHLT – setup ausführen");
+    const rows = planRows();
+    log("7. Gültige Termine", rows.length);
+    rows.slice(0, 5).forEach((r, i) => log(`   Termin ${i + 1}`, `${Utilities.formatDate(r.from, CONFIG.TIMEZONE, "dd.MM.yyyy")} ${r.activity} ${r.ort}`));
+    if (sheet && sheet.getLastRow() > 1) {
+      const raw = sheet.getRange(2, 1, Math.min(3, sheet.getLastRow() - 1), 4).getValues();
+      raw.forEach((r, i) => log(`   Rohdaten Zeile ${i + 2}`, r.map((v) => `${v instanceof Date ? "Datum " + v.toISOString() : typeof v + " " + v}`).join(" | ")));
+    }
+  } catch (e) { log("6. Blatt lesen", "Fehler " + e.message); }
+}
