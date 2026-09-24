@@ -216,29 +216,39 @@
      ====================================================================== */
 
   const CONSENT_KEY = "mieterapp.consent";
-  const CONSENT_VERSION = "2026-09b"; // bei Änderung der Hinweise hochzählen
+  const CONSENT_VERSION = "2026-09b"; // bei Änderung der Hinweise hochzählen → alle stimmen neu zu
+  const CONSENT_DAYS = 30;            // danach wird die Zustimmung erneut abgefragt
   let consentGiven = false;
 
-  /** Zustimmung für diese Sitzung UND gültige PIN auf diesem Gerät. */
+  /** Gültige Zustimmung (höchstens 30 Tage alt, aktuelle Fassung) UND gültige PIN auf diesem Gerät. */
   function hasConsent() {
     if (!pinOk()) return false;
     if (consentGiven) return true;
-    try { consentGiven = sessionStorage.getItem(CONSENT_KEY) === CONSENT_VERSION; } catch (e) { /* blockiert */ }
+    const c = readJson(CONSENT_KEY);
+    consentGiven = !!(c && c.v === CONSENT_VERSION && Date.now() - c.at < CONSENT_DAYS * 86400000);
     return consentGiven;
   }
 
-  /* ---------- Zugangs-PIN (bei jedem App-Start wie die Zustimmung; 3 Fehlversuche → 15 Minuten Sperre) ---------- */
+  /** Zustimmung und PIN auf diesem Gerät löschen (Widerruf). */
+  function revokeConsent() {
+    consentGiven = false;
+    sessionPin = null;
+    localRemove(CONSENT_KEY);
+    localRemove(PIN_KEY);
+    try { sessionStorage.removeItem(CONSENT_KEY); sessionStorage.removeItem(PIN_KEY); } catch (e) { /* egal */ }
+  }
+
+  /* ---------- Zugangs-PIN (einmal pro Gerät; 3 Fehlversuche → 15 Minuten Sperre) ---------- */
 
   const PIN_KEY = "mieterapp.pin";
   const PIN_LOCK_KEY = "mieterapp.pinlock";
   let pinTimer = null;
-  let sessionPin = null; // Ersatz, falls sessionStorage blockiert ist
-  localRemove(PIN_KEY); // ältere Version hat die PIN dauerhaft gespeichert
+  let sessionPin = null; // Ersatz, falls der Gerätespeicher blockiert ist
 
   /** Gespeicherte PIN, sofern sie zur aktuell gültigen PIN passt (sonst ""). */
   function storedPin() {
     let saved = null;
-    try { saved = JSON.parse(sessionStorage.getItem(PIN_KEY) || "null"); } catch (e) { /* blockiert */ }
+    saved = readJson(PIN_KEY);
     if (!saved && sessionPin) saved = sessionPin;
     return saved && saved.hash === CFG.PIN_SHA256 ? String(saved.pin || "") : "";
   }
@@ -265,7 +275,7 @@
     }
     if ((await sha256Hex(pin)) === CFG.PIN_SHA256) {
       sessionPin = { pin, hash: CFG.PIN_SHA256 };
-      try { sessionStorage.setItem(PIN_KEY, JSON.stringify(sessionPin)); } catch (e) { /* nur im Speicher */ }
+      writeJson(PIN_KEY, sessionPin); // bleibt auf dem Gerät, bis die PIN sich ändert oder widerrufen wird
       localRemove(PIN_LOCK_KEY);
       msg.textContent = "";
       return true;
@@ -324,10 +334,7 @@
       return;
     }
     pinRejectedAt = Date.now();
-    sessionPin = null;
-    try { sessionStorage.removeItem(PIN_KEY); } catch (e) { /* egal */ }
-    consentGiven = false;
-    try { sessionStorage.removeItem(CONSENT_KEY); } catch (e) { /* egal */ }
+    revokeConsent();
     $("#pinInput").value = "";
     $("#pinMsg").textContent = t_("Die PIN hat sich geändert. Bitte die aktuelle PIN vom Aushang eingeben.");
     updateConsentUi();
@@ -377,11 +384,16 @@
       if (!check.checked) return;
       if (!pinOk() && !(await checkPinInput())) { updateAcceptButton(); return; }
       consentGiven = true;
-      try { sessionStorage.setItem(CONSENT_KEY, CONSENT_VERSION); } catch (e) { /* nur für diese Seite */ }
+      writeJson(CONSENT_KEY, { v: CONSENT_VERSION, at: Date.now() });
       updateConsentUi();
       if (viewEnterHooks[currentView]) viewEnterHooks[currentView]();
     });
     $("#consentDecline").addEventListener("click", () => showConsentStep("declined"));
+    $("#consentRevoke").addEventListener("click", () => {
+      revokeConsent();
+      toast(t_("Zustimmung widerrufen. Die App fragt beim nächsten Öffnen erneut."), "ok");
+      $("#consentRevoke").disabled = true;
+    });
     $("#consentBack").addEventListener("click", () => showConsentStep("ask"));
     $("#consentReturn").addEventListener("click", (e) => {
       e.preventDefault();

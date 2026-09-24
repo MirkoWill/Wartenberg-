@@ -25,12 +25,12 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 | Meine Meldungen | `#meldungen` | Ticket-/Erfassungsnummern werden auf dem Gerät gemerkt, Status per `action=status` |
 | Aktuelles | `#notfall` (oben) | Hinweise aus dem Blatt „Aktuelles“, je Aufgang filterbar; dienstags/mittwochs automatisch Hinweis zur Treppenhausreinigung (`recurringNotices`) |
 | Mehrsprachigkeit | Kopfzeile, Zustimmung | DE, EN, RU, UK, CS – Wörterbuch in `js/i18n.js` (Schlüssel = deutscher Text); Impressum/Datenschutz/Hausordnung nur Deutsch |
-| Rechtliches | `#impressum`, `#datenschutz` | Impressum, Datenschutzerklärung; Zustimmungsdialog bei jedem App-Start (Sitzung). Vor der Zustimmung werden keine externen Dienste geladen; bei Ablehnung Kontaktdaten und Notrufnummern |
+| Rechtliches | `#impressum`, `#datenschutz` | Impressum, Datenschutzerklärung; Zustimmungsdialog alle 30 Tage und bei geänderten Hinweisen, Widerruf auf der Datenschutzseite. Vor der Zustimmung werden keine externen Dienste geladen; bei Ablehnung Kontaktdaten und Notrufnummern |
 | US 3.1 Hausmeister-Login | `#hausmeister` | Persönlicher Link `?hm=TOKEN` je Mitarbeiternummer (007, 001, ab 100 – keine Namen, Blatt „Mitarbeiter“), Tab „Hausmeister“ erscheint; Rolle Verwaltung mit QR-Druck |
 | US 3.2 QR-Nachweis | `#hausmeister` | html5-qrcode, Rückkamera, Tätigkeit wählen, Ton/Vibration + grüner Haken; offline gespeichert und mit Scan-Zeit nachgesendet |
 | US 3.3 Auftragsliste | `#hausmeister` | Offene Bewohner-Tickets + interne Mängel, „Erledigt“-Button; Mängel erfassen (Blatt „Mängel Hausmeister“) |
 | Reinigungsplan | Tabelle, Kalender | Blatt „Reinigungsplan“ → Google-Kalender; tägliche Kontrolle; Bewohner sehen „Hausreinigung & Pflege“ |
-| Zugangs-PIN | Zustimmungsdialog | PIN vom Aushang bei jedem App-Start (Sitzung); 3 Fehlversuche → 15 Min. Sperre; Prüfung zusätzlich im Backend (`APP_PIN`), Content-Security-Policy |
+| Zugangs-PIN | Zustimmungsdialog | PIN vom Aushang einmal pro Gerät; 3 Fehlversuche → 15 Min. Sperre; Prüfung zusätzlich im Backend (`APP_PIN`), Content-Security-Policy |
 
 ## Struktur
 

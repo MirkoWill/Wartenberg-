@@ -147,7 +147,7 @@ abfotografierter QR-Code lässt sich auch woanders scannen; manuell gewählte un
 Spalte *Erfassung* gekennzeichnet. Wichtigster Schutz insgesamt: **2-Faktor-Anmeldung** für das Google-Konto und das
 GitHub-Konto.
 
-- **Zugangs-PIN:** Die App fragt bei jedem Start (wie die Zustimmung) die PIN ab (3 Fehlversuche → 15 Minuten Sperre auf dem Gerät).
+- **Zugangs-PIN:** Die App fragt die PIN einmal pro Gerät ab (erneut nach Widerruf oder PIN-Wechsel) (3 Fehlversuche → 15 Minuten Sperre auf dem Gerät).
   Das Backend prüft die PIN bei jeder Meldung und Statusabfrage selbst; nach 300 Fehlversuchen in 15 Minuten
   (alle Geräte zusammen) nimmt es 15 Minuten lang keine PIN an (bewusst hoch, damit Störer nicht alle Bewohner aussperren können). Der Erledigt-Link des Hausmeisters braucht keine PIN.
 - **Missbrauchsbremse:** höchstens 40 Meldungen pro Stunde und 10 Hausmeister-Mails je 6 Stunden (insgesamt).
