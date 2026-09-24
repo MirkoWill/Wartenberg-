@@ -200,7 +200,7 @@
     if (!LEGAL_VIEWS.includes(viewName)) lastAppView = viewName;
     window.scrollTo(0, 0);
     updateConsentUi();
-    // Externe Dienste (Abfahrten, aponet) erst nach Zustimmung laden.
+    // Externe Dienste (z. B. Abfahrten) erst nach Zustimmung laden.
     if (hasConsent() && viewEnterHooks[viewName]) viewEnterHooks[viewName]();
   }
 
@@ -631,7 +631,7 @@
     return label;
   }
 
-  // US 1.4 – Kiez-Guide, Dokumente, Apotheken-Notdienst
+  // US 1.4 – Kiez-Guide (inkl. Link zum Apotheken-Notdienst), Dokumente
   function renderInfos() {
     $("#documentList").innerHTML = OBJ.documents.map((d) => `
       <li>
@@ -645,7 +645,7 @@
       </li>`).join("");
 
     $("#kiezList").innerHTML = OBJ.kiez.map((g) => `
-      <h3 class="subsection-title"><span aria-hidden="true">${esc(g.icon)}</span> ${esc(g.group)}</h3>
+      <h3 class="subsection-title"${g.id ? ` id="${esc(g.id)}"` : ""}><span aria-hidden="true">${esc(g.icon)}</span> ${esc(g.group)}</h3>
       <ul class="place-list">
         ${g.places.map((pl) => `
           <li class="place">
@@ -656,9 +656,8 @@
             <a class="btn btn--ghost btn--small" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pl.name + ", " + pl.address)}"
                target="_blank" rel="noopener" aria-label="${esc(t_("{name} auf der Karte zeigen", { name: pl.name }))}">Karte</a>
           </li>`).join("")}
-      </ul>`).join("");
-
-    $("#pharmacyLink").href = OBJ.pharmacyUrl;
+      </ul>
+      ${(g.links || []).map((l) => `<a class="btn btn--ghost btn--block kiez-link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("")}`).join("");
 
     // Sprungmarken oben auf der Seite
     $$(".jump a[data-jump]").forEach((a) => a.addEventListener("click", (e) => {
@@ -667,11 +666,9 @@
     }));
   }
 
-  // Termine und iFrame erst beim Öffnen der Infos-Seite laden (spart Datenvolumen).
+  // Termine erst beim Öffnen der Infos-Seite laden (spart Datenvolumen).
   viewEnterHooks.infos = () => {
     loadPickups();
-    const frame = $("#pharmacyFrame");
-    if (!frame.src) frame.src = OBJ.pharmacyUrl;
   };
 
   // US 1.3 – Live-ÖPNV-Monitor

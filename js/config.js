@@ -191,10 +191,13 @@ window.APP_CONFIG = {
       },
       {
         group: "Apotheke",
+        id: "apotheke",
         icon: "💊",
         places: [
           { name: "Amsel-Apotheke", address: "Rostocker Str. 15, 13059 Berlin" },
         ],
+        // Link unter der Gruppe (Apotheken-Notdienst, PLZ 13059 vorausgewählt)
+        links: [{ label: "Apotheken-Notdienst in der Nähe (aponet.de)", url: "https://www.aponet.de/notdienstsuche/13059-Berlin" }],
       },
       {
         group: "Pakete",
@@ -212,8 +215,6 @@ window.APP_CONFIG = {
       { label: "Visitenkarte Willbrandt und Kompagnon", sub: "Kontakt speichern (.vcf)", url: "assets/hausverwaltung.vcf", icon: "👤" },
     ],
 
-    // Apotheken-Notdienst, Postleitzahl 13059 vorausgewählt
-    pharmacyUrl: "https://www.aponet.de/notdienstsuche/13059-Berlin",
 
     // Stromzähler per WhatsApp (US 2.2) – internationales Format ohne "+" und ohne Leerzeichen.
     whatsappNumber: "493099270747",

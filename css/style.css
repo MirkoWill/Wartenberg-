@@ -333,9 +333,6 @@ a { color: var(--c-primary); }
 .link-item::after { content: "↓"; color: var(--c-primary); font-weight: 700; }
 
 /* ---------- iFrame ---------- */
-.iframe-card { padding: 0; overflow: hidden; }
-.iframe-card iframe { display: block; width: 100%; height: 420px; border: 0; background: #fff; }
-.iframe-card .btn { border-radius: 0; border-width: 0; border-top: 1px solid var(--c-border); }
 
 /* ---------- ÖPNV ---------- */
 .transit-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
@@ -921,3 +918,4 @@ body.lang-de .i18n-note { display: none; }
   .qr-sheet { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
   .qr-card { page-break-inside: avoid; }
 }
+.kiez-link { margin-top: 8px; }
