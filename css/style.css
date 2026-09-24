@@ -951,3 +951,7 @@ input[type="file"]::file-selector-button {
 .transit-link__go { font-size: 26px; color: var(--c-primary); }
 .section-title--first { margin-top: 0; }
 .news:not([hidden]) + .section-title--first { margin-top: 8px; }
+/* Ungerade Kachelzahl: letzte Kachel über die volle Breite (2 Spalten am Handy) */
+@media (max-width: 559px) {
+  .tile-grid > .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
