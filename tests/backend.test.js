@@ -318,6 +318,7 @@ mails.length = 0; dg = ctx.morningDigest();
 check('Keine Morgen-Mail, wenn nichts fällig', dg.red === 0 && mails.length === 0);
 check('Morgen-Trigger 7 Uhr angelegt', triggers.some((t) => t.getHandlerFunction() === 'morningDigest'));
 
+check('Wohnungsbezeichnung: Nummer → „Whg 04“, Gewerbe/„Whg“ bleibt', ctx.whg('04') === 'Whg 04' && ctx.whg("'4a") === 'Whg 4a' && ctx.whg('Laden EG links') === 'Laden EG links' && ctx.whg('Whg 7') === 'Whg 7');
 // ================= Wetter =================
 delete cache.weather; fetches.length = 0;
 wx.hours = [...mkHours('2026-07-01', (h) => (h < 7 ? 'clear-night' : 'clear-day'), 18, 33), ...mkHours('2026-07-02', (h) => (h === 14 || h === 15 ? 'thunderstorm' : 'partly-cloudy-day'), 20, 29), ...mkHours('2026-07-03', () => 'cloudy', 15, 22), ...mkHours('2026-07-04', () => 'rain', 10, 12)];
