@@ -247,9 +247,11 @@ function submitTicket(p) {
     str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "", doneCode, defaultOwner(type),
   ]);
 
+  // Klingelschild: Auftrag per Mail an den Hausmeister; das Ergebnis steht in der Info-Mail an die Verwaltung.
+  let bell = null;
   if (type === "Klingelschild") {
-    if (withinLimit("hausmeisterMail", CONFIG.LIMITS.hausmeisterMailsPer6h, 21600)) sendBellOrder(id, doneCode, p);
-    else console.warn("Tageslimit Hausmeister-Mails erreicht – Auftrag nur in der Tabelle:", id);
+    if (withinLimit("hausmeisterMail", CONFIG.LIMITS.hausmeisterMailsPer6h, 21600)) bell = sendBellOrder(id, doneCode, p);
+    else bell = { sent: false, reason: "Limit für Hausmeister-Mails erreicht – Auftrag bitte selbst weitergeben" };
   }
 
   notify(`Neuer Antrag: ${type} (${id})`, [
@@ -261,6 +263,10 @@ function submitTicket(p) {
     str(p.ort) ? `Ort: ${str(p.ort)}` : "",
     `Details: ${details}`,
     photoUrl ? `Foto: ${photoUrl}` : "",
+    ...(bell ? ["", bell.sent
+      ? `✔ Auftrag per E-Mail an den Hausmeister gesendet (${bell.to}). Gesendeter Text:`
+      : `✘ KEINE Mail an den Hausmeister: ${bell.reason}`,
+    bell.sent ? "------------------------------\n" + bell.body + "\n------------------------------" : ""] : []),
   ]);
 
   return { ok: true, id };
@@ -714,9 +720,10 @@ function doneUrl(id, code) {
 }
 
 /** E-Mail an den Hausmeister: Klingelschild aktualisieren. Fehler blockieren den Antrag nicht. */
+/** Gibt { sent, to, body } bzw. { sent: false, reason } zurück. */
 function sendBellOrder(id, code, p) {
-  const to = PropertiesService.getScriptProperties().getProperty("HAUSMEISTER_EMAIL") || CONFIG.HAUSMEISTER_EMAIL;
-  if (!to) return;
+  const to = (PropertiesService.getScriptProperties().getProperty("HAUSMEISTER_EMAIL") || CONFIG.HAUSMEISTER_EMAIL || "").trim();
+  if (!to) return { sent: false, reason: "keine Hausmeister-Adresse eingetragen" };
   const link = doneUrl(id, code);
   const facts = [
     ["Adresse", [plain(p.entrance, 60), plain(p.house, 60)].filter(Boolean).join(" · ")],
@@ -763,8 +770,10 @@ function sendBellOrder(id, code, p) {
       name: CONFIG.SENDER_NAME,
       replyTo: replyTo.split(",")[0].trim() || undefined,
     });
+    return { sent: true, to, body };
   } catch (err) {
     console.error("Hausmeister-Mail fehlgeschlagen:", err);
+    return { sent: false, reason: `Versand fehlgeschlagen (${err.message || err})` };
   }
 }
 

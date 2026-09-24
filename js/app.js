@@ -1502,14 +1502,22 @@
     }
   }
 
-  async function staffPost(payload) {
+  async function staffPost(payload, timeoutMs = 30000) {
     const s = staff();
-    const res = await fetch(CFG.API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ ...payload, token: payload.token || (s && s.token) }),
-      redirect: "follow",
-    });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs); // Google antwortet manchmal gar nicht
+    let res;
+    try {
+      res = await fetch(CFG.API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ ...payload, token: payload.token || (s && s.token) }),
+        redirect: "follow",
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json().catch(() => ({}));
     if (data.ok === false) {
@@ -1546,6 +1554,7 @@
       const cur = staff();
       if (!cur || cur.token !== s.token) return;
       writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities });
+      loadTasks(); // Aufträge schon im Hintergrund holen
       fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
     } catch (err) {
       const cur = staff();
@@ -1778,16 +1787,38 @@
 
   /* ---------- Aufträge ---------- */
 
-  async function loadTasks() {
+  // Zuletzt geladene Aufträge sofort zeigen, im Hintergrund aktualisieren (Google braucht oft 5–15 s).
+  const TASKS_KEY = "mieterapp.staffTasks";
+  let tasksLoading = null;
+
+  function showCachedTasks() {
+    const c = readJson(TASKS_KEY);
+    const s = staff();
+    if (!c || !s || c.token !== s.token) return null;
+    renderTasks(c.tasks || []);
+    return c;
+  }
+
+  function loadTasks() {
+    if (tasksLoading) return tasksLoading;
     const status = $("#tasksStatus");
-    status.textContent = "Lade Aufträge …";
-    try {
-      const data = await staffPost({ action: "getTasks" });
-      renderTasks(data.tasks || []);
-      status.textContent = data.tasks.length ? `${data.tasks.length} offen · Stand ${formatTime(new Date())}` : "";
-    } catch (err) {
-      status.textContent = err.userMessage || "Aufträge konnten nicht geladen werden (kein Netz?).";
-    }
+    const cached = showCachedTasks();
+    const stand = (at) => `Stand ${formatTime(new Date(at))}`;
+    status.textContent = cached ? `${stand(cached.at)} · wird aktualisiert …` : "Lade Aufträge … (kann einige Sekunden dauern)";
+    const token = (staff() || {}).token;
+    tasksLoading = staffPost({ action: "getTasks" }, 25000).then((data) => {
+      const tasks = data.tasks || [];
+      writeJson(TASKS_KEY, { token, at: Date.now(), tasks });
+      renderTasks(tasks);
+      status.textContent = `${tasks.length} offen · ${stand(Date.now())}`;
+    }).catch((err) => {
+      const why = err.userMessage || (err.name === "AbortError"
+        ? "Google hat nicht rechtzeitig geantwortet" : "keine Verbindung");
+      status.textContent = cached
+        ? `Aktualisieren fehlgeschlagen (${why}) – angezeigt: ${stand(cached.at)}. Bitte „Aktualisieren“ tippen.`
+        : `Aufträge konnten nicht geladen werden (${why}). Bitte „Aktualisieren“ tippen.`;
+    }).finally(() => { tasksLoading = null; });
+    return tasksLoading;
   }
 
   function renderTasks(tasks) {
@@ -1825,6 +1856,8 @@
     try {
       await staffPost({ action: "completeTask", id });
       toast("Als erledigt gemeldet.", "ok");
+      const c = readJson(TASKS_KEY); // sofort aus der Liste nehmen, nicht auf Google warten
+      if (c) { c.tasks = (c.tasks || []).filter((t) => t.id !== id); writeJson(TASKS_KEY, c); renderTasks(c.tasks); }
       loadTasks();
     } catch (err) {
       btn.disabled = false;
@@ -1955,6 +1988,7 @@
       pendingScan = null;
       localRemove(STAFF_KEY);
       localRemove(STAFF_TODAY_KEY);
+      localRemove(TASKS_KEY);
       renderStaff();
       location.hash = "notfall";
       toast("Abgemeldet.", "ok");
