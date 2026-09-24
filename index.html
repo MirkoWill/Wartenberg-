@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=23">
+  <link rel="stylesheet" href="css/style.css?v=24">
 </head>
 <body>
   <header class="app-header">
@@ -241,9 +241,10 @@
 
         <details class="rule staff-privacy">
           <summary>Datenschutz-Hinweis</summary>
-          <p>Mit jedem Nachweis speichern wir Ihren Namen, den Ort, die Tätigkeit und die Uhrzeit (bei Offline-Scans die
-            Uhrzeit des Scans) sowie freiwillig eine Notiz oder ein Foto. Zweck ist der Leistungsnachweis gegenüber der
-            WEG Wartenberger Dorfkrug. Die Bewohner sehen in der App nur Ort, Tätigkeit und Datum, nicht Ihren Namen.
+          <p>Mit jedem Nachweis speichern wir Ihre Mitarbeiternummer (keinen Namen), den Ort, die Tätigkeit und die
+            Uhrzeit (bei Offline-Scans die Uhrzeit des Scans) sowie freiwillig eine Notiz oder ein Foto. Wer hinter einer
+            Nummer steht, weiß nur Ihr Arbeitgeber. Zweck ist der Leistungsnachweis gegenüber der WEG Wartenberger
+            Dorfkrug. Die Bewohner sehen in der App nur Ort, Tätigkeit und Datum.
             Verantwortlich: Willbrandt und Kompagnon (siehe Impressum). Die Daten liegen in einer Google-Tabelle der
             Hausverwaltung.</p>
         </details>
@@ -580,10 +581,10 @@
       <details class="rule">
         <summary>Hausmeister-Portal und Reinigungsnachweise</summary>
         <p>Der Hausmeisterdienst dokumentiert erledigte Arbeiten (z. B. Treppenhausreinigung) per QR-Code in einem
-          eigenen, mit persönlichem Link geschützten Bereich der App. Gespeichert werden Name der Mitarbeiterin bzw. des
-          Mitarbeiters, Ort, Tätigkeit, Uhrzeit sowie freiwillig Notiz und Foto – als Leistungsnachweis gegenüber der
-          WEG (Art. 6 Abs. 1 lit. b und f DSGVO). Bewohnerinnen und Bewohner sehen in der App nur Ort, Tätigkeit und
-          Datum, keine Namen. Der Reinigungsplan wird zusätzlich im Google-Kalender der WEG veröffentlicht.</p>
+          eigenen, mit persönlichem Link geschützten Bereich der App. Gespeichert werden eine Mitarbeiternummer
+          (pseudonym, ohne Namen; die Zuordnung kennt nur der Hausmeisterdienst), Ort, Tätigkeit, Uhrzeit sowie freiwillig
+          Notiz und Foto – als Leistungsnachweis gegenüber der WEG (Art. 6 Abs. 1 lit. b und f DSGVO). Bewohnerinnen und
+          Bewohner sehen in der App nur Ort, Tätigkeit und Datum. Der Reinigungsplan wird zusätzlich im Google-Kalender der WEG veröffentlicht.</p>
       </details>
       <details class="rule">
         <summary>Anfragen per WhatsApp und Telefon</summary>
@@ -719,8 +720,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=23"></script>
-  <script src="js/i18n.js?v=23"></script>
-  <script src="js/app.js?v=23"></script>
+  <script src="js/config.js?v=24"></script>
+  <script src="js/i18n.js?v=24"></script>
+  <script src="js/app.js?v=24"></script>
 </body>
 </html>

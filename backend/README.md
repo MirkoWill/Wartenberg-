@@ -80,10 +80,10 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 
 | Blatt | Inhalt |
 |---|---|
-| **Mitarbeiter** | 1 Zeile *Verwaltung* + 20 Zeilen *Hausmeister*, je mit **persönlichem Link**. Spalte *Name* ausfüllen, Link per WhatsApp/E-Mail an die Person schicken – einmal am Handy öffnen, dann bleibt sie angemeldet. Zugang sperren: *Aktiv* abhaken (wirkt nach spätestens 5 Minuten). Mehr Links: Menü **Mieter-App → Mitarbeiter-Links ergänzen** (nach Erhöhen von `STAFF_LINKS`). Rolle *Verwaltung* sieht zusätzlich „QR-Codes drucken“. |
+| **Mitarbeiter** | **Nur Nummern, keine Namen** (pseudonym): `007` Verwaltung, `001` Leitung Hausmeisterdienst, `100`–`119` Mitarbeiter, je mit **persönlichem Link**. Die Liste (Nr + Link) geht an den Hausmeisterdienst, der selbst festhält, wer welche Nummer hat. Link einmal am Handy öffnen, dann bleibt man angemeldet. Zugang sperren: *Aktiv* abhaken (wirkt nach spätestens 5 Minuten); für eine neue Person besser eine unbenutzte Nummer vergeben. Mehr Nummern: `STAFF_LINKS` erhöhen, dann Menü **Mieter-App → Mitarbeiter-Links ergänzen**. Rolle *Verwaltung* sieht zusätzlich „QR-Codes drucken“. |
 | **QR-Orte** | Alle Orte mit QR-Code (Code, Ort, Bereich, Aufgang-ID, Standard-Tätigkeit). *Für Bewohner anzeigen* = erscheint bei den Bewohnern unter „Hausreinigung & Pflege“ (bei Aufgang-ID nur in diesem Aufgang, leer = alle). Neue Orte einfach als Zeile ergänzen; *Code* nur Buchstaben/Ziffern/_ und danach nicht mehr ändern (steht im gedruckten QR-Code). |
 | **Tätigkeiten** | Auswahlliste beim Scannen; beliebig erweiterbar. |
-| **Reinigung** | Jeder Nachweis: Scan-Zeit, Ort, Tätigkeit, Mitarbeiter, Notiz, Foto, *Erfassung* = „QR-Scan“ oder „manuell gewählt“ (QR-Code beschädigt). |
+| **Reinigung** | Jeder Nachweis: Scan-Zeit, Ort, Tätigkeit, Mitarbeiter-Nr, Notiz, Foto, *Erfassung* = „QR-Scan“ oder „manuell gewählt“ (QR-Code beschädigt). |
 | **Mängel Hausmeister** | Vom Hausmeister/der Verwaltung erfasste Mängel, getrennt von den Bewohner-Tickets; Status wie bei *Tickets*. |
 | **Reinigungsplan** | Termine vom Hausmeister (siehe unten). |
 

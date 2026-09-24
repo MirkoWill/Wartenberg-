@@ -43,11 +43,12 @@ const CONFIG = {
     cleaning: {
       name: "Reinigung",
       headers: ["Zeitpunkt (Scan)", "Ort-Code", "Mitarbeiter-Nr", "Eingang Server", "Ort", "Tätigkeit",
-        "Mitarbeiter", "Notiz", "Foto", "Aufgang-ID", "Erfassung"],
+        "Notiz", "Foto", "Aufgang-ID", "Erfassung"],
     },
     staff: {
       name: "Mitarbeiter",
-      headers: ["Nr", "Name", "Rolle", "Aktiv", "Token", "Persönlicher Link"],
+      // Pseudonym: nur Nummern, keine Namen. Wer hinter einer Nummer steht, dokumentiert die Firma selbst.
+      headers: ["Nr", "Rolle", "Aktiv", "Token", "Persönlicher Link"],
     },
     areas: {
       name: "QR-Orte",
@@ -59,7 +60,7 @@ const CONFIG = {
     },
     staffDefects: {
       name: "Mängel Hausmeister",
-      headers: ["ID", "Eingang", "Erfasst von", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
+      headers: ["ID", "Eingang", "Erfasst von (Nr)", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
         "Status", "Erledigt am", "Notiz Verwaltung"],
     },
     plan: {
@@ -84,6 +85,9 @@ const CONFIG = {
   APP_URL: "https://mirkowill.github.io/Wartenberg-/",
   // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
   CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
+  // Mitarbeiternummern: feste Nummern plus STAFF_LINKS Nummern ab STAFF_FIRST_NR.
+  STAFF_FIXED: [["007", "Verwaltung"], ["001", "Hausmeister"]], // 007 Hausverwaltung, 001 Leitung Hausmeisterdienst
+  STAFF_FIRST_NR: 100,
   STAFF_LINKS: 20,
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
@@ -886,22 +890,26 @@ function setupPortalSheets() {
   ensureDailyCheckTrigger();
 }
 
-/** Füllt das Blatt „Mitarbeiter“ auf CONFIG.STAFF_LINKS Zeilen mit persönlichen Links auf. */
+/**
+ * Füllt das Blatt „Mitarbeiter“ auf: feste Nummern (007 Verwaltung, 001 Leitung) und
+ * CONFIG.STAFF_LINKS Nummern ab 100, jeweils mit persönlichem Link. Keine Namen (Pseudonym).
+ */
 function ensureStaffLinks() {
   const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.staff.name);
+  sheet.getRange(2, 1, sheet.getMaxRows() - 1, 1).setNumberFormat("@"); // „007“ bleibt „007“
   const rows = Math.max(sheet.getLastRow() - 1, 0);
-  const have = rows ? sheet.getRange(2, 1, rows, 6).getValues().filter((r) => r[4]).length : 0;
-  const add = [];
-  if (!have) add.push([0, "Willbrandt und Kompagnon", "Verwaltung", true]);
-  for (let i = have + add.length; i <= CONFIG.STAFF_LINKS; i++) add.push([i, "", "Hausmeister", true]);
+  const have = rows ? sheet.getRange(2, 1, rows, 4).getValues().filter((r) => r[3]).map((r) => String(r[0])) : [];
+  const add = CONFIG.STAFF_FIXED.filter(([nr]) => have.indexOf(nr) === -1).map(([nr, role]) => [nr, role]);
+  const numbered = have.map(Number).filter((n) => n >= CONFIG.STAFF_FIRST_NR);
+  let next = numbered.length ? Math.max.apply(null, numbered) + 1 : CONFIG.STAFF_FIRST_NR;
+  for (let i = numbered.length; i < CONFIG.STAFF_LINKS; i++) add.push([String(next++), "Hausmeister"]);
   if (!add.length) return;
-  const start = sheet.getLastRow() + 1;
-  sheet.getRange(start, 1, add.length, 6).setValues(add.map((r) => {
+  sheet.getRange(sheet.getLastRow() + 1, 1, add.length, 5).setValues(add.map(([nr, role]) => {
     const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
-    return [r[0], r[1], r[2], r[3], token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
+    return [nr, role, true, token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
   }));
-  sheet.getRange(2, 4, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
-  sheet.getRange(2, 3, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+  sheet.getRange(2, 3, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  sheet.getRange(2, 2, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation()
     .requireValueInList(["Hausmeister", "Verwaltung"], true).build());
   CacheService.getScriptCache().remove("staff");
 }
@@ -919,7 +927,7 @@ function sheetObjects(def) {
   });
 }
 
-/** Prüft den persönlichen Zugang. Ergebnis: { nr, name, role }. */
+/** Prüft den persönlichen Zugang. Ergebnis: { nr, name: "Nr. 100", role } – keine Klarnamen. */
 function authStaff(token) {
   const t = String(token || "").trim();
   if (!/^[a-f0-9]{24,64}$/i.test(t)) throw userError("Kein gültiger Zugang", "staff");
@@ -930,7 +938,8 @@ function authStaff(token) {
     map = {};
     sheetObjects(CONFIG.SHEETS.staff).forEach((r) => {
       if (r.Token && r.Aktiv === true) {
-        map[String(r.Token)] = { nr: r.Nr, name: String(r.Name || "").trim() || `Mitarbeiter ${r.Nr}`, role: String(r.Rolle || "Hausmeister") };
+        const nr = String(r.Nr).trim();
+        map[String(r.Token)] = { nr, name: `Nr. ${nr}`, role: String(r.Rolle || "Hausmeister") };
       }
     });
     cache.put("staff", JSON.stringify(map), 300);
@@ -977,7 +986,7 @@ function logCleaning(p, user) {
 
   const photoUrl = p.photo ? savePhoto(p.photo, `Nachweis_${area.code}_${Utilities.formatDate(when, CONFIG.TIMEZONE, "yyyyMMdd_HHmm")}`) : "";
   appendRow(CONFIG.SHEETS.cleaning.name, [
-    when, area.code, str(String(user.nr), 10), now, str(area.ort, 120), activity, str(user.name, 80),
+    when, area.code, str(String(user.nr), 10), now, str(area.ort, 120), activity,
     str(p.note, 500), photoUrl, area.aufgang, p.manual ? "manuell gewählt" : "QR-Scan",
   ]);
   return { ok: true, ort: area.ort, activity, time: when.toISOString() };
@@ -993,7 +1002,7 @@ function getTasks(p, user) {
     created: iso(r.Eingang),
   }));
   const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter(open).map((r) => ({
-    id: r.ID, source: r["Erfasst von"], type: "Mangel (intern)", status: r.Status, entrance: "", wohnung: "",
+    id: r.ID, source: r["Erfasst von (Nr)"], type: "Mangel (intern)", status: r.Status, entrance: "", wohnung: "",
     name: "", contact: "", date: "", details: r.Beschreibung, ort: r.Ort, urgent: r.Dringend === true,
     created: iso(r.Eingang),
   }));
