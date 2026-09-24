@@ -835,7 +835,8 @@ function plain(value, max) {
 /** "04" → "Whg 04", "Whg 04" bleibt unverändert. */
 function whg(value) {
   const v = String(value || "").replace(/^'/, "").trim();
-  return /^(whg|wohnung|we)\b/i.test(v) ? v : `Whg ${v}`;
+  // Nur reine Nummern bekommen „Whg“ davor („04“, „4a“) – Gewerbe wie „Laden EG“ bleibt, wie es ist.
+  return /^\d/.test(v) ? `Whg ${v}` : v;
 }
 
 function escHtml(value) {
@@ -920,7 +921,7 @@ function completeTicketPage(q) {
   if (!row || !q.t || String(row[c("Erledigt-Code")]) !== String(q.t)) {
     return donePage("Link ungültig", "Dieser Link ist ungültig oder abgelaufen. Bitte wenden Sie sich an die Hausverwaltung.");
   }
-  const what = `${row[c("Typ")]} · ${row[c("Aufgang")]}, Whg ${row[c("Wohnung")]} · Ticket ${q.id}`;
+  const what = `${row[c("Typ")]} · ${row[c("Aufgang")]}, ${whg(row[c("Wohnung")])} · Ticket ${q.id}`;
 
   if (row[c("Status")] === "erledigt") {
     return donePage("Bereits erledigt", `${what} ist bereits als erledigt gemeldet. Vielen Dank!`);

@@ -1134,7 +1134,7 @@
       if (!validate(form)) return;
       const wohnung = form.elements.wohnung.value.trim();
       const where = OBJ.key ? ` (${OBJ.label})` : "";
-      const text = `Hallo, ich benötige den Zählerstand/Zugang für Wohnung ${wohnung}${where}.`;
+      const text = `Hallo, ich benötige den Zählerstand/Zugang für ${whgLabel(wohnung)}${where}.`;
       const url = `https://wa.me/${OBJ.whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
       window.open(url, "_blank", "noopener");
     });
@@ -1962,7 +1962,8 @@
 
   function whgLabel(v) {
     const s = String(v).replace(/^'/, "");
-    return /^(whg|wohnung|we)\b/i.test(s) ? s : `Whg ${s}`;
+    // Nur reine Nummern bekommen „Whg“ davor („04“, „4a“) – Gewerbe wie „Laden EG“ bleibt, wie es ist.
+    return /^\d/.test(s) ? `Whg ${s}` : s;
   }
 
   async function completeTask(id, btn) {

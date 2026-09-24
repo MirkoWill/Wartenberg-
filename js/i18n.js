@@ -12,6 +12,10 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "Wohnung / Gewerbe *": ["Flat / business unit *", "Квартира / помещение *", "Квартира / приміщення *", "Byt / provozovna *"],
+    "Wohnung / Gewerbe": ["Flat / business unit", "Квартира / помещение", "Квартира / приміщення", "Byt / provozovna"],
+    "Steht am Türrahmen. Gewerbe: z. B. „Laden EG links“": ["Shown on the door frame. Businesses: e.g. “Shop ground floor left”", "Указан на дверной раме. Помещения: напр. «Магазин, 1 этаж слева»", "Вказано на дверній рамі. Приміщення: напр. «Магазин, 1 поверх ліворуч»", "Je uvedeno na zárubni dveří. Provozovny: např. „Obchod přízemí vlevo“"],
+    "z. B. 04 oder Laden EG": ["e.g. 04 or Shop GF", "напр. 04 или Магазин", "напр. 04 або Магазин", "např. 04 nebo Obchod"],
     "Sonnig": ["Sunny", "Солнечно", "Сонячно", "Slunečno"],
     "Teils bewölkt": ["Partly cloudy", "Переменная облачность", "Мінлива хмарність", "Polojasno"],
     "Bewölkt": ["Cloudy", "Облачно", "Хмарно", "Zataženo"],

@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=47">
+  <link rel="stylesheet" href="css/style.css?v=48">
 </head>
 <body>
   <header class="app-header">
@@ -402,8 +402,9 @@
           <legend class="form-block__title">Ihre Angaben</legend>
           <div class="field-row">
             <label class="field">
-              <span class="field__label">Wohnung *</span>
-              <input name="wohnung" required autocomplete="off" placeholder="z. B. Whg 04">
+              <span class="field__label">Wohnung / Gewerbe *</span>
+              <input name="wohnung" required autocomplete="off" placeholder="z. B. 04 oder Laden EG">
+              <span class="field__hint">Steht am Türrahmen. Gewerbe: z. B. „Laden EG links“</span>
             </label>
             <label class="field">
               <span class="field__label">Ablesedatum *</span>
@@ -446,8 +447,9 @@
       <p class="lead">Die Stromzähler sind verschlossen. Fragen Sie den Zugang oder Zählerstand direkt per WhatsApp an – ohne Registrierung.</p>
       <form class="form" id="formPower" novalidate>
         <label class="field">
-          <span class="field__label">Wohnungsnummer *</span>
-          <input name="wohnung" required autocomplete="off" placeholder="z. B. Whg 04">
+          <span class="field__label">Wohnung / Gewerbe *</span>
+          <input name="wohnung" required autocomplete="off" placeholder="z. B. 04 oder Laden EG">
+          <span class="field__hint">Steht am Türrahmen. Gewerbe: z. B. „Laden EG links“</span>
         </label>
         <button class="btn btn--whatsapp btn--block" type="submit">Per WhatsApp anfragen</button>
       </form>
@@ -458,8 +460,9 @@
       <p class="lead">Für Telekom, Vodafone &amp; Co. Termine sind frühestens in <strong>2 Werktagen</strong> möglich, nur Montag bis Freitag.</p>
       <form class="form" id="formElectric" novalidate>
         <label class="field">
-          <span class="field__label">Wohnungsnummer *</span>
-          <input name="wohnung" required autocomplete="off">
+          <span class="field__label">Wohnung / Gewerbe *</span>
+          <input name="wohnung" required autocomplete="off" placeholder="z. B. 04 oder Laden EG">
+          <span class="field__hint">Steht am Türrahmen. Gewerbe: z. B. „Laden EG links“</span>
         </label>
         <label class="field">
           <span class="field__label">Ihr Name *</span>
@@ -487,8 +490,9 @@
       <p class="lead">Neues oder geändertes Klingel- und Briefkastenschild beantragen.</p>
       <form class="form" id="formBell" novalidate>
         <label class="field">
-          <span class="field__label">Wohnungsnummer *</span>
-          <input name="wohnung" required autocomplete="off">
+          <span class="field__label">Wohnung / Gewerbe *</span>
+          <input name="wohnung" required autocomplete="off" placeholder="z. B. 04 oder Laden EG">
+          <span class="field__hint">Steht am Türrahmen. Gewerbe: z. B. „Laden EG links“</span>
         </label>
         <label class="field">
           <span class="field__label">Ihr Name *</span>
@@ -534,8 +538,8 @@
         </label>
         <div class="field-row">
           <label class="field">
-            <span class="field__label">Wohnung</span>
-            <input name="wohnung" autocomplete="off">
+            <span class="field__label">Wohnung / Gewerbe</span>
+            <input name="wohnung" autocomplete="off" placeholder="z. B. 04 oder Laden EG">
           </label>
           <label class="field">
             <span class="field__label">Name</span>
@@ -802,8 +806,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=47"></script>
-  <script src="js/i18n.js?v=47"></script>
-  <script src="js/app.js?v=47"></script>
+  <script src="js/config.js?v=48"></script>
+  <script src="js/i18n.js?v=48"></script>
+  <script src="js/app.js?v=48"></script>
 </body>
 </html>
