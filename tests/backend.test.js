@@ -287,6 +287,9 @@ late[tcol('Status')] = 'offen'; late[tcol('In Arbeit seit')] = '';
 const ra = ctx.rebuildAnalytics();
 const an = sheets['Auswertung Aufträge'].grid;
 check('Auswertung Aufträge für Looker Studio', ra.tasks === an.length - 1 && an[0][0] === 'ID' && an.some((r) => r[0] === 'T-LATE' && r[16] === 'rot' && r[15] === 'überfällig'), an.slice(0, 2));
+const ah = an[0], lateRow = an.find((r) => r[0] === 'T-LATE');
+check('Auswertung: fertige Zähler Offen/Erledigt/Überfällig/SLA eingehalten', lateRow[ah.indexOf('Offen')] === 1 && lateRow[ah.indexOf('Erledigt')] === 0 && lateRow[ah.indexOf('Überfällig')] === 1 && lateRow[ah.indexOf('SLA eingehalten')] === ''
+  && an.slice(1).filter((r) => r[ah.indexOf('Status')] === 'erledigt').every((r) => r[ah.indexOf('SLA eingehalten')] === 0 || r[ah.indexOf('SLA eingehalten')] === 1), lateRow);
 check('Auswertung Reinigung (365 Tage Soll/Ist)', sheets['Auswertung Reinigung'].grid[0][3] === 'Soll' && ra.cleaning === sheets['Auswertung Reinigung'].grid.length - 1);
 mails.length = 0;
 let dg = ctx.morningDigest();

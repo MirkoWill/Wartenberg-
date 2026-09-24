@@ -68,7 +68,7 @@ const CONFIG = {
       name: "Auswertung Aufträge",
       headers: ["ID", "Quelle", "Art", "Aufgang", "Zuständig", "Status", "Dringend", "Eingang", "In Arbeit seit",
         "Erledigt am", "Reaktion fällig", "Erledigung fällig", "Reaktionszeit (Std.)", "Durchlaufzeit (Tage)",
-        "SLA Reaktion", "SLA Erledigung", "Ampel", "Monat"],
+        "SLA Reaktion", "SLA Erledigung", "Ampel", "Monat", "Offen", "Erledigt", "Überfällig", "SLA eingehalten"],
     },
     analyticsCleaning: {
       name: "Auswertung Reinigung",
@@ -1871,7 +1871,10 @@ function rebuildAnalytics() {
     const s = slaInfo(t, now);
     return [t.id, t.source === "Bewohner" ? "Bewohner" : "Hausmeister", t.type, t.entrance || t.object, t.owner, t.status,
       t.urgent, t.created || "", t.inWork || "", t.done || "", s.reactDue, s.doneDue, round(s.reactHours, 1),
-      round(s.leadDays, 1), label[s.react], label[s.done], ampel[s.light], monthKey(t.created)].map(protectCell);
+      round(s.leadDays, 1), label[s.react], label[s.done], ampel[s.light], monthKey(t.created),
+      // Fertige Zähler für Looker Studio (keine Formeln nötig): Summe bzw. Durchschnitt (= Quote)
+      t.status === "erledigt" ? 0 : 1, t.status === "erledigt" ? 1 : 0, s.light === "red" ? 1 : 0,
+      t.status === "erledigt" ? (s.react === "ok" && s.done === "ok" ? 1 : 0) : ""].map(protectCell);
   });
   writeTable(ss, CONFIG.SHEETS.analytics, rows);
 

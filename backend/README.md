@@ -159,7 +159,9 @@ Das Script baut jede Nacht (und per Menü **Mieter-App → Auswertung aktualisie
 Datenquelle eignen – **nicht von Hand bearbeiten**, sie werden überschrieben:
 
 - **Auswertung Aufträge**: eine Zeile je Meldung/Mangel mit Art, Aufgang, Zuständig, Status, Zeiten, Fristen,
-  Reaktionszeit (Std.), Durchlaufzeit (Tage), SLA eingehalten/verspätet/überfällig, Ampel, Monat.
+  Reaktionszeit (Std.), Durchlaufzeit (Tage), SLA eingehalten/verspätet/überfällig, Ampel, Monat – plus fertige
+  Zähler für Diagramme ohne Formeln: **Offen**, **Erledigt**, **Überfällig** (je 1/0, als Summe) und
+  **SLA eingehalten** (1/0 nur bei erledigten; als Durchschnitt und Typ „Prozent“ = SLA-Quote).
   Enthält **keine Namen, Telefonnummern oder Beschreibungen** der Bewohner.
 - **Auswertung Reinigung**: je Tag und Plan-Eintrag Soll (1) und Ist (0/1) – Erfüllungsquote = Summe Ist / Summe Soll.
 
@@ -171,7 +173,8 @@ Einrichten (einmalig, ca. 15 Minuten):
    Überschriften“ angehakt → **Hinzufügen**. Danach über **Ressource → Datenquellen verwalten → Datenquelle hinzufügen**
    auch **Auswertung Reinigung** anbinden.
 4. Vorschläge für Diagramme:
-   - **Kurzübersicht** (Kennzahl): Anzahl Datensätze, Filter Status ≠ erledigt; daneben Filter Ampel = rot.
+   - **Kurzübersichten** (Kennzahlen): „Offen“ (Summe), „Überfällig“ (Summe), „SLA eingehalten“ (Durchschnitt,
+     Feldtyp Prozent), „Reaktionszeit (Std.)“ (Durchschnitt).
    - **Zeitreihe/Säulen**: Dimension „Monat“, Aufschlüsselung „Art“, Messwert Anzahl.
    - **SLA-Quote**: Kreisdiagramm Dimension „SLA Erledigung“.
    - **Reaktionszeit**: Balken Dimension „Art“, Messwert „Reaktionszeit (Std.)“ als Durchschnitt.
