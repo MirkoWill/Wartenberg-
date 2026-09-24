@@ -30,6 +30,7 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 | US 3.2 QR-Nachweis | `#hausmeister` | html5-qrcode, Rückkamera, Tätigkeit wählen, Ton/Vibration + grüner Haken; offline gespeichert und mit Scan-Zeit nachgesendet |
 | US 3.3 Auftragsliste | `#hausmeister` | Offene Bewohner-Tickets + interne Mängel, „Erledigt“-Button; Mängel erfassen (Blatt „Mängel Hausmeister“) |
 | Reinigungsplan | Tabelle, Kalender | Blatt „Reinigungsplan“ → Google-Kalender; tägliche Kontrolle; Bewohner sehen „Hausreinigung & Pflege“ |
+| Einführung & Schrift | Start, Fußzeile | Kurze Einführung (3 Schritte) einmal nach der ersten Zustimmung, erneut über „Kurze Einführung“; Schalter „A+“ für größere Schrift (pro Gerät gemerkt) |
 | Zugangs-PIN | Zustimmungsdialog | PIN vom Aushang einmal pro Gerät; 3 Fehlversuche → 15 Min. Sperre; Prüfung zusätzlich im Backend (`APP_PIN`), Content-Security-Policy |
 
 ## Struktur

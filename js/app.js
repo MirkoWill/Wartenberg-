@@ -16,6 +16,10 @@
   // bewusst Menü ⋮ → „Zum Startbildschirm hinzufügen“.
   window.addEventListener("beforeinstallprompt", (e) => e.preventDefault());
 
+  // Größere Schrift (Schalter „A+“), sofort anwenden, damit nichts springt.
+  const TEXT_KEY = "mieterapp.textsize";
+  try { if (localStorage.getItem(TEXT_KEY) === "large") document.documentElement.classList.add("text-large"); } catch (e) { /* egal */ }
+
   // Fehlerüberwachung: unerwartete Fehler (nur nach Zustimmung, max. 5 je Sitzung, ohne persönliche
   // Daten) an die Verwaltung melden – Blatt „Fehlerprotokoll“, Systemprüfung per Mail.
   const APP_VERSION = ((document.querySelector('script[src*="app.js"]') || {}).src || "").replace(/.*v=/, "") || "?";
@@ -408,6 +412,7 @@
       writeJson(CONSENT_KEY, { v: CONSENT_VERSION, at: Date.now() });
       updateConsentUi();
       if (viewEnterHooks[currentView]) viewEnterHooks[currentView]();
+      maybeShowIntro();
     });
     $("#consentDecline").addEventListener("click", () => showConsentStep("declined"));
     $("#consentRevoke").addEventListener("click", () => {
@@ -2065,6 +2070,74 @@
   }
 
   /* ======================================================================
+     Kurze Einführung (3 Schritte, einmal pro Gerät) und größere Schrift
+     ====================================================================== */
+
+  const INTRO_KEY = "mieterapp.intro";
+  const INTRO = [
+    { icon: "🏠", title: "Start", text: "Aktuelles aus dem Haus und alle Notfallnummern. Ein Tipp genügt, und der Anruf startet." },
+    { icon: "🧰", title: "Services", text: "Zählerstände, Mängel, Klingelschild oder einen Techniker-Termin melden – gern mit Foto. Sie erhalten sofort eine Nummer." },
+    { icon: "📋", title: "Meldungen und Infos", text: "Unter „Meldungen“ sehen Sie, wie weit Ihr Anliegen ist. Unter „Infos“ finden Sie Müllabfuhr, Hausordnung, Einkaufen und Abfahrten." },
+  ];
+  let introStep = 0;
+
+  function renderIntro() {
+    const s = INTRO[introStep];
+    $("#introIcon").textContent = s.icon;
+    $("#introTitle").textContent = t_(s.title);
+    $("#introText").textContent = t_(s.text);
+    $("#introDots").innerHTML = INTRO.map((_, i) => `<span class="${i === introStep ? "is-active" : ""}"></span>`).join("");
+    $("#introNext").textContent = introStep === INTRO.length - 1 ? t_("Los geht's") : t_("Weiter");
+    $("#introSkip").hidden = introStep === INTRO.length - 1;
+  }
+
+  function showIntro() {
+    introStep = 0;
+    renderIntro();
+    $("#intro").hidden = false;
+    document.body.classList.add("has-modal");
+    $("#introTitle").focus();
+  }
+
+  function closeIntro() {
+    $("#intro").hidden = true;
+    document.body.classList.toggle("has-modal", !$("#consent").hidden);
+    writeJson(INTRO_KEY, { seen: Date.now() });
+  }
+
+  /** Einmal pro Gerät, nach der Zustimmung; nicht für den Hausmeisterdienst. */
+  function maybeShowIntro() {
+    if (readJson(INTRO_KEY) || isStaff() || !hasConsent() || !$("#consent").hidden) return;
+    if (LEGAL_VIEWS.includes(currentView)) return;
+    showIntro();
+  }
+
+  function initIntro() {
+    $("#introNext").addEventListener("click", () => {
+      if (introStep < INTRO.length - 1) { introStep++; renderIntro(); $("#introTitle").focus(); } else closeIntro();
+    });
+    $("#introSkip").addEventListener("click", closeIntro);
+    $("#intro").addEventListener("keydown", (e) => { if (e.key === "Escape") closeIntro(); });
+    $("#introOpen").addEventListener("click", (e) => { e.preventDefault(); showIntro(); });
+  }
+
+  function initTextSize() {
+    const btn = $("#textSize");
+    const sync = () => {
+      const large = document.documentElement.classList.contains("text-large");
+      btn.setAttribute("aria-pressed", String(large));
+      btn.setAttribute("aria-label", t_(large ? "Normale Schrift" : "Größere Schrift"));
+      btn.textContent = large ? "A−" : "A+";
+    };
+    btn.addEventListener("click", () => {
+      const large = document.documentElement.classList.toggle("text-large");
+      try { localStorage.setItem(TEXT_KEY, large ? "large" : "normal"); } catch (e) { /* nur für jetzt */ }
+      sync();
+    });
+    sync();
+  }
+
+  /* ======================================================================
      Start
      ====================================================================== */
 
@@ -2091,12 +2164,13 @@
     [
       renderEntrancePicker, renderEmergency, renderWaste, renderInfos, initTransit,
       initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
-      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff,
+      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff, initIntro, initTextSize,
     ].forEach((step) => {
       try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); setTimeout(() => reportError(`${step.name}: ${err.message}`, "init"), 3000); }
     });
     try { translateDom(document.body); watchTranslations(); } catch (err) { console.error("Übersetzung:", err); }
     initRouter();
+    setTimeout(() => { try { maybeShowIntro(); } catch (e) { /* egal */ } }, 400);
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("sw.js").catch((e) => console.warn("Service Worker:", e));
