@@ -890,6 +890,7 @@ function setupPortalSheets() {
 
   ensureStaffLinks();
   ensureDailyCheckTrigger();
+  CacheService.getScriptCache().removeAll(["areas", "staff"]);
 }
 
 /**
@@ -952,6 +953,15 @@ function authStaff(token) {
 }
 
 function activeAreas() {
+  // 5 Minuten zwischenspeichern: jeder Scan fragt die Orte ab, das Blatt ändert sich selten.
+  const cache = CacheService.getScriptCache();
+  try { const hit = JSON.parse(cache.get("areas") || "null"); if (hit) return hit; } catch (e) { /* neu laden */ }
+  const list = readActiveAreas();
+  try { cache.put("areas", JSON.stringify(list), 300); } catch (e) { /* zu groß – egal */ }
+  return list;
+}
+
+function readActiveAreas() {
   return sheetObjects(CONFIG.SHEETS.areas).filter((a) => a.Code && a.Aktiv !== false).map((a) => ({
     code: String(a.Code).trim(), ort: String(a.Ort || a.Code), bereich: String(a.Bereich || ""),
     aufgang: String(a["Aufgang-ID"] || "").trim(), activity: String(a["Standard-Tätigkeit"] || ""),
