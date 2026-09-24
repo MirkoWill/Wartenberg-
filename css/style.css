@@ -39,6 +39,8 @@
   --c-hero: #2b3033;          /* Titelband */
   --c-danger: #b3261e;
   --c-danger-soft: #fbeceb;
+  --c-urgent: #b85c00;        /* dringende Störung (orange) */
+  --c-urgent-soft: #fff1e0;
   --c-ok: #4f7a28;
   --c-whatsapp: #1c9d56;
 
@@ -70,6 +72,8 @@
     --c-hero: #0d0f10;
     --c-danger: #ff7a70;
     --c-danger-soft: #3a1f1f;
+    --c-urgent: #ffab57;
+    --c-urgent-soft: #3a2a17;
     --c-ok: #a8d468;
     --shadow: none;
   }
@@ -290,6 +294,8 @@ a { color: var(--c-primary); }
 }
 .contact--danger { border-color: var(--c-danger); background: var(--c-danger-soft); }
 .contact--danger .contact__call { background: var(--c-danger); }
+.contact--urgent { border-color: var(--c-urgent); background: var(--c-urgent-soft); }
+.contact--urgent .contact__call { background: var(--c-urgent); }
 
 /* ---------- Regeln / Kiez (Akkordeon) ---------- */
 .rules { display: grid; gap: 8px; }
