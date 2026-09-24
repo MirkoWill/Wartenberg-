@@ -12,6 +12,7 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "Nur Ihre Wohnung ohne Strom: Sicherungskasten im Flur prüfen. Ganzes Haus ohne Strom: Hausmeister-Notdienst anrufen. Auch die Nachbarhäuser oder die Straße dunkel: Stromnetz Berlin anrufen.": ["Only your flat without power: check the fuse box in the hallway. Whole building without power: call the caretaker emergency service. Neighbouring buildings or the street dark too: call Stromnetz Berlin.", "Нет света только в вашей квартире: проверьте электрощиток в прихожей. Нет света во всём доме: позвоните в аварийную службу хаусмайстера. Темно и в соседних домах или на улице: позвоните в Stromnetz Berlin.", "Немає світла лише у вашій квартирі: перевірте електрощиток у передпокої. Немає світла в усьому будинку: зателефонуйте до аварійної служби хаусмайстера. Темно й у сусідніх будинках або на вулиці: зателефонуйте до Stromnetz Berlin.", "Bez proudu jen váš byt: zkontrolujte pojistkovou skříň v předsíni. Bez proudu celý dům: zavolejte pohotovost domovníka. Tma i v sousedních domech nebo na ulici: zavolejte Stromnetz Berlin."],
     "Wohnung / Gewerbe *": ["Flat / business unit *", "Квартира / помещение *", "Квартира / приміщення *", "Byt / provozovna *"],
     "Wohnung / Gewerbe": ["Flat / business unit", "Квартира / помещение", "Квартира / приміщення", "Byt / provozovna"],
     "Steht am Türrahmen. Gewerbe: z. B. „Friseur“": ["Shown on the door frame. Businesses: e.g. “Hairdresser”", "Указан на дверной раме. Помещения: напр. «Парикмахерская»", "Вказано на дверній рамі. Приміщення: напр. «Перукарня»", "Je uvedeno na zárubni dveří. Provozovny: např. „Kadeřnictví“"],
@@ -187,7 +188,6 @@ window.I18N = {
     "Schlossmontage J. Günther GmbH · Mo, Mi, Fr 8–18 · Di, Do 8–16 Uhr": ["Schlossmontage J. Günther GmbH · Mon, Wed, Fri 8–18 · Tue, Thu 8–16", "Schlossmontage J. Günther GmbH · пн, ср, пт 8–18 · вт, чт 8–16", "Schlossmontage J. Günther GmbH · пн, ср, пт 8–18 · вт, чт 8–16", "Schlossmontage J. Günther GmbH · po, st, pá 8–18 · út, čt 8–16 h"],
     "Schlüsseldienst Günther": ["Locksmith Günther", "Слесарь Günther (вскрытие замков)", "Слюсар Günther (відкриття замків)", "Zámečník Günther"],
     "Services": ["Services", "Услуги", "Послуги", "Služby"],
-    "Sicherungskasten Ihrer Wohnung prüfen (Flur). Ist das ganze Haus betroffen, bitte den Hausmeister informieren.": ["Check the fuse box of your flat (hallway). If the whole building is affected, please inform the caretaker.", "Проверьте электрощиток вашей квартиры (в коридоре). Если без света весь дом, сообщите хаусмайстеру.", "Перевірте електрощиток вашої квартири (у коридорі). Якщо без світла весь будинок, повідомте гаусмайстра.", "Zkontrolujte pojistkovou skříň svého bytu (chodba). Pokud je postižen celý dům, informujte prosím domovníka."],
     "So geht's": ["How it works", "Как это работает", "Як це працює", "Jak na to"],
     "Sonderfälle": ["Special cases", "Особые случаи", "Особливі випадки", "Zvláštní případy"],
     "Sonstiges": ["Other", "Другое", "Інше", "Ostatní"],
