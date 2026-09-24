@@ -272,5 +272,30 @@ P({ ...base, entrance: 'X\r\nBcc: evil@x.de', action: 'submitTicket', type: 'Kli
 check('H1 Keine Umbrüche in Betreffzeilen', mails.length > 0 && mails.every((m) => !/[\r\n]/.test(m.subject)), mails.map((m) => m.subject));
 check('H2 Empfänger nicht beeinflussbar', mails.every((m) => ['info@gs-schreier.de', 'service@willbrandt-kompagnon.de'].includes(m.to)));
 
+console.log('--- I. Cockpit / Leitung / Auswertung / Abfahrten (Pen-Test 2)');
+reset();
+for (const obj of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+  P({ pin: '13059', action: 'submitTicket', type: 'Mangel', details: 'x', entrance: '', object: obj, house: '' });
+}
+let i1ok = true, i1err = '';
+try { ctx.rebuildAnalytics(); } catch (e) { i1ok = false; i1err = e.message; }
+check('I1 Manipulierte Aufgang-ID (constructor/__proto__) legt Auswertung nicht lahm', i1ok, i1err);
+const ov2 = P({ action: 'adminOverview', token: ADM });
+check('I2 Cockpit bleibt nutzbar, Aufgang immer Text', ov2.ok && ov2.tasks.every((t) => typeof t.entrance === 'string'), ov2.error);
+check('I3 Leerer Auftrags-ID wird abgelehnt (erledigen/ändern)', !P({ action: 'completeTask', token: HM, id: '' }).ok && !P({ action: 'adminUpdateTask', token: ADM, id: '', status: 'erledigt' }).ok);
+check('I4 Leitung: fremde Rolle per Anfrage nicht erschleichbar', (() => { const r = P({ action: 'adminOverview', token: LEAD, role: 'Verwaltung', user: { role: 'Verwaltung' } }); return r.ok && r.role === 'Leitung' && r.tasks.every((t) => t.owner === 'Hausmeister'); })());
+check('I5 Hausmeister: Cockpit-Aktionen gesperrt, auch mit role-Feld', P({ action: 'adminOverview', token: HM, role: 'Verwaltung' }).code === 'staff');
+check('I6 Notiz-Formel wird Text (adminUpdateTask)', (() => { const t = P({ action: 'adminOverview', token: ADM }).tasks[0]; P({ action: 'adminUpdateTask', token: ADM, id: t.id, note: '=HYPERLINK("http://x")' }); const g = [sheets['Tickets'], sheets['Mängel Hausmeister']].map((s) => s.grid).flat(); return g.some((r) => r[0] === t.id && r.some((c) => typeof c === 'string' && c.startsWith("'=HYPERLINK"))); })());
+{
+  let locks = 0;
+  const orig = ctx.LockService.getScriptLock;
+  ctx.LockService.getScriptLock = () => { locks++; return orig(); };
+  G({ action: 'departures', pin: '13059' });
+  ctx.LockService.getScriptLock = orig;
+  check('I7 Abfahrten blockieren nicht die Script-Sperre (Formulare laufen weiter, auch wenn der Fahrplandienst hängt)', locks === 0, locks);
+}
+check('I8 Abfahrten nur mit PIN/Token', G({ action: 'departures' }).code === 'pin' && G({ action: 'departures', pin: '99999' }).code === 'pin');
+check('I9 Abfahrten: keine fremde Haltestelle/URL steuerbar (Parameter ignoriert)', (() => { const r = G({ action: 'departures', pin: '13059', stop: 'x', url: 'http://evil' }); return r.ok !== undefined; })());
+
 console.log(fails ? `>>> ${fails} BEFUND(E)` : '>>> KEINE BEFUNDE');
 process.exitCode = fails ? 1 : 0;

@@ -603,7 +603,7 @@
     box.hidden = false;
     box.innerHTML = `
       <div class="weather__days">${days.map((d, i) => {
-        const [icon, label] = WEATHER_ICONS[d.icon] || ["🌡️", ""];
+        const [icon, label] = Object.prototype.hasOwnProperty.call(WEATHER_ICONS, d.icon) ? WEATHER_ICONS[d.icon] : ["🌡️", ""];
         const hi = num(d.max), lo = num(d.min);
         return `<div class="weather__day">
           <div class="weather__name">${esc(dayName(d, i))}</div>
