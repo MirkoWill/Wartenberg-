@@ -17,13 +17,18 @@ const ACTIVITIES = ["Treppenhausreinigung", "Fensterreinigung Aufgang", "Müllpl
 function fakeBackend(state = {}) {
   return (d) => {
     const staff = { [STAFF]: { name: "Nr. 100", role: "Hausmeister" }, [ADMIN]: { name: "Nr. 007", role: "Verwaltung" } }[d.token];
-    if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect"].includes(d.action)) {
+    if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask"].includes(d.action)) {
       if (!staff) return { ok: false, error: "Kein gültiger Zugang", code: "staff" };
       if (state.offline && d.action === "logCleaning") return "abort";
       if (d.action === "hmLogin") return { ok: true, user: staff, areas: AREAS, activities: ACTIVITIES };
       if (d.action === "getTasks") return state.hangTasks ? null : { ok: true, tasks: state.tasks || [] };
       if (d.action === "completeTask") { state.tasks = (state.tasks || []).filter((t) => t.id !== d.id); return { ok: true }; }
       if (d.action === "submitStaffDefect") return { ok: true, id: "M-260924-ABCD" };
+      if (d.action === "adminOverview" || d.action === "adminUpdateTask") {
+        if (staff.role !== "Verwaltung") return { ok: false, error: "Nur für die Verwaltung.", code: "staff" };
+        if (d.action === "adminUpdateTask") { (state.updates = state.updates || []).push(d); return { ok: true }; }
+        return state.overview || { ok: true, kpi: { open: 0, overdue: 0, dueSoon: 0, avgReactHours: null, avgLeadDays: null, slaQuote: null, closed90: 0, cleaningQuote: null, errors24: 0 }, months: [], perEntrance: {}, tasks: [], lookerUrl: "" };
+      }
       return { ok: true };
     }
     const pin = state.pin || PIN;
@@ -236,6 +241,48 @@ function makeQrVideo(text) {
       check("QR-Druckbogen", (await p.$$(".qr-card")).length === AREAS.length);
       await ctx.close();
     }
+    {
+      const iso = (h) => new Date(Date.now() + h * 3600000).toISOString();
+      const mk = (id, light, extra) => ({ id, kind: "ticket", source: "Bewohner", type: "Klingelschild", status: "offen", owner: "Hausmeister", urgent: false, created: iso(-100), inWork: "", done: "", termin: "", entrance: "Dorfstr. 24", wohnung: "5", name: "", contact: "", details: "Name falsch", ort: "", note: "", by: "",
+        sla: { light, react: light === "red" ? "overdue" : "open", done: "open", reactDue: iso(light === "red" ? -5 : 10), doneDue: iso(100) }, ...extra });
+      const state = { overview: { ok: true, kpi: { open: 2, overdue: 1, dueSoon: 1, avgReactHours: 5.5, avgLeadDays: 2.25, slaQuote: 0.8, closed90: 10, cleaningQuote: 0.95, cleaningIst: 19, cleaningSoll: 20, errors24: 0 },
+        months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, Mangel: i % 3, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 2, Nachweise: 20 })),
+        perEntrance: { "Dorfstr. 24": 5, "Lindenberger Str. 6": 2 }, lookerUrl: "https://lookerstudio.google.com/reporting/abc",
+        tasks: [mk("T-1", "red"), mk("T-2", "yellow", { owner: "Verwaltung", type: "Mangel" }), mk("T-3", "done", { status: "erledigt", done: iso(-2) })] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
+      check("Verwaltung: Tab heißt Cockpit", /Cockpit/.test(await p.textContent("#staffTab")) && (await p.getAttribute("#staffTab", "href")) === "#cockpit");
+      await p.click("#staffTab"); await p.waitForSelector("#cockpitList .task");
+      check("Cockpit: Kennzahlen", (await p.$$(".kpi")).length === 8 && /80 %/.test(await p.textContent("#cockpitKpis")) && /5,5 Std\./.test(await p.textContent("#cockpitKpis")));
+      check("Cockpit: offene Aufträge mit Ampel, Überfälliges markiert", (await p.$$("#cockpitList .task")).length === 2 && await p.isVisible(".task--sla-red .sla-dot--red") && /überfällig/.test(await p.textContent(".task--sla-red .task__due")));
+      check("Cockpit-Tab aktiv markiert", (await p.getAttribute("#staffTab", "aria-current")) === "page");
+      await p.click('#cockpitFilter [data-filter="red"]');
+      check("Filter Überfällig", (await p.$$("#cockpitList .task")).length === 1);
+      await p.click('#cockpitFilter [data-filter="Verwaltung"]');
+      check("Filter Verwaltung", (await p.$$("#cockpitList .task")).length === 1 && /Mangel/.test(await p.textContent("#cockpitList .task__type")));
+      await p.click('#cockpitFilter [data-filter="done"]');
+      check("Filter Erledigt", (await p.$$("#cockpitList .task")).length === 1 && /eingehalten/.test(await p.textContent("#cockpitList .task__due")));
+      await p.click('#cockpitFilter [data-filter="open"]');
+      await p.click('.task--sla-red .task__edit summary');
+      await p.selectOption('.task--sla-red select[name="status"]', "in Arbeit");
+      await p.fill('.task--sla-red textarea[name="note"]', "Schild bestellt");
+      await p.click('.task--sla-red [type="submit"]'); await p.waitForTimeout(400);
+      check("Bearbeiten sendet Status + Notiz", (state.updates || []).some((u) => u.id === "T-1" && u.status === "in Arbeit" && u.note === "Schild bestellt" && u.owner === "Hausmeister" && u.token === ADMIN), state.updates);
+      check("Diagramme (3 Monats-Charts + Aufgänge)", (await p.$$("#cockpitCharts svg")).length === 3 && (await p.$$(".hbars li")).length === 2);
+      check("Looker-Link", (await p.getAttribute("#cockpitLooker", "href")) === "https://lookerstudio.google.com/reporting/abc" && await p.isVisible("#cockpitLooker"));
+      check("Keine Fehler im Cockpit", p.errors.length === 0, p.errors);
+      await ctx.close();
+    }
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend(), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?hm=${STAFF}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
+      check("Hausmeister: Tab heißt Hausmeister, kein Cockpit", /Hausmeister/.test(await p.textContent("#staffTab")) && !(await p.isVisible("#staffAdmin")));
+      await p.goto(`${base}#cockpit`); await p.waitForTimeout(500);
+      check("Hausmeister sieht Cockpit nicht", await p.isVisible("#cockpitNone") && !(await p.isVisible("#cockpitArea")) && !ctx.requests.some((r) => r.action === "adminOverview"));
+      await ctx.close();
+    }
 
     console.log("--- Einführung und Schriftgröße");
     {
@@ -295,6 +342,7 @@ function makeQrVideo(text) {
       const X = `<img src=x class=pwn onerror="window.__xss=1"><svg class=pwn onload="window.__xss=1"></svg>"'><script class=pwn>window.__xss=1</script>`;
       const evil = (d) => {
         if (d.action === "hmLogin") return { ok: true, user: { name: X, role: "Verwaltung" }, areas: [{ code: "TG", ort: X, activity: X }], activities: [X] };
+        if (d.action === "adminOverview") return { ok: true, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
         if (d.action === "getTasks") return { ok: true, tasks: [{ id: X, source: X, type: X, status: "offen", entrance: X, wohnung: X, name: X, contact: "javascript:window.__xss=1", details: X, ort: X, created: X, owner: X }] };
         if (d.action === "news") return { ok: true, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
         if (d.action === "status") return { ok: true, items: [{ id: "T-260924-ABCD", type: X, status: X, created: X }] };
@@ -307,6 +355,8 @@ function makeQrVideo(text) {
       await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForTimeout(800);
       await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(800);
       await p.goto(`${base}#qrdruck`); await p.waitForTimeout(800);
+      await p.goto(`${base}#cockpit`); await p.waitForTimeout(1000);
+      await p.click('#cockpitFilter [data-filter="done"]'); await p.click('#cockpitFilter [data-filter="open"]');
       const pwn = await p.evaluate(() => ({ xss: window.__xss || 0, nodes: document.querySelectorAll(".pwn, script:not([src])").length, js: [...document.querySelectorAll("a[href]")].filter((a) => /^\s*javascript:/i.test(a.getAttribute("href"))).length }));
       check("Schadcode aus Server-Antworten wird nicht ausgeführt/eingefügt", !pwn.xss && !pwn.nodes && !pwn.js, pwn);
       await ctx.close();

@@ -28,6 +28,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 | `NOTIFY_EMAIL` | `verwaltung@example.org` | E-Mail bei jedem neuen Antrag, jeder Zählermeldung und jeder Erledigt-Meldung (mehrere kommagetrennt). Prüfen: Funktion **testMail** ausführen. |
 | `APP_PIN` | `13059` | Zugangs-PIN der App (ohne Eintrag gilt 13059). Bei Änderung auch `PIN_SHA256` in `js/config.js` anpassen. |
 | `CALENDAR_ID` | `abc…@group.calendar.google.com` | Optional: Kalender für den Reinigungsplan (sonst Suche nach Name „WEG Wartenberger Dorfkrug“) |
+| `LOOKER_URL` | `https://lookerstudio.google.com/reporting/…` | Optional: Link auf den Looker-Studio-Bericht, erscheint im Cockpit unter „Werkzeuge“ |
 
 ## 4. Als Web-App bereitstellen
 
@@ -114,6 +115,66 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
 - **Tägliche Kontrolle um 19 Uhr:** Für eintägige Termine von heute ohne passenden Scan (gleiche Tätigkeit, gleicher Ort)
   kommt eine Mail an `NOTIFY_EMAIL` („Fehlende Nachweise“). Zeiträume (z. B. Winterdienst) werden nicht geprüft.
 - Die Bewohner sehen in der App die nächsten Termine (14 Tage) und die zuletzt erledigten Arbeiten (60 Tage) für ihren Aufgang.
+
+## Cockpit für die Verwaltung (007 / 008)
+
+Wer mit dem persönlichen Link von **007** oder **008** angemeldet ist, sieht unten den Tab **📊 Cockpit**
+(statt „Hausmeister“). Die Hausmeister-Tools (Scannen, Mangel erfassen, QR-Druck) sind von dort verlinkt.
+Nr. 008 legt `setup` bzw. **Mieter-App → Mitarbeiter-Links ergänzen** automatisch an – den Link aus dem Blatt
+„Mitarbeiter“ der Partnerin geben. Das Cockpit zeigt:
+
+- **Kennzahlen**: offen, überfällig, bald fällig, SLA-Quote (90 Tage), Ø Reaktions- und Durchlaufzeit,
+  Reinigung laut Plan (Soll/Ist, 30 Tage), App-Fehler der letzten 24 Stunden.
+- **Aufträge mit Ampel** (rot = Frist überschritten, gelb = Frist in < 24 Std., grün = im Plan), Filter und
+  **Bearbeiten** (Status, Zuständig, interne Notiz). Die App speichert, wer zuletzt geändert hat (Spalte „Bearbeitet von“).
+- **Diagramme** der letzten 12 Monate: Meldungen je Monat und Art, Reinigungsnachweise, Zählermeldungen, Meldungen je Aufgang.
+
+**SLA-Ziele** (in `CONFIG.SLA` änderbar):
+
+| Art | Reaktion (Status „in Arbeit“) | Erledigt |
+|---|---|---|
+| Dringend (Mangel vom Hausmeister mit „dringend“) | 1 Tag | 3 Tage |
+| Mangel (Bewohner und intern) | 3 Werktage | 14 Tage |
+| Klingelschild | 3 Werktage | 10 Werktage |
+| Elektroraum | bestätigt 1 Werktag vor dem Termin | am Termin |
+
+Werktage = Mo–Fr (Feiertage zählen als Werktage). Zeitstempel „In Arbeit seit“ und „Erledigt am“ setzt das
+System selbst – auch wenn der Status **direkt in der Tabelle** geändert wird (dann steht „Tabelle“ bei „Bearbeitet von“).
+Wird ein erledigter Auftrag wieder geöffnet, wird „Erledigt am“ geleert.
+
+**Morgen-Mail um 7 Uhr** an `NOTIFY_EMAIL` – **nur**, wenn Aufträge überfällig oder bald fällig sind.
+
+## Statistik mit Looker Studio (kostenlos) 💻 am Computer
+
+Das Script baut jede Nacht (und per Menü **Mieter-App → Auswertung aktualisieren**) zwei Blätter, die sich direkt als
+Datenquelle eignen – **nicht von Hand bearbeiten**, sie werden überschrieben:
+
+- **Auswertung Aufträge**: eine Zeile je Meldung/Mangel mit Art, Aufgang, Zuständig, Status, Zeiten, Fristen,
+  Reaktionszeit (Std.), Durchlaufzeit (Tage), SLA eingehalten/verspätet/überfällig, Ampel, Monat.
+  Enthält **keine Namen, Telefonnummern oder Beschreibungen** der Bewohner.
+- **Auswertung Reinigung**: je Tag und Plan-Eintrag Soll (1) und Ist (0/1) – Erfüllungsquote = Summe Ist / Summe Soll.
+
+Einrichten (einmalig, ca. 15 Minuten):
+
+1. Einmal **Mieter-App → Auswertung aktualisieren** ausführen, damit die Blätter existieren.
+2. <https://lookerstudio.google.com> mit dem Konto **willbrandtundkompagnon@gmail.com** öffnen → **Leerer Bericht**.
+3. Datenquelle **Google Sheets** → die Mieter-App-Tabelle → Blatt **Auswertung Aufträge** → „Erste Zeile als
+   Überschriften“ angehakt → **Hinzufügen**. Danach über **Ressource → Datenquellen verwalten → Datenquelle hinzufügen**
+   auch **Auswertung Reinigung** anbinden.
+4. Vorschläge für Diagramme:
+   - **Kurzübersicht** (Kennzahl): Anzahl Datensätze, Filter Status ≠ erledigt; daneben Filter Ampel = rot.
+   - **Zeitreihe/Säulen**: Dimension „Monat“, Aufschlüsselung „Art“, Messwert Anzahl.
+   - **SLA-Quote**: Kreisdiagramm Dimension „SLA Erledigung“.
+   - **Reaktionszeit**: Balken Dimension „Art“, Messwert „Reaktionszeit (Std.)“ als Durchschnitt.
+   - **Aufgänge**: Balken Dimension „Aufgang“, Messwert Anzahl.
+   - **Reinigung**: Tabelle Dimension „Ort“/„Tätigkeit“, Messwerte SUM(Ist) und SUM(Soll), berechnetes Feld
+     `SUM(Ist)/SUM(Soll)` als Prozent; Zeitreihe nach „Monat“.
+   - Oben einen **Zeitraum-Filter** (Feld „Eingang“ bzw. „Datum“) und Auswahlfilter für Aufgang und Art.
+5. **Freigabe**: Bericht nur für eure beiden Google-Konten freigeben (Teilen → Personen). Für den Beirat ggf. einen
+   Link „Nur ansehen“; die Auswertung enthält keine Namen, trotzdem bewusst entscheiden.
+6. Bericht-Adresse kopieren und als Script-Eigenschaft `LOOKER_URL` eintragen → erscheint im Cockpit.
+
+Looker liest die Tabelle live; die Blätter werden nachts um 3 Uhr neu berechnet.
 
 ## Löschkonzept und Überwachung (automatisch, täglich 3 Uhr)
 

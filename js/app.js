@@ -215,7 +215,7 @@
     const parent = view.dataset.parent;
     const activeTab = parent || viewName;
     $$(".tabbar__item").forEach((t) => {
-      if (t.dataset.tab === activeTab) t.setAttribute("aria-current", "page");
+      if (String(t.dataset.tab).split(" ").includes(activeTab)) t.setAttribute("aria-current", "page");
       else t.removeAttribute("aria-current");
     });
 
@@ -1622,6 +1622,16 @@
       ? "manifest-hausmeister.json" : "manifest.json";
     if (manifest && manifest.getAttribute("href") !== wanted) manifest.setAttribute("href", wanted);
     $("#staffTab").hidden = !loggedIn;
+    const admin = !!(loggedIn && s.user && s.user.role === "Verwaltung");
+    const tab = $("#staffTab");
+    if (tab.dataset.role !== String(admin)) {
+      tab.dataset.role = String(admin);
+      tab.setAttribute("href", admin ? "#cockpit" : "#hausmeister");
+      tab.dataset.tab = admin ? "cockpit hausmeister" : "hausmeister";
+      tab.innerHTML = admin ? '<span aria-hidden="true">📊</span>Cockpit' : '<span aria-hidden="true">🧹</span>Hausmeister';
+    }
+    $("#cockpitNone").hidden = admin;
+    $("#cockpitArea").hidden = !admin;
     $(".tabbar").classList.toggle("tabbar--5", loggedIn);
     $("#staffNone").hidden = loggedIn && !!s.user;
     $("#staffLinkForm").hidden = loggedIn;
@@ -1972,6 +1982,184 @@
     }).join("");
   }
 
+  /* ---------- Cockpit (Verwaltung 007/008) ---------- */
+
+  const COCKPIT_KEY = "mieterapp.cockpit";
+  let cockpitLoading = null;
+  let cockpitFilter = "open";
+
+  function isAdmin() { return ((staff() || {}).user || {}).role === "Verwaltung"; }
+
+  function loadCockpit() {
+    if (!isAdmin()) return Promise.resolve();
+    if (cockpitLoading) return cockpitLoading;
+    const status = $("#cockpitStatus");
+    const token = staff().token;
+    const cached = readJson(COCKPIT_KEY);
+    const stand = (at) => `Stand ${formatTime(new Date(at))}`;
+    if (cached && cached.token === token) renderCockpit(cached.data);
+    status.textContent = cached && cached.token === token ? `${stand(cached.at)} · wird aktualisiert …` : "Lade Cockpit … (kann einige Sekunden dauern)";
+    cockpitLoading = staffPost({ action: "adminOverview" }, 30000).then((data) => {
+      if ((staff() || {}).token !== token) return;
+      writeJson(COCKPIT_KEY, { token, at: Date.now(), data });
+      renderCockpit(data);
+      status.textContent = stand(Date.now());
+    }).catch((err) => {
+      const why = err.userMessage || (err.name === "AbortError" ? "Google hat nicht rechtzeitig geantwortet" : "keine Verbindung");
+      status.textContent = `Aktualisieren fehlgeschlagen (${why}).`;
+    }).finally(() => { cockpitLoading = null; });
+    return cockpitLoading;
+  }
+
+  function renderCockpit(d) {
+    const k = d.kpi || {};
+    const pct = (x) => (typeof x !== "number" ? "–" : `${Math.round(x * 100)} %`);
+    const num = (x, digits) => (typeof x !== "number" ? "–" : x.toLocaleString("de-DE", { maximumFractionDigits: digits }));
+    const tile = (label, value, cls, sub) => `<div class="kpi${cls ? " kpi--" + cls : ""}"><div class="kpi__value">${esc(value)}</div>`
+      + `<div class="kpi__label">${esc(label)}</div>${sub ? `<div class="kpi__sub">${esc(sub)}</div>` : ""}</div>`;
+    $("#cockpitKpis").innerHTML = [
+      tile("Offen", String(k.open || 0)),
+      tile("Überfällig", String(k.overdue || 0), k.overdue ? "red" : "green"),
+      tile("Bald fällig", String(k.dueSoon || 0), k.dueSoon ? "yellow" : ""),
+      tile("SLA eingehalten", pct(k.slaQuote), k.slaQuote === null ? "" : k.slaQuote >= 0.9 ? "green" : k.slaQuote >= 0.7 ? "yellow" : "red", `${k.closed90 || 0} erledigt in 90 Tagen`),
+      tile("Ø Reaktion", k.avgReactHours === null ? "–" : `${num(k.avgReactHours, 1)} Std.`, "", "90 Tage"),
+      tile("Ø Durchlauf", k.avgLeadDays === null ? "–" : `${num(k.avgLeadDays, 1)} Tage`, "", "90 Tage"),
+      tile("Reinigung laut Plan", pct(k.cleaningQuote), k.cleaningQuote === null ? "" : k.cleaningQuote >= 0.95 ? "green" : k.cleaningQuote >= 0.8 ? "yellow" : "red", `${k.cleaningIst || 0} von ${k.cleaningSoll || 0} (30 Tage)`),
+      tile("App-Fehler 24 Std.", String(k.errors24 || 0), k.errors24 ? "yellow" : ""),
+    ].join("");
+    renderCockpitList(Array.isArray(d.tasks) ? d.tasks : []);
+    renderCockpitCharts(d);
+    const looker = $("#cockpitLooker");
+    const okUrl = /^https:\/\/lookerstudio\.google\.com\//.test(d.lookerUrl || "");
+    looker.hidden = !okUrl;
+    if (okUrl) looker.href = d.lookerUrl;
+  }
+
+  function dueText(t) {
+    const dt = (iso) => new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const s = t.sla || {};
+    if (t.status === "erledigt") return `Erledigt ${t.done ? formatDate(new Date(t.done)) : ""}${s.react === "late" || s.done === "late" ? " · SLA verfehlt" : " · SLA eingehalten"}`;
+    if (s.react === "overdue") return `Reaktion überfällig seit ${dt(s.reactDue)}`;
+    if (s.done === "overdue") return `Erledigung überfällig seit ${dt(s.doneDue)}`;
+    if (s.react === "open") return `Reaktion bis ${dt(s.reactDue)} · erledigen bis ${dt(s.doneDue)}`;
+    return `Erledigen bis ${dt(s.doneDue)}`;
+  }
+
+  function renderCockpitList(tasks) {
+    const f = cockpitFilter;
+    tasks.forEach((t) => { t.sla = t.sla && typeof t.sla === "object" ? t.sla : {}; t.status = String(t.status || ""); });
+    const list = tasks.filter((t) => (f === "done" ? t.status === "erledigt"
+      : t.status !== "erledigt" && (f === "open" || t.sla.light === f || t.owner === f)));
+    const opt = (vals, sel) => vals.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
+    const light = { red: "Überfällig", yellow: "Bald fällig", green: "Im Plan", done: "Erledigt" };
+    $("#cockpitList").innerHTML = list.length ? list.map((t) => {
+      const where = [t.entrance, t.wohnung ? whgLabel(t.wohnung) : "", t.ort].filter(Boolean).join(" · ");
+      const phone = String(t.contact || "").replace(/[^\d+]/g, "");
+      return `
+        <li class="task task--sla-${esc(t.sla.light)}" data-id="${esc(t.id)}">
+          <div class="task__head">
+            <span class="sla-dot sla-dot--${esc(t.sla.light)}" role="img" aria-label="${esc(light[t.sla.light] || "")}"></span>
+            <span class="task__type">${esc(t.type)}</span>
+            ${t.urgent ? '<span class="badge badge--dringend">dringend</span>' : ""}
+            <span class="badge badge--${esc(t.status.replace(" ", "-"))}">${esc(t.status)}</span>
+            <span class="badge badge--owner">${esc(t.owner)}</span>
+          </div>
+          <div class="task__due">${esc(dueText(t))}</div>
+          ${where ? `<div class="task__where">${esc(where)}</div>` : ""}
+          ${t.termin ? `<div class="task__date">Termin: <strong>${esc(formatDate(new Date(t.termin)))}</strong></div>` : ""}
+          ${t.details ? `<p class="task__details">${esc(t.details)}</p>` : ""}
+          ${t.name || t.contact ? `<div class="task__contact">${esc(t.name || "")}${t.contact ? " · " + (phone.length >= 6
+            ? `<a href="tel:${esc(phone)}">${esc(t.contact)}</a>` : esc(t.contact)) : ""}</div>` : ""}
+          <div class="task__meta muted small">${esc(t.id)} · ${esc(t.source === "Bewohner" ? "Bewohner" : "intern " + t.source)}`
+            + `${t.created ? " · Eingang " + esc(formatDate(new Date(t.created))) : ""}${t.by ? " · zuletzt: " + esc(t.by) : ""}</div>
+          <details class="task__edit">
+            <summary>Bearbeiten</summary>
+            <form class="form" data-edit="${esc(t.id)}">
+              <label class="field"><span class="field__label">Status</span>
+                <select name="status">${opt(["offen", "in Arbeit", "erledigt"], t.status)}</select></label>
+              <label class="field"><span class="field__label">Zuständig</span>
+                <select name="owner">${opt(["Hausmeister", "Verwaltung"], t.owner)}</select></label>
+              <label class="field"><span class="field__label">Notiz (nur intern)</span>
+                <textarea name="note" rows="2" maxlength="1000">${esc(t.note || "")}</textarea></label>
+              <button class="btn btn--primary btn--small" type="submit">Speichern</button>
+            </form>
+          </details>
+        </li>`;
+    }).join("") : `<li class="muted">${f === "open" ? "Keine offenen Aufträge. 👍" : "Keine Aufträge in dieser Auswahl."}</li>`;
+  }
+
+  async function saveCockpitTask(e) {
+    const form = e.target.closest("[data-edit]");
+    if (!form) return;
+    e.preventDefault();
+    const id = form.dataset.edit;
+    const change = { status: form.elements.status.value, owner: form.elements.owner.value, note: form.elements.note.value };
+    const btn = form.querySelector('[type="submit"]');
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "adminUpdateTask", id, ...change }, 30000);
+      toast(`${id} gespeichert.`, "ok");
+      const c = readJson(COCKPIT_KEY); // sofort anzeigen, Ampel kommt mit dem nächsten Laden
+      if (c) {
+        const t = (c.data.tasks || []).find((x) => x.id === id);
+        if (t) {
+          Object.assign(t, change, { by: staff().user.name });
+          if (change.status === "erledigt") { t.sla.light = "done"; t.done = t.done || new Date().toISOString(); }
+        }
+        writeJson(COCKPIT_KEY, c);
+        renderCockpitList(c.data.tasks || []);
+      }
+      localRemove(TASKS_KEY);
+      loadCockpit();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.userMessage || "Speichern fehlgeschlagen – bitte erneut versuchen.", "error");
+    }
+  }
+
+  /** Einfache Balkendiagramme als SVG (keine externe Bibliothek, keine Daten an Dritte). */
+  function barChart(title, months, series) {
+    const W = 340, H = 150, top = 10, bottom = 22, left = 26;
+    const totals = months.map((m) => series.reduce((a, s) => a + (Number(m[s.key]) || 0), 0));
+    const max = Math.max(1, ...totals);
+    const bw = (W - left) / months.length;
+    const y = (v) => top + (H - top - bottom) * (1 - v / max);
+    let bars = "";
+    months.forEach((m, i) => {
+      let acc = 0;
+      series.forEach((s) => {
+        const v = Number(m[s.key]) || 0;
+        if (!v) return;
+        bars += `<rect x="${(left + i * bw + 2).toFixed(1)}" y="${y(acc + v).toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${(y(acc) - y(acc + v)).toFixed(1)}" fill="${s.color}"><title>${esc(s.label)} ${esc(m.month)}: ${v}</title></rect>`;
+        acc += v;
+      });
+      bars += `<text x="${(left + i * bw + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="chart__axis">${esc(m.month.slice(5))}</text>`;
+    });
+    const grid = `<line x1="${left}" x2="${W}" y1="${y(max)}" y2="${y(max)}" class="chart__grid"/><text x="${left - 4}" y="${y(max) + 4}" text-anchor="end" class="chart__axis">${max}</text>`
+      + `<line x1="${left}" x2="${W}" y1="${y(0)}" y2="${y(0)}" class="chart__grid"/><text x="${left - 4}" y="${y(0) + 4}" text-anchor="end" class="chart__axis">0</text>`;
+    const legend = series.map((s) => `<span class="chart__key"><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join("");
+    return `<figure class="chart"><figcaption>${esc(title)}</figcaption>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">${grid}${bars}</svg>
+      <div class="chart__legend">${legend}</div></figure>`;
+  }
+
+  function renderCockpitCharts(d) {
+    const months = (Array.isArray(d.months) ? d.months : []).map((m) => ({ ...m, month: String(m.month || "") }));
+    if (!months.length) { $("#cockpitCharts").innerHTML = ""; return; }
+    const entrances = Object.entries(d.perEntrance || {}).sort((a, b) => b[1] - a[1]);
+    const maxE = Math.max(1, ...entrances.map((e) => Number(e[1]) || 0));
+    $("#cockpitCharts").innerHTML = barChart("Meldungen je Monat", months, [
+      { key: "Mangel", label: "Mangel", color: "#b3261e" },
+      { key: "Mangel (intern)", label: "Mangel (intern)", color: "#e08a00" },
+      { key: "Klingelschild", label: "Klingelschild", color: "#6d7454" },
+      { key: "Elektroraum", label: "Elektroraum", color: "#3a6ea5" },
+    ]) + barChart("Reinigungsnachweise je Monat", months, [{ key: "Nachweise", label: "Nachweise (Scans)", color: "#4f7a28" }])
+      + barChart("Zählerablesungen je Monat", months, [{ key: "Zähler", label: "Meldungen Zählerstand", color: "#3a6ea5" }])
+      + (entrances.length ? `<figure class="chart"><figcaption>Meldungen je Aufgang (12 Monate)</figcaption>
+        <ul class="hbars">${entrances.map(([name, n]) => `<li><span class="hbars__label">${esc(name)}</span>`
+          + `<span class="hbars__bar"><i style="width:${Math.round(((Number(n) || 0) / maxE) * 100)}%"></i></span><span class="hbars__n">${esc(n)}</span></li>`).join("")}</ul></figure>` : "");
+  }
+
   /* ---------- Start ---------- */
 
   function selectStaffPane(name) {
@@ -2034,6 +2222,7 @@
       localRemove(STAFF_KEY);
       localRemove(STAFF_TODAY_KEY);
       localRemove(TASKS_KEY);
+      localRemove(COCKPIT_KEY);
       renderStaff();
       location.hash = "notfall";
       toast("Abgemeldet.", "ok");
@@ -2043,6 +2232,21 @@
     viewEnterHooks.hausmeister = staffLogin;
     viewLeaveHooks.hausmeister = stopScan;
     viewEnterHooks.qrdruck = renderQrSheet;
+    // Gespeicherten Stand sofort zeigen; nach frischer Anmeldung (Rolle erst jetzt bekannt) nachladen.
+    viewEnterHooks.cockpit = () => {
+      loadCockpit();
+      staffLogin().then(() => { if (currentView === "cockpit" && !readJson(COCKPIT_KEY)) loadCockpit(); });
+    };
+    $("#cockpitRefresh").addEventListener("click", loadCockpit);
+    $("#cockpitFilter").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-filter]");
+      if (!b) return;
+      cockpitFilter = b.dataset.filter;
+      $$("#cockpitFilter [data-filter]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      const c = readJson(COCKPIT_KEY);
+      if (c && c.data) renderCockpitList(Array.isArray(c.data.tasks) ? c.data.tasks : []);
+    });
+    $("#cockpitList").addEventListener("submit", saveCockpitTask);
   }
 
   /* ---------- Bewohner: Hausreinigung (zuletzt erledigt / geplant) ---------- */

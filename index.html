@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=43">
+  <link rel="stylesheet" href="css/style.css?v=44">
 </head>
 <body>
   <header class="app-header">
@@ -248,6 +248,7 @@
 
         <div class="staff-admin" id="staffAdmin" hidden>
           <h2 class="section-title">Verwaltung</h2>
+          <a class="btn btn--primary btn--block" href="#cockpit">📊 Cockpit: Aufträge, SLA, Statistik</a>
           <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
         </div>
 
@@ -266,6 +267,39 @@
     </section>
 
     <!-- ============ QR-Codes drucken (Verwaltung) ============ -->
+    <section class="view" data-view="cockpit" data-title="Cockpit" hidden>
+      <p class="muted" id="cockpitNone">Das Cockpit ist nur für die Verwaltung. Bitte mit dem persönlichen Link (007/008) anmelden.</p>
+      <div id="cockpitArea" hidden>
+        <div class="cockpit-bar">
+          <span class="muted small" id="cockpitStatus">–</span>
+          <button class="btn btn--ghost btn--small" id="cockpitRefresh" type="button">↻ Aktualisieren</button>
+        </div>
+        <div class="kpis" id="cockpitKpis"></div>
+
+        <h2 class="section-title">Aufträge</h2>
+        <div class="chips" id="cockpitFilter" role="group" aria-label="Filter">
+          <button type="button" class="chip" data-filter="open" aria-pressed="true">Alle offenen</button>
+          <button type="button" class="chip" data-filter="red" aria-pressed="false">🔴 Überfällig</button>
+          <button type="button" class="chip" data-filter="yellow" aria-pressed="false">🟡 Bald fällig</button>
+          <button type="button" class="chip" data-filter="Hausmeister" aria-pressed="false">Hausmeister</button>
+          <button type="button" class="chip" data-filter="Verwaltung" aria-pressed="false">Verwaltung</button>
+          <button type="button" class="chip" data-filter="done" aria-pressed="false">Erledigt (30 Tage)</button>
+        </div>
+        <ul class="task-list" id="cockpitList"></ul>
+
+        <h2 class="section-title">Statistik (12 Monate)</h2>
+        <div id="cockpitCharts"></div>
+
+        <h2 class="section-title">Werkzeuge</h2>
+        <a class="btn btn--ghost btn--block" href="#hausmeister">🧹 Hausmeister-Tools (Scannen, Mangel erfassen)</a>
+        <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
+        <a class="btn btn--ghost btn--block" id="cockpitLooker" href="#" target="_blank" rel="noopener" hidden>📈 Auswertung in Looker Studio</a>
+        <p class="muted small">SLA-Ziele: Dringend – Reaktion 1 Tag, erledigt 3 Tage · Mangel – Reaktion 3 Werktage, erledigt
+          14 Tage · Klingelschild – Reaktion 3 Werktage, erledigt 10 Werktage · Elektroraum – bestätigt 1 Werktag vor dem
+          Termin, erledigt am Termin. Reaktion = Status „in Arbeit“.</p>
+      </div>
+    </section>
+
     <section class="view" data-view="qrdruck" data-title="QR-Codes" data-parent="hausmeister" hidden>
       <div data-no-i18n>
       <div class="no-print">
@@ -757,8 +791,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=43"></script>
-  <script src="js/i18n.js?v=43"></script>
-  <script src="js/app.js?v=43"></script>
+  <script src="js/config.js?v=44"></script>
+  <script src="js/i18n.js?v=44"></script>
+  <script src="js/app.js?v=44"></script>
 </body>
 </html>
