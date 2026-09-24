@@ -27,7 +27,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 |---|---|---|
 | `NOTIFY_EMAIL` | `verwaltung@example.org` | E-Mail bei jedem neuen Antrag, jeder Zählermeldung und jeder Erledigt-Meldung (mehrere kommagetrennt). Prüfen: Funktion **testMail** ausführen. |
 | `APP_PIN` | `13059` | Zugangs-PIN der App (ohne Eintrag gilt 13059). Bei Änderung auch `PIN_SHA256` in `js/config.js` anpassen. |
-| `HAUSMEISTER_TOKENS` | `{"langer-zufallscode": "hm_becker"}` | Zugang für das Hausmeister-Portal (Epic 3) |
+| `CALENDAR_ID` | `abc…@group.calendar.google.com` | Optional: Kalender für den Reinigungsplan (sonst Suche nach Name „WEG Wartenberger Dorfkrug“) |
 
 ## 4. Als Web-App bereitstellen
 
@@ -73,6 +73,38 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
   *Heizung* (Spalte *Einheit*: kWh oder MWh). Nach dem Update einmal **setup** ausführen (neue Spalte *Einheit*).
 - **Fotos** liegen im privaten Drive-Ordner und sind **nicht öffentlich**; der Link in der Tabelle
   funktioniert nur für Sie bzw. für Personen, mit denen Sie den Ordner teilen.
+
+## Hausmeister-Portal (Epic 3)
+
+`setup` legt dafür diese Blätter an und füllt sie beim ersten Mal:
+
+| Blatt | Inhalt |
+|---|---|
+| **Mitarbeiter** | 1 Zeile *Verwaltung* + 20 Zeilen *Hausmeister*, je mit **persönlichem Link**. Spalte *Name* ausfüllen, Link per WhatsApp/E-Mail an die Person schicken – einmal am Handy öffnen, dann bleibt sie angemeldet. Zugang sperren: *Aktiv* abhaken (wirkt nach spätestens 5 Minuten). Mehr Links: Menü **Mieter-App → Mitarbeiter-Links ergänzen** (nach Erhöhen von `STAFF_LINKS`). Rolle *Verwaltung* sieht zusätzlich „QR-Codes drucken“. |
+| **QR-Orte** | Alle Orte mit QR-Code (Code, Ort, Bereich, Aufgang-ID, Standard-Tätigkeit). *Für Bewohner anzeigen* = erscheint bei den Bewohnern unter „Hausreinigung & Pflege“ (bei Aufgang-ID nur in diesem Aufgang, leer = alle). Neue Orte einfach als Zeile ergänzen; *Code* nur Buchstaben/Ziffern/_ und danach nicht mehr ändern (steht im gedruckten QR-Code). |
+| **Tätigkeiten** | Auswahlliste beim Scannen; beliebig erweiterbar. |
+| **Reinigung** | Jeder Nachweis: Scan-Zeit, Ort, Tätigkeit, Mitarbeiter, Notiz, Foto, *Erfassung* = „QR-Scan“ oder „manuell gewählt“ (QR-Code beschädigt). |
+| **Mängel Hausmeister** | Vom Hausmeister/der Verwaltung erfasste Mängel, getrennt von den Bewohner-Tickets; Status wie bei *Tickets*. |
+| **Reinigungsplan** | Termine vom Hausmeister (siehe unten). |
+
+**QR-Codes drucken:** Mit dem Verwaltungs-Link in der App **Hausmeister → QR-Codes drucken** → Drucken (A4, 3 Codes
+pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not geht auch die normale Handy-Kamera.
+
+**Reinigungsplan:** Die Liste des Hausmeisters (Excel) in das Blatt **Reinigungsplan** kopieren – eine Zeile je Termin:
+
+| Datum | Bis | Tätigkeit | Ort | Bemerkung |
+|---|---|---|---|---|
+| 07.10.2026 | | Treppenhausreinigung | alle Aufgänge | |
+| 12.10.2026 | | Fensterreinigung Aufgang | Treppenhaus Lindenberger Str. 6 | |
+| 01.11.2026 | 31.03.2027 | Winterdienst | | Bereitschaft |
+
+- *Bis* nur bei Zeiträumen. *Ort*: Name aus **QR-Orte** (auch mehrere, mit Komma), `alle Aufgänge`, `alle Keller` oder leer (= ganze Anlage).
+- Menü **Mieter-App → Reinigungsplan → Kalender übertragen**: überträgt alles in den Google-Kalender
+  „WEG Wartenberger Dorfkrug“ (neu, geändert, gelöscht). Nach jeder Änderung am Plan erneut ausführen.
+  Beim ersten Mal fragt Google nach der Kalender-Berechtigung. Anderer Kalender: Script-Eigenschaft `CALENDAR_ID`.
+- **Tägliche Kontrolle um 19 Uhr:** Für eintägige Termine von heute ohne passenden Scan (gleiche Tätigkeit, gleicher Ort)
+  kommt eine Mail an `NOTIFY_EMAIL` („Fehlende Nachweise“). Zeiträume (z. B. Winterdienst) werden nicht geprüft.
+- Die Bewohner sehen in der App die nächsten Termine (14 Tage) und die zuletzt erledigten Arbeiten (60 Tage) für ihren Aufgang.
 
 ## Fehlersuche: Es kommen keine E-Mails an
 

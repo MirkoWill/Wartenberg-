@@ -235,7 +235,7 @@
     if (!saved && sessionPin) saved = sessionPin;
     return saved && saved.hash === CFG.PIN_SHA256 ? String(saved.pin || "") : "";
   }
-  function pinOk() { return !CFG.PIN_SHA256 || !!storedPin(); }
+  function pinOk() { return !CFG.PIN_SHA256 || isStaff() || !!storedPin(); } // Hausmeister: persönlicher Link statt PIN
 
   function pinLock() { return readJson(PIN_LOCK_KEY) || { fails: 0, until: 0 }; }
   function pinLockedFor() { return Math.max(0, pinLock().until - Date.now()); }
@@ -489,6 +489,7 @@
     // Höchstens alle 5 Minuten neu laden; bis dahin gespeicherten Stand zeigen.
     const cached = readJson(NEWS_KEY);
     renderNews(cached && cached.obj === OBJ.key ? cached.items : []);
+    renderCare(cached && cached.obj === OBJ.key ? cached.care : null);
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
       const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}${pinParam()}`);
@@ -496,8 +497,9 @@
       if (data.code === "pin") { handlePinRejected(); return; }
       if (!data.ok) return;
       newsLoadedAt = Date.now();
-      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items });
+      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items, care: data.care || null });
       renderNews(data.items);
+      renderCare(data.care);
     } catch (err) {
       console.warn("Aktuelles:", err);
     }
@@ -1462,6 +1464,484 @@
   }
 
   /* ======================================================================
+     Epic 3 – Hausmeister-Portal (persönlicher Link ?hm=TOKEN)
+     Scannen (QR-Code am Ort) → Tätigkeit → Nachweis; offline wird gespeichert
+     und später mit der Scan-Uhrzeit nachgesendet. Aufträge, Mängel, QR-Druck.
+     ====================================================================== */
+
+  const STAFF_KEY = "mieterapp.staff";              // { token, user, areas, activities }
+  const STAFF_QUEUE_KEY = "mieterapp.staffQueue";   // noch nicht gesendete Nachweise
+  const STAFF_TODAY_KEY = "mieterapp.staffToday";   // Liste „Heute erfasst“
+  let pendingScan = null;                           // ?scan=CODE aus einem QR-Code (Handy-Kamera)
+  let scanner = null;
+  let scanCtx = null;                               // { area, time, manual }
+
+  function staff() { return readJson(STAFF_KEY); }
+  function isStaff() { const s = staff(); return !!(s && s.token); }
+
+  /** ?hm=TOKEN (persönlicher Link) und ?scan=CODE übernehmen und aus der Adresse entfernen. */
+  function captureStaffParams() {
+    const params = new URLSearchParams(location.search);
+    const token = params.get("hm");
+    const scan = params.get("scan");
+    if (token && /^[a-f0-9]{24,64}$/i.test(token)) {
+      const cur = staff();
+      if (!cur || cur.token !== token) writeJson(STAFF_KEY, { token });
+    }
+    if (scan && /^[A-Z0-9_\-]{1,40}$/i.test(scan)) pendingScan = scan.toUpperCase();
+    if (token || scan) {
+      params.delete("hm");
+      params.delete("scan");
+      const q = params.toString();
+      history.replaceState(null, "", location.pathname + (q ? `?${q}` : "") + (token || scan ? "#hausmeister" : location.hash));
+    }
+  }
+
+  async function staffPost(payload) {
+    const s = staff();
+    const res = await fetch(CFG.API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ ...payload, token: s && s.token }),
+      redirect: "follow",
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    if (data.ok === false) {
+      const err = new Error(data.error || "Fehler");
+      err.userMessage = data.error;
+      err.code = data.code;
+      if (data.code === "staff") { localRemove(STAFF_KEY); renderStaff(); }
+      throw err;
+    }
+    return data;
+  }
+
+  const scriptLoads = {};
+  function loadScript(src) {
+    if (!scriptLoads[src]) {
+      scriptLoads[src] = new Promise((resolve, reject) => {
+        const el = document.createElement("script");
+        el.src = src;
+        el.onload = resolve;
+        el.onerror = () => { delete scriptLoads[src]; reject(new Error(`${src} nicht geladen`)); };
+        document.head.appendChild(el);
+      });
+    }
+    return scriptLoads[src];
+  }
+
+  async function staffLogin() {
+    const s = staff();
+    if (!s || !CFG.API_URL) return;
+    try {
+      const data = await staffPost({ action: "hmLogin" });
+      writeJson(STAFF_KEY, { ...s, user: data.user, areas: data.areas, activities: data.activities });
+      fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
+    } catch (err) {
+      if (err.code === "staff") toast(err.userMessage, "error", 8000);
+      else if (!s.user) toast("Anmeldung nicht möglich – bitte Internetverbindung prüfen.", "error");
+    }
+    renderStaff();
+    flushStaffQueue();
+    if (pendingScan) { const code = pendingScan; pendingScan = null; handleScanCode(code, false); }
+  }
+
+  function renderStaff() {
+    const s = staff();
+    const loggedIn = !!(s && s.token);
+    $("#staffTab").hidden = !loggedIn;
+    $(".tabbar").classList.toggle("tabbar--5", loggedIn);
+    $("#staffNone").hidden = loggedIn && !!s.user;
+    $("#staffArea").hidden = !(loggedIn && s.user);
+    if (!loggedIn || !s.user) return;
+
+    $("#staffName").textContent = s.user.role === "Verwaltung" ? `${s.user.name} · Verwaltung` : s.user.name;
+    $("#staffAdmin").hidden = s.user.role !== "Verwaltung";
+    const opts = (list, sel) => list.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
+    $("#scanActivity").innerHTML = opts(s.activities || []);
+    $("#scanManual").innerHTML = `<option value="">Ort wählen …</option>`
+      + (s.areas || []).map((a) => `<option value="${esc(a.code)}">${esc(a.ort)}</option>`).join("");
+    const defectOrt = $("#defectOrt");
+    const keep = defectOrt.value;
+    defectOrt.innerHTML = `<option value="">Bitte wählen …</option>`
+      + (s.areas || []).map((a) => `<option>${esc(a.ort)}</option>`).join("")
+      + `<option value="__frei">Anderer Ort / Wohnung …</option>`;
+    defectOrt.value = keep;
+    renderQueueBadge();
+    renderToday();
+  }
+
+  /* ---------- Scannen ---------- */
+
+  function beep() {
+    try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) { /* egal */ }
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.frequency.value = 1320;
+      g.gain.value = 0.15;
+      o.connect(g).connect(ac.destination);
+      o.start();
+      o.stop(ac.currentTime + 0.15);
+      o.onended = () => ac.close();
+    } catch (e) { /* ohne Ton */ }
+  }
+
+  async function startScan() {
+    $("#scanStart").hidden = true;
+    $("#scanner").hidden = false;
+    try {
+      await loadScript("vendor/html5-qrcode.min.js");
+      scanner = new window.Html5Qrcode("scannerView", {
+        formatsToSupport: [window.Html5QrcodeSupportedFormats.QR_CODE], verbose: false,
+      });
+      await scanner.start(
+        { facingMode: "environment" }, // zwingend Rückkamera
+        { fps: 10, qrbox: (w, h) => { const m = Math.floor(Math.min(w, h) * 0.7); return { width: m, height: m }; } },
+        (text) => { stopScan(); handleScanCode(text); },
+        () => {}
+      );
+    } catch (err) {
+      console.error("Scanner:", err);
+      toast("Kamera nicht verfügbar. Bitte Kamerazugriff erlauben oder den Ort manuell wählen.", "error", 7000);
+      stopScan();
+    }
+  }
+
+  function stopScan() {
+    const s = scanner;
+    scanner = null;
+    if (s) s.stop().then(() => s.clear()).catch(() => {});
+    $("#scanner").hidden = true;
+    $("#scanStart").hidden = false;
+  }
+
+  /** QR-Inhalt: Link mit ?scan=CODE oder nur der Code. */
+  function handleScanCode(text, fromCamera = true) {
+    let code = String(text || "").trim();
+    try { code = new URL(code).searchParams.get("scan") || code; } catch (e) { /* kein Link */ }
+    code = code.toUpperCase();
+    const area = ((staff() || {}).areas || []).find((a) => a.code.toUpperCase() === code);
+    if (!area) { toast(`Unbekannter QR-Code (${code.slice(0, 40)}).`, "error", 6000); return; }
+    if (fromCamera) beep();
+    showScanForm(area, false);
+  }
+
+  function showScanForm(area, manual) {
+    scanCtx = { area, time: new Date().toISOString(), manual };
+    location.hash !== "#hausmeister" && (location.hash = "hausmeister");
+    selectStaffPane("scan");
+    $("#scanStart").hidden = true;
+    $("#scanForm").hidden = false;
+    $("#scanHow").textContent = manual ? "Ort (manuell gewählt)" : "Ort (per QR-Code)";
+    $("#scanPlace").textContent = area ? area.ort : "";
+    $("#scanPlace").hidden = manual;
+    $("#scanManual").hidden = !manual;
+    $("#scanManual").required = manual;
+    $("#scanManual").value = area ? area.code : "";
+    if (area && area.activity) $("#scanActivity").value = area.activity;
+    $("#scanForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function resetScanForm() {
+    const form = $("#scanForm");
+    form.reset();
+    form.classList.remove("was-validated");
+    $$(".photo-preview", form).forEach((img) => { img.hidden = true; img.removeAttribute("src"); });
+    form.hidden = true;
+    $("#scanStart").hidden = false;
+    scanCtx = null;
+  }
+
+  function showScanDone(text, queued) {
+    const box = $("#scanDone");
+    box.classList.toggle("scan-done--queued", !!queued);
+    $("#scanDoneText").textContent = text;
+    box.hidden = false;
+    setTimeout(() => { box.hidden = true; }, 3000);
+  }
+
+  async function submitScan(e) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    if (!validate(form) || !scanCtx) return;
+    const areas = (staff() || {}).areas || [];
+    const area = scanCtx.manual ? areas.find((a) => a.code === $("#scanManual").value) : scanCtx.area;
+    if (!area) return;
+    const btn = form.querySelector('[type="submit"]');
+    btn.disabled = true;
+    const entry = {
+      action: "logCleaning", areaToken: area.code, activity: form.elements.activity.value,
+      note: form.elements.note.value.trim(), timestamp: scanCtx.time, manual: scanCtx.manual,
+    };
+    try {
+      entry.photo = await readPhoto(form.elements.foto.files[0]);
+      await staffPost(entry);
+      addToday(area.ort, entry.activity, false);
+      showScanDone(`${area.ort} – ${entry.activity}`, false);
+      resetScanForm();
+    } catch (err) {
+      if (err.userMessage) { toast(err.userMessage, "error", 7000); return; }
+      queueStaffEntry(entry);
+      addToday(area.ort, entry.activity, true);
+      showScanDone("Ohne Netz gespeichert – wird automatisch gesendet.", true);
+      resetScanForm();
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function queueStaffEntry(entry) {
+    const q = readJson(STAFF_QUEUE_KEY) || [];
+    q.push(entry);
+    try { localStorage.setItem(STAFF_QUEUE_KEY, JSON.stringify(q)); } catch (e) {
+      q[q.length - 1] = { ...entry, photo: null }; // Speicher voll: ohne Foto
+      writeJson(STAFF_QUEUE_KEY, q);
+    }
+    renderQueueBadge();
+  }
+
+  let flushing = false;
+  async function flushStaffQueue() {
+    const q = readJson(STAFF_QUEUE_KEY) || [];
+    if (flushing || !q.length || !isStaff() || !navigator.onLine) return;
+    flushing = true;
+    try {
+      while (q.length) {
+        try {
+          await staffPost(q[0]);
+        } catch (err) {
+          if (!err.userMessage) break; // weiterhin kein Netz
+          toast(`Nachweis verworfen: ${err.userMessage}`, "error", 7000);
+        }
+        q.shift();
+        writeJson(STAFF_QUEUE_KEY, q);
+      }
+    } finally {
+      flushing = false;
+      renderQueueBadge();
+      renderToday();
+    }
+  }
+
+  function renderQueueBadge() {
+    const n = (readJson(STAFF_QUEUE_KEY) || []).length;
+    const b = $("#staffQueue");
+    b.hidden = !n;
+    b.textContent = `${n} nicht gesendet`;
+    b.className = "badge badge--offen";
+  }
+
+  function addToday(ort, activity, queued) {
+    const day = toIsoDate(today());
+    const t = readJson(STAFF_TODAY_KEY);
+    const items = t && t.day === day ? t.items : [];
+    items.unshift({ ort, activity, time: new Date().toISOString(), queued });
+    writeJson(STAFF_TODAY_KEY, { day, items: items.slice(0, 50) });
+    renderToday();
+  }
+
+  function renderToday() {
+    const t = readJson(STAFF_TODAY_KEY);
+    const items = t && t.day === toIsoDate(today()) ? t.items : [];
+    const pending = (readJson(STAFF_QUEUE_KEY) || []).length;
+    $("#todayList").innerHTML = items.length ? items.map((i, idx) => `
+      <li><span class="today-list__time">${esc(formatTime(new Date(i.time)))}</span>
+        <span><strong>${esc(i.activity)}</strong><br>${esc(i.ort)}</span>
+        ${i.queued && idx < pending ? '<span class="badge badge--offen">wartet</span>' : '<span class="badge badge--erledigt">✓</span>'}</li>`).join("")
+      : '<li class="muted">Noch nichts erfasst.</li>';
+  }
+
+  /* ---------- Aufträge ---------- */
+
+  async function loadTasks() {
+    const status = $("#tasksStatus");
+    status.textContent = "Lade Aufträge …";
+    try {
+      const data = await staffPost({ action: "getTasks" });
+      renderTasks(data.tasks || []);
+      status.textContent = data.tasks.length ? `${data.tasks.length} offen · Stand ${formatTime(new Date())}` : "";
+    } catch (err) {
+      status.textContent = err.userMessage || "Aufträge konnten nicht geladen werden (kein Netz?).";
+    }
+  }
+
+  function renderTasks(tasks) {
+    $("#taskList").innerHTML = tasks.length ? tasks.map((t) => {
+      const where = [t.entrance, t.wohnung ? whgLabel(t.wohnung) : "", t.ort].filter(Boolean).join(" · ");
+      const phone = String(t.contact || "").replace(/[^\d+]/g, "");
+      return `
+        <li class="task${t.urgent ? " task--urgent" : ""}">
+          <div class="task__head">
+            <span class="task__type">${esc(t.type)}</span>
+            ${t.urgent ? '<span class="badge badge--dringend">dringend</span>' : ""}
+            ${t.status === "in Arbeit" ? '<span class="badge badge--in-Arbeit">in Arbeit</span>' : ""}
+          </div>
+          ${where ? `<div class="task__where">${esc(where)}</div>` : ""}
+          ${t.date ? `<div class="task__date">Termin: <strong>${esc(formatDateLong(parseIsoDate(t.date)))}</strong></div>` : ""}
+          ${t.details ? `<p class="task__details">${esc(t.details)}</p>` : ""}
+          ${t.name || t.contact ? `<div class="task__contact">${esc(t.name || "")}${t.contact ? " · " + (phone.length >= 6
+            ? `<a href="tel:${esc(phone)}">${esc(t.contact)}</a>` : esc(t.contact)) : ""}</div>` : ""}
+          <div class="task__meta muted small">${esc(t.id)} · ${esc(t.source)}${t.created ? " · " + esc(formatDate(parseIsoDate(t.created))) : ""}</div>
+          <button class="btn btn--primary btn--small" type="button" data-done="${esc(t.id)}">✓ Erledigt</button>
+        </li>`;
+    }).join("") : '<li class="muted">Keine offenen Aufträge. 👍</li>';
+  }
+
+  function whgLabel(v) {
+    const s = String(v).replace(/^'/, "");
+    return /^(whg|wohnung|we)\b/i.test(s) ? s : `Whg ${s}`;
+  }
+
+  async function completeTask(id, btn) {
+    if (!window.confirm(`Auftrag ${id} als erledigt melden?`)) return;
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "completeTask", id });
+      toast("Als erledigt gemeldet.", "ok");
+      loadTasks();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.userMessage || "Senden fehlgeschlagen – bitte später erneut versuchen.", "error");
+    }
+  }
+
+  /* ---------- Mangel erfassen ---------- */
+
+  async function submitStaffDefect(e) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    if (!validate(form)) return;
+    const btn = form.querySelector('[type="submit"]');
+    btn.disabled = true;
+    try {
+      const free = form.elements.ort.value === "__frei";
+      const res = await staffPost({
+        action: "submitStaffDefect",
+        ort: free ? form.elements.ortFrei.value.trim() : form.elements.ort.value,
+        beschreibung: form.elements.beschreibung.value.trim(),
+        dringend: form.elements.dringend.checked,
+        photo: await readPhoto(form.elements.foto.files[0]),
+      });
+      toast(`Mangel gemeldet. Nr. ${res.id}`, "ok", 7000);
+      form.reset();
+      form.classList.remove("was-validated");
+      $("#defectOrtFreeWrap").hidden = true;
+      $$(".photo-preview", form).forEach((img) => { img.hidden = true; img.removeAttribute("src"); });
+    } catch (err) {
+      toast(err.userMessage || "Senden fehlgeschlagen. Bitte Internetverbindung prüfen.", "error");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ---------- QR-Codes drucken (Verwaltung) ---------- */
+
+  async function renderQrSheet() {
+    const s = staff();
+    const sheet = $("#qrSheet");
+    if (!s || !s.user || s.user.role !== "Verwaltung") {
+      sheet.innerHTML = '<p class="muted">Nur für die Verwaltung.</p>';
+      return;
+    }
+    try {
+      await loadScript("vendor/qrcode-generator.js");
+    } catch (err) {
+      sheet.innerHTML = '<p class="muted">QR-Bibliothek konnte nicht geladen werden.</p>';
+      return;
+    }
+    const base = `${location.origin}${location.pathname}`;
+    sheet.innerHTML = (s.areas || []).map((a) => {
+      const qr = window.qrcode(0, "M");
+      qr.addData(`${base}?scan=${encodeURIComponent(a.code)}#hausmeister`);
+      qr.make();
+      return `
+        <figure class="qr-card">
+          <div class="qr-card__brand">Willbrandt <strong>und Kompagnon</strong></div>
+          <div class="qr-card__code">${qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true })}</div>
+          <figcaption>
+            <strong class="qr-card__place">${esc(a.ort)}</strong>
+            <span class="qr-card__hint">Hausmeisterdienst: nach Erledigung scannen</span>
+            <span class="qr-card__id">${esc(a.code)}</span>
+          </figcaption>
+        </figure>`;
+    }).join("");
+  }
+
+  /* ---------- Start ---------- */
+
+  function selectStaffPane(name) {
+    $$("#staffTabs input").forEach((r) => { r.checked = r.value === name; });
+    $$(".staff-pane").forEach((p) => { p.hidden = p.dataset.pane !== name; });
+    if (name === "tasks") loadTasks();
+  }
+
+  function initStaff() {
+    captureStaffParams();
+    renderStaff();
+    $$("#staffTabs input").forEach((r) => r.addEventListener("change", () => selectStaffPane(r.value)));
+    $("#scanBtn").addEventListener("click", startScan);
+    $("#scanCancel").addEventListener("click", stopScan);
+    $("#manualBtn").addEventListener("click", () => showScanForm(null, true));
+    $("#scanManual").addEventListener("change", (e) => {
+      const area = ((staff() || {}).areas || []).find((a) => a.code === e.target.value);
+      if (area && area.activity) $("#scanActivity").value = area.activity;
+    });
+    $("#scanForm").addEventListener("submit", submitScan);
+    $("#scanFormCancel").addEventListener("click", resetScanForm);
+    $("#tasksRefresh").addEventListener("click", loadTasks);
+    $("#taskList").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-done]");
+      if (btn) completeTask(btn.dataset.done, btn);
+    });
+    $("#defectOrt").addEventListener("change", (e) => {
+      const free = e.target.value === "__frei";
+      $("#defectOrtFreeWrap").hidden = !free;
+      $("#defectOrtFree").required = free;
+    });
+    $("#formStaffDefect").addEventListener("submit", submitStaffDefect);
+    $("#qrPrint").addEventListener("click", () => window.print());
+    $("#staffLogout").addEventListener("click", () => {
+      if (!window.confirm("Auf diesem Gerät abmelden? Zum erneuten Anmelden brauchen Sie Ihren persönlichen Link.")) return;
+      localRemove(STAFF_KEY);
+      localRemove(STAFF_TODAY_KEY);
+      renderStaff();
+      location.hash = "notfall";
+    });
+    window.addEventListener("online", flushStaffQueue);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") flushStaffQueue(); });
+    viewEnterHooks.hausmeister = staffLogin;
+    viewLeaveHooks.hausmeister = stopScan;
+    viewEnterHooks.qrdruck = renderQrSheet;
+  }
+
+  /* ---------- Bewohner: Hausreinigung (zuletzt erledigt / geplant) ---------- */
+
+  function renderCare(care) {
+    const box = $("#careBox");
+    const last = (care && care.last) || [];
+    const next = (care && care.next) || [];
+    if (!last.length && !next.length) { box.hidden = true; box.innerHTML = ""; return; }
+    const day = (iso) => new Date(iso).toLocaleDateString(LOCALE(), { weekday: "short", day: "2-digit", month: "2-digit" });
+    const range = (n) => (n.to && n.to !== n.from
+      ? `${formatDate(parseIsoDate(n.from))} – ${formatDate(parseIsoDate(n.to))}`
+      : parseIsoDate(n.from).toLocaleDateString(LOCALE(), { weekday: "short", day: "2-digit", month: "2-digit" }));
+    box.hidden = false;
+    box.innerHTML = `
+      <h2 class="news__heading">${esc(t_("Hausreinigung & Pflege"))}</h2>
+      <div class="card care__card">
+        ${last.length ? `<h3 class="care__title">${esc(t_("Zuletzt erledigt"))}</h3>
+          <ul class="care__list">${last.map((l) => `<li><span class="care__date">${esc(day(l.time))}</span>
+            <span><strong>${esc(t_(l.activity))}</strong><br><span class="muted">${esc(l.ort)}</span></span></li>`).join("")}</ul>` : ""}
+        ${next.length ? `<h3 class="care__title">${esc(t_("Geplant"))}</h3>
+          <ul class="care__list">${next.map((n) => `<li><span class="care__date">${esc(range(n))}</span>
+            <span><strong>${esc(t_(n.activity))}</strong>${n.ort ? `<br><span class="muted">${esc(n.ort)}</span>` : ""}</span></li>`).join("")}</ul>` : ""}
+      </div>`;
+  }
+
+  /* ======================================================================
      Start
      ====================================================================== */
 
@@ -1482,7 +1962,7 @@
     [
       renderEntrancePicker, renderEmergency, renderWaste, renderInfos, initTransit,
       initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
-      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage,
+      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff,
     ].forEach((step) => {
       try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); }
     });

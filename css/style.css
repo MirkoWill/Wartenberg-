@@ -857,3 +857,67 @@ body.lang-de .i18n-note { display: none; }
 .stand select { width: auto; flex: none; }
 .segmented--3 { display: grid; grid-template-columns: repeat(3, 1fr); }
 .stand select[hidden] { display: none; }
+
+/* ---------- Epic 3: Hausmeister-Portal ---------- */
+.tabbar--5 { grid-template-columns: repeat(5, 1fr); }
+.tabbar--5 .tabbar__item { font-size: 12px; }
+.btn--big { min-height: 64px; font-size: 20px; }
+.staff-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.staff-head__name { font-weight: 700; font-size: 20px; }
+.segmented--tabs { grid-template-columns: repeat(3, 1fr); margin-bottom: 16px; }
+.staff-pane > .btn + .btn, #scanStart .btn + .btn { margin-top: 10px; }
+.scanner { margin-bottom: 12px; }
+#scannerView { width: 100%; border-radius: var(--radius); overflow: hidden; background: #000; min-height: 260px; }
+#scannerView video { width: 100% !important; height: auto !important; }
+.scan-form { margin-top: 4px; }
+.scan-place { padding: 14px; margin-bottom: 14px; border: 2px solid var(--c-primary); border-radius: var(--radius); background: var(--c-surface); }
+.scan-place__name { font-size: 20px; font-weight: 700; }
+.scan-form .btn + .btn { margin-top: 10px; }
+.scan-done {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-content: center; justify-items: center; gap: 16px;
+  padding: 24px; text-align: center; background: rgba(46, 125, 50, 0.96); color: #fff;
+}
+.scan-done--queued { background: rgba(107, 77, 0, 0.96); }
+.scan-done__check { width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; font-size: 72px; font-weight: 700; background: #fff; color: #2e7d32; }
+.scan-done--queued .scan-done__check { color: #6b4d00; }
+.scan-done__text { font-size: 22px; font-weight: 700; max-width: 22em; }
+.today-list, .task-list, .care__list { list-style: none; margin: 0; padding: 0; }
+.today-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--c-border); }
+.today-list__time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--c-primary); }
+.task { padding: 14px 16px; margin-top: 10px; background: var(--c-surface); border: 1px solid var(--c-border); border-left: 5px solid var(--c-primary); border-radius: var(--radius); }
+.task--urgent { border-left-color: var(--c-danger); }
+.task__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
+.task__type { font-weight: 700; font-size: 18px; }
+.task__where, .task__date, .task__contact { margin-top: 2px; }
+.task__details { margin: 6px 0; white-space: pre-line; }
+.task__meta { margin: 6px 0 10px; }
+.badge--dringend { background: var(--c-danger); color: #fff; }
+.staff-admin { margin-top: 8px; }
+.staff-privacy { margin: 22px 0 12px; }
+#staffTabs + .staff-pane .section-title { margin-top: 24px; }
+
+/* Bewohner: Hausreinigung */
+.care { margin-top: 28px; }
+.care__title { margin: 0 0 6px; font-size: 16px; color: var(--c-primary); }
+.care__title + .care__list { margin-bottom: 12px; }
+.care__list li { display: grid; grid-template-columns: 7.2em 1fr; gap: 10px; padding: 6px 0; border-top: 1px solid var(--c-border); }
+.care__list li:first-child { border-top: 0; }
+.care__date { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* QR-Druckbogen */
+.qr-sheet { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
+.qr-card { margin: 0; padding: 12px; background: #fff; color: #111; border: 2px solid #6d7454; border-radius: 10px; text-align: center; break-inside: avoid; }
+.qr-card__brand { font-family: var(--font-brand); color: #6d7454; font-size: 14px; }
+.qr-card__code svg { width: 100%; height: auto; max-width: 220px; }
+.qr-card figcaption { display: grid; gap: 2px; }
+.qr-card__place { font-size: 16px; line-height: 1.2; }
+.qr-card__hint { font-size: 12px; }
+.qr-card__id { font-size: 10px; color: #666; }
+
+@media print {
+  body { background: #fff !important; }
+  .app-header, .hero, .tabbar, .app-footer, .no-print, .toast, .consent, .consent-return, .back-btn { display: none !important; }
+  .app-main { padding: 0 !important; max-width: none !important; }
+  .qr-sheet { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  .qr-card { page-break-inside: avoid; }
+}
