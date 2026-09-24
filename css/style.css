@@ -936,3 +936,10 @@ input[type="file"]::file-selector-button {
   margin-right: 12px; padding: 10px 14px; border: 1.5px solid var(--c-primary); border-radius: var(--radius);
   background: var(--c-surface); color: var(--c-primary); font: inherit; font-weight: 700; cursor: pointer;
 }
+
+/* Infos: Einstieg zu den Abfahrten */
+.transit-link { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin-bottom: 16px; text-decoration: none; color: inherit; }
+.transit-link__icon { font-size: 28px; }
+.transit-link__title { display: block; font-weight: 700; font-size: 18px; color: var(--c-heading); }
+.transit-link__sub { display: block; font-size: 14px; color: var(--c-muted); }
+.transit-link__go { font-size: 26px; color: var(--c-primary); }
