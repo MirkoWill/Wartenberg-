@@ -90,8 +90,12 @@ window.APP_CONFIG = {
       },
       {
         title: "Stromausfall",
-        text: "Sicherungskasten Ihrer Wohnung prüfen (Flur). Ist das ganze Haus betroffen, bitte den Hausmeister informieren.",
-        actions: [{ type: "tel", label: "Stromnetz Berlin anrufen", phone: "+498002112525" }],
+        text: "Nur Ihre Wohnung ohne Strom: Sicherungskasten im Flur prüfen. Ganzes Haus ohne Strom: Hausmeister-Notdienst anrufen. "
+          + "Auch die Nachbarhäuser oder die Straße dunkel: Stromnetz Berlin anrufen.",
+        actions: [
+          { type: "tel", label: "Hausmeister-Notdienst anrufen", phone: "+491794073564" },
+          { type: "tel", label: "Stromnetz Berlin anrufen", phone: "+498002112525" },
+        ],
       },
       {
         title: "Gasgeruch",
