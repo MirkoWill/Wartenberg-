@@ -83,6 +83,10 @@ const CONFIG = {
       name: "Umfrage-Stimmen",
       headers: ["Zeit", "Umfrage-ID", "Antwort", "Aufgang-ID", "Stimm-Kennung"],
     },
+    push: {
+      name: "Benachrichtigungen",
+      headers: ["ID", "Endpoint", "Gruppe", "Nr", "Aufgang", "Angelegt", "Zuletzt", "Fehler"],
+    },
     fitness: {
       name: "Fitness-Buchungen",
       headers: ["ID", "Nr", "Beginn", "Ende", "Minuten", "Gebucht am", "Storniert", "Mit"],
@@ -107,6 +111,8 @@ const CONFIG = {
   // Fitnessraum (privat): Mitglieder nach Nummer, Buchungsregeln, Wochenziel für die Statistik
   FITNESS: { members: ["007", "008", "010", "011"], fromHour: 6, toHour: 23, minMinutes: 30, maxMinutes: 120,
     stepMinutes: 30, daysAhead: 28, maxFuture: 10, weeklyGoal: 2 },
+  // Benachrichtigungen (Web Push, Android): Kontakt für die Push-Dienste, Obergrenzen
+  PUSH: { contact: "info@willbrandt-kompagnon.de", maxSubscriptions: 1000, maxPerSend: 300 },
   // Aufgang-IDs → lesbarer Name (für Auswertungen, z. B. Mängel vom Hausmeister)
   ENTRANCE_NAMES: {
     dorf24: "Dorfstr. 24", lind2: "Lindenberger Str. 2", lind4: "Lindenberger Str. 4",
@@ -164,6 +170,7 @@ const CONFIG = {
     errorLogDays: 90,         // Fehlerprotokoll
     votesYears: 2,            // anonyme Umfrage-Stimmen
     fitnessYears: 2,          // Fitnessraum-Buchungen
+    pushYears: 1,             // Geräte für Benachrichtigungen (ab letzter Nutzung der App)
   },
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
@@ -243,6 +250,7 @@ function onOpen() {
     .addItem("Auswertung aktualisieren", "rebuildAnalyticsNow")
     .addItem("Monatsbericht: Vorschau an mich", "reportPreviewNow")
     .addItem("Systemprüfung jetzt", "healthCheckNow")
+    .addItem("Benachrichtigung testen (an Verwaltung)", "pushTest")
     .addItem("Alte Daten jetzt löschen (Löschkonzept)", "cleanupNow")
     .addToUi();
 }
@@ -279,6 +287,9 @@ function doPost(e) {
         return json(submitMeterReadings(Object.assign({}, p, { meters: [p] })));
       case "reportError": return json(reportClientError(p));
       case "vote": rateLimit("vote", 300, 3600); return json(submitVote(p));
+      case "pushKey": return json(pushKey());
+      case "pushSubscribe": rateLimit("push", 120, 3600); return json(pushSubscribe(p));
+      case "pushUnsubscribe": rateLimit("push", 120, 3600); return json(pushUnsubscribe(p));
       default: return json({ ok: false, error: "Unbekannte Aktion" });
     }
   } catch (err) {
@@ -299,6 +310,7 @@ function doGet(e) {
       requireStaffWork(user);
       return json(getTasks({}, user));
     }
+    if (q.action === "pushInbox") { rateLimit("inbox", 3000, 3600); return json(pushInbox(q.id)); } // Service Worker, ohne PIN
     if (q.action === "done") return completeTicketPage(q);
     if (q.action === "releaseReport") return releaseReportPage(q);
     if (q.action === "status") { requirePin(q.pin, q.token); return json(getStatus(q.ids)); }
@@ -364,6 +376,11 @@ function submitTicket(p) {
       : `✘ KEINE Mail an den Hausmeister: ${bell.reason}`,
     bell.sent ? "------------------------------\n" + bell.body + "\n------------------------------" : ""] : []),
   ]);
+
+  // Benachrichtigungen: nur Art und Aufgang – keine Namen oder Wohnungen auf dem Sperrbildschirm
+  const where = entranceName(objectId(p.object)) || plain(p.entrance, 60);
+  pushSend({ roles: ["Verwaltung"] }, { title: `Neue Meldung: ${type}`, body: where, url: "#cockpit", tag: id });
+  if (defaultOwner(type) === "Hausmeister") pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `Neuer Auftrag: ${type}`, body: where, url: "#hausmeister", tag: id });
 
   return { ok: true, id };
 }
@@ -1333,6 +1350,8 @@ function submitStaffDefect(p, user) {
     `Erfasst von: ${user.name}`, `Ort: ${plain(ort, 120)}`, `Beschreibung: ${plain(text)}`,
     photoUrl ? `Foto: ${photoUrl}` : "",
   ]);
+  pushSend({ roles: ["Verwaltung"] }, { title: `${p.dringend === true ? "DRINGEND – " : ""}Mangel vom Hausmeister`, body: plain(ort, 80),
+    url: "#cockpit", tag: id, urgent: p.dringend === true });
   return { ok: true, id };
 }
 
@@ -1648,6 +1667,7 @@ function cleanupOldData() {
     meter: deleteRowsWhere(CONFIG.SHEETS.meter, (r) => older(date(r.Ablesedatum) || date(r.Eingang), before(R.meterYears))),
     cleaning: deleteRowsWhere(CONFIG.SHEETS.cleaning, (r) => older(date(r["Zeitpunkt (Scan)"]), before(R.cleaningYears))),
     plan: deleteRowsWhere(CONFIG.SHEETS.plan, (r) => older(date(r.Bis) || date(r.Datum), before(R.planYears))),
+    push: deleteRowsWhere(CONFIG.SHEETS.push, (r) => older(date(r.Zuletzt), before(R.pushYears))),
     fitness: deleteRowsWhere(CONFIG.SHEETS.fitness, (r) => older(date(r.Beginn), before(R.fitnessYears))),
     votes: deleteRowsWhere(CONFIG.SHEETS.votes, (r) => older(date(r.Zeit), before(R.votesYears))),
     errors: deleteRowsWhere(CONFIG.SHEETS.errors, (r) => older(date(r.Zeit), new Date(now.getTime() - R.errorLogDays * 86400000))),
@@ -1999,6 +2019,10 @@ function adminUpdateTask(p, user) {
     if (p.owner !== undefined) {
       if (CONFIG.OWNERS.indexOf(p.owner) === -1) throw userError("Ungültige Zuständigkeit");
       sheet.getRange(row._row, col("Zuständig")).setValue(p.owner);
+      if (p.owner === "Hausmeister" && ownerOf(row, row.Typ || "Mangel (intern)") !== "Hausmeister") {
+        pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `Neuer Auftrag: ${plain(row.Typ || "Mangel", 40)}`,
+          body: entranceName(row["Aufgang-ID"]) || plain(row.Ort, 80), url: "#hausmeister", tag: id });
+      }
     }
     if (p.note !== undefined) sheet.getRange(row._row, col("Notiz Verwaltung")).setValue(protectCell(str(p.note, 1000)));
     if (p.longRunner !== undefined) sheet.getRange(row._row, col("Langläufer")).setValue(p.longRunner === true ? "ja" : "");
@@ -2498,6 +2522,11 @@ function adminNewsSave(p, user) {
   } finally {
     lock.releaseLock();
   }
+  // Bewohner benachrichtigen – nur wenn der Hinweis schon gilt (nicht erst in einigen Tagen)
+  if (from <= new Date()) {
+    pushSend({ residents: only ? only.split(", ") : "all" }, { title: `📢 ${title || "Neuer Hinweis der Hausverwaltung"}`,
+      body: text, url: "#notfall", urgent: p.important === true });
+  }
   return { ok: true };
 }
 
@@ -2632,6 +2661,7 @@ function adminPollSave(p, user) {
   } finally {
     lock.releaseLock();
   }
+  pushSend({ residents: only ? only.split(", ") : "all" }, { title: "🗳️ Neue Umfrage", body: question, url: "#notfall", tag: id });
   return { ok: true, id };
 }
 
@@ -2653,7 +2683,7 @@ const SHEET_GROUPS = [
   ["Tickets", "arbeit"], ["Mängel Hausmeister", "arbeit"], ["Aktuelles", "arbeit"], ["Umfragen", "arbeit"],
   ["Reinigungsplan", "arbeit"], ["Übersicht Zähler", "auswertung"], ["Zählerstände", "daten"], ["Reinigung", "daten"],
   ["Mitarbeiter", "einstellung"], ["QR-Orte", "einstellung"], ["Tätigkeiten", "einstellung"],
-  ["Auswertung Aufträge", "auswertung"], ["Auswertung Reinigung", "auswertung"], ["Umfrage-Stimmen", "daten"], ["Fitness-Buchungen", "daten"], ["Fehlerprotokoll", "daten"],
+  ["Auswertung Aufträge", "auswertung"], ["Auswertung Reinigung", "auswertung"], ["Umfrage-Stimmen", "daten"], ["Fitness-Buchungen", "daten"], ["Benachrichtigungen", "daten"], ["Fehlerprotokoll", "daten"],
 ];
 const GROUP_COLORS = { start: "#151515", arbeit: "#6d7454", auswertung: "#3a6ea5", daten: "#9aa0a6", einstellung: "#b36b00" };
 const GROUP_TEXT = {
@@ -2909,6 +2939,7 @@ function fitnessBook(p, user) {
   const now = new Date();
   if (end <= now) throw userError("Dieser Zeitraum liegt in der Vergangenheit.");
   if (start > new Date(now.getTime() + F.daysAhead * 86400000)) throw userError(`Höchstens ${F.daysAhead} Tage im Voraus.`);
+  let id = "";
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -2919,7 +2950,7 @@ function fitnessBook(p, user) {
       const t = (x) => Utilities.formatDate(x, CONFIG.TIMEZONE, "HH:mm");
       throw userError(`Schon belegt von ${t(clash.Beginn)} bis ${t(clash.Ende)} Uhr (${fitnessWho(clash)}).`);
     }
-    const id = newId("F");
+    id = newId("F");
     const def = CONFIG.SHEETS.fitness;
     const sheet = getSpreadsheet().getSheetByName(def.name);
     const mitCol = def.headers.indexOf("Mit") + 1;
@@ -2928,10 +2959,11 @@ function fitnessBook(p, user) {
     sheet.getRange(row, 2).setNumberFormat("@"); // „010“ bleibt „010“
     sheet.getRange(row, mitCol).setNumberFormat("@");
     sheet.getRange(row, 1, 1, def.headers.length).setValues([[id, user.nr, start, end, minutes, now, "", partners.join(", ")]]);
-    return { ok: true, id, with: partners };
   } finally {
     lock.releaseLock();
   }
+  if (partners.length) pushSend({ nrs: partners }, { title: `Nr. ${user.nr} trainiert mit dir 💪`, body: pushSlot(start, end), url: "#fitness", tag: id });
+  return { ok: true, id, with: partners };
 }
 
 /**
@@ -2950,8 +2982,301 @@ function fitnessCancel(p, user) {
     const col = def.headers.indexOf("Mit") + 1;
     sheet.getRange(hit._row, col).setNumberFormat("@");
     sheet.getRange(hit._row, col).setValue(hit._with.filter((x) => x !== user.nr).join(", "));
+    if (hit.Beginn > new Date()) pushSend({ nrs: [hit.Nr] }, { title: `Nr. ${user.nr} hat abgesagt`, body: pushSlot(hit.Beginn, hit.Ende), url: "#fitness", tag: String(hit.ID) });
     return { ok: true, left: true };
   }
   sheet.getRange(hit._row, def.headers.indexOf("Storniert") + 1).setValue("ja");
+  const others = hit._people.filter((x) => x !== user.nr);
+  if (others.length && hit.Beginn > new Date()) {
+    pushSend({ nrs: others }, { title: "Training abgesagt", body: `${pushSlot(hit.Beginn, hit.Ende)} (Nr. ${user.nr})`, url: "#fitness", tag: String(hit.ID) });
+  }
   return { ok: true };
+}
+
+/* ==========================================================================
+   Benachrichtigungen (Web Push, gedacht für Android) – ohne zusätzlichen Anbieter.
+   Das Handy bekommt über den Push-Dienst des Browsers nur ein leeres Signal („es gibt etwas“);
+   den Text holt der Service Worker danach direkt hier ab (pushInbox). So läuft kein Inhalt über Google.
+   Anmeldung (VAPID): ES256-Signatur, hier ohne Bibliothek mit BigInt umgesetzt (Kurve P-256).
+   Gespeichert je Gerät: Push-Adresse, Gruppe (Bewohner/Rolle), Nummer bzw. Aufgang – keine Namen.
+   ========================================================================== */
+
+const P256 = {
+  p: BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff"),
+  n: BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"),
+  gx: BigInt("0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"),
+  gy: BigInt("0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"),
+};
+
+function ecMod(a, m) { const r = a % m; return r < 0n ? r + m : r; }
+function ecPow(b, e, m) { let r = 1n; b = ecMod(b, m); while (e > 0n) { if (e & 1n) r = (r * b) % m; b = (b * b) % m; e >>= 1n; } return r; }
+function ecInv(a, m) { return ecPow(a, m - 2n, m); }
+
+/** Punktverdopplung in Jacobi-Koordinaten (a = -3). */
+function ecDouble(P) {
+  const p = P256.p;
+  if (!P || P[1] === 0n) return null;
+  const [X, Y, Z] = P;
+  const delta = (Z * Z) % p, gamma = (Y * Y) % p, beta = (X * gamma) % p;
+  const alpha = (3n * ecMod(X - delta, p) * ((X + delta) % p)) % p;
+  const X3 = ecMod(alpha * alpha - 8n * beta, p);
+  const Z3 = ecMod((Y + Z) * (Y + Z) - gamma - delta, p);
+  const Y3 = ecMod(alpha * ecMod(4n * beta - X3, p) - 8n * gamma * gamma, p);
+  return [X3, Y3, Z3];
+}
+
+function ecAdd(P, Q) {
+  const p = P256.p;
+  if (!P) return Q;
+  if (!Q) return P;
+  const [X1, Y1, Z1] = P, [X2, Y2, Z2] = Q;
+  const Z1Z1 = (Z1 * Z1) % p, Z2Z2 = (Z2 * Z2) % p;
+  const U1 = (X1 * Z2Z2) % p, U2 = (X2 * Z1Z1) % p;
+  const S1 = (Y1 * Z2 * Z2Z2) % p, S2 = (Y2 * Z1 * Z1Z1) % p;
+  const H = ecMod(U2 - U1, p), r = ecMod(S2 - S1, p);
+  if (H === 0n) return r === 0n ? ecDouble(P) : null;
+  const HH = (H * H) % p, HHH = (H * HH) % p, V = (U1 * HH) % p;
+  const X3 = ecMod(r * r - HHH - 2n * V, p);
+  const Y3 = ecMod(r * ecMod(V - X3, p) - S1 * HHH, p);
+  const Z3 = (H * Z1 * Z2) % p;
+  return [X3, Y3, Z3];
+}
+
+/** k · G → affine [x, y] */
+function ecMulG(k) {
+  let R = null;
+  const G = [P256.gx, P256.gy, 1n];
+  for (let i = BigInt(k.toString(2).length - 1); i >= 0n; i--) {
+    R = ecDouble(R);
+    if ((k >> i) & 1n) R = ecAdd(R, G);
+  }
+  if (!R) throw new Error("Punkt im Unendlichen");
+  const zi = ecInv(R[2], P256.p), zi2 = (zi * zi) % P256.p;
+  return [(R[0] * zi2) % P256.p, (R[1] * zi2 * zi) % P256.p];
+}
+
+function bytesToHex(bytes) { return bytes.map((b) => ((b & 255) + 256).toString(16).slice(1)).join(""); }
+function hexToBytes(hex) { const out = []; for (let i = 0; i < hex.length; i += 2) { const v = parseInt(hex.substr(i, 2), 16); out.push(v > 127 ? v - 256 : v); } return out; }
+function bigToBytes32(x) { return hexToBytes(x.toString(16).padStart(64, "0")); }
+function b64url(bytesOrString) { return Utilities.base64EncodeWebSafe(bytesOrString).replace(/=+$/, ""); }
+function sha256Bytes(value) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value); }
+
+/** Zufallszahl 1 … n-1 (384 Bit aus mehreren UUIDs und dem Geheimnis → praktisch ohne Verzerrung). */
+function ecRandomScalar(secret) {
+  const seed = () => `${secret || ""}|${Utilities.getUuid()}|${Utilities.getUuid()}|${Date.now()}|${Math.random()}`;
+  const hex = bytesToHex(sha256Bytes(seed())) + bytesToHex(sha256Bytes(seed())).slice(0, 32);
+  return (BigInt("0x" + hex) % (P256.n - 1n)) + 1n;
+}
+
+/** ES256-Signatur (r‖s, je 32 Byte) über einen Text. */
+function es256Sign(text, dHex) {
+  const d = BigInt("0x" + dHex);
+  const e = BigInt("0x" + bytesToHex(sha256Bytes(text)));
+  for (let tries = 0; tries < 8; tries++) {
+    const k = ecRandomScalar(dHex);
+    const r = ecMulG(k)[0] % P256.n;
+    if (r === 0n) continue;
+    const s = (ecInv(k, P256.n) * ((e + r * d) % P256.n)) % P256.n;
+    if (s === 0n) continue;
+    return bigToBytes32(r).concat(bigToBytes32(s));
+  }
+  throw new Error("Signatur fehlgeschlagen");
+}
+
+/** VAPID-Schlüssel (einmalig erzeugt, in den Script-Eigenschaften). Öffentlicher Teil geht an die App. */
+function vapidKeys() {
+  const props = PropertiesService.getScriptProperties();
+  let d = props.getProperty("VAPID_PRIVATE"), pub = props.getProperty("VAPID_PUBLIC");
+  if (d && pub) return { d, pub };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    d = props.getProperty("VAPID_PRIVATE"); pub = props.getProperty("VAPID_PUBLIC");
+    if (d && pub) return { d, pub };
+    const k = ecRandomScalar("vapid");
+    const [x, y] = ecMulG(k);
+    d = k.toString(16).padStart(64, "0");
+    pub = b64url([4].concat(bigToBytes32(x), bigToBytes32(y)));
+    props.setProperty("VAPID_PRIVATE", d);
+    props.setProperty("VAPID_PUBLIC", pub);
+    return { d, pub };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Authorization-Kopf für einen Push-Dienst (JWT je Dienst 11 Std. zwischengespeichert). */
+function vapidAuth(endpoint) {
+  const aud = /^https:\/\/[^/]+/.exec(endpoint)[0];
+  const keys = vapidKeys();
+  const cache = CacheService.getScriptCache();
+  const ck = `vapid_${keys.pub.slice(0, 12)}_${aud}`;
+  let jwt = cache.get(ck);
+  if (!jwt) {
+    const head = b64url(JSON.stringify({ typ: "JWT", alg: "ES256" }));
+    const body = b64url(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: `mailto:${CONFIG.PUSH.contact}` }));
+    jwt = `${head}.${body}.${b64url(es256Sign(`${head}.${body}`, keys.d))}`;
+    cache.put(ck, jwt, 11 * 3600);
+  }
+  return `vapid t=${jwt}, k=${keys.pub}`;
+}
+
+/* ---------- Abos ---------- */
+
+// Nur echte Push-Dienste der Browser (verhindert, dass der Server an beliebige Adressen sendet)
+const PUSH_HOSTS = /^https:\/\/(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9-]+\.push\.services\.mozilla\.com|[a-z0-9.-]+\.notify\.windows\.com|web\.push\.apple\.com)\/[A-Za-z0-9_\-:/.%=+~]+$/;
+
+function pushSheet() {
+  const ss = getSpreadsheet();
+  const def = CONFIG.SHEETS.push;
+  let sheet = ss.getSheetByName(def.name);
+  if (!sheet) {
+    sheet = ss.insertSheet(def.name);
+    sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers]).setFontWeight("bold").setBackground("#eef0e6");
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/** Öffentlicher Schlüssel für die App (vor dem Anmelden beim Push-Dienst). */
+function pushKey() {
+  return { ok: true, key: vapidKeys().pub };
+}
+
+/**
+ * Gerät anmelden bzw. auffrischen. Mit gültigem persönlichem Link → Gruppe = Rolle (Hausmeister, Leitung,
+ * Verwaltung, Fitness) und Nummer; sonst Bewohner mit Aufgang. Gleiche Push-Adresse → gleiche Zeile.
+ */
+function pushSubscribe(p) {
+  const endpoint = String(p.endpoint || "").trim();
+  if (endpoint.length > 1000 || !PUSH_HOSTS.test(endpoint)) throw userError("Benachrichtigungen werden auf diesem Gerät nicht unterstützt.");
+  let user = null;
+  if (p.token) { try { user = authStaff(p.token); } catch (e) { user = null; } }
+  const obj = objectId(p.obj);
+  const aufgang = !user && Object.prototype.hasOwnProperty.call(CONFIG.ENTRANCE_NAMES, obj) ? obj : "";
+  const group = user ? user.role : "Bewohner";
+  const def = CONFIG.SHEETS.push;
+  const sheet = pushSheet();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const rows = sheetObjects(def);
+    const hit = rows.find((r) => String(r.Endpoint) === endpoint);
+    const now = new Date();
+    if (hit) {
+      sheet.getRange(hit._row, 3, 1, 3).setNumberFormat("@").setValues([[group, user ? user.nr : "", aufgang]]);
+      sheet.getRange(hit._row, 7, 1, 2).setValues([[now, 0]]);
+      return { ok: true, id: String(hit.ID), group, key: vapidKeys().pub };
+    }
+    if (rows.length >= CONFIG.PUSH.maxSubscriptions) throw userError("Benachrichtigungen sind gerade nicht möglich. Bitte später erneut versuchen.");
+    const id = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
+    const row = lastContentRow(sheet, [1]) + 1;
+    sheet.getRange(row, 1, 1, 5).setNumberFormat("@"); // „007“ bleibt „007“
+    sheet.getRange(row, 1, 1, def.headers.length).setValues([[id, endpoint, group, user ? user.nr : "", aufgang, now, now, 0]]);
+    return { ok: true, id, group, key: vapidKeys().pub };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function pushUnsubscribe(p) {
+  const id = String(p.id || "");
+  if (!/^[a-f0-9]{32,48}$/.test(id)) return { ok: true };
+  const hit = sheetObjects(CONFIG.SHEETS.push).find((r) => String(r.ID) === id);
+  if (hit) pushSheet().deleteRow(hit._row);
+  CacheService.getScriptCache().remove(`pq_${id}`);
+  return { ok: true };
+}
+
+/** Der Service Worker holt nach dem Signal genau eine wartende Nachricht ab (Kennung = Geheimnis des Geräts). */
+function pushInbox(id) {
+  id = String(id || "");
+  if (!/^[a-f0-9]{32,48}$/.test(id)) return { ok: true, item: null };
+  const cache = CacheService.getScriptCache();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    let list = [];
+    try { list = JSON.parse(cache.get(`pq_${id}`) || "[]"); } catch (e) { list = []; }
+    const item = list.shift() || null;
+    if (list.length) cache.put(`pq_${id}`, JSON.stringify(list), 21600); else cache.remove(`pq_${id}`);
+    return { ok: true, item };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ---------- Versand ---------- */
+
+/** Aktive Mitarbeiter: Nummer → Rolle (gesperrte Links bekommen nichts mehr). */
+function activeStaffRoles() {
+  const map = {};
+  sheetObjects(CONFIG.SHEETS.staff).forEach((r) => { if (r.Token && r.Aktiv === true) map[String(r.Nr).trim()] = String(r.Rolle || "Hausmeister"); });
+  return map;
+}
+
+/**
+ * Nachricht an alle passenden Geräte. to = { residents: [Aufgang-IDs] | "all", roles: [...], nrs: [...], exceptNr }
+ * Fehler beim Versand stören die eigentliche Aktion nie.
+ */
+function pushSend(to, msg) {
+  try {
+    const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.push.name);
+    if (!sheet) return 0;
+    const staff = (to.roles || to.nrs) ? activeStaffRoles() : {};
+    const targets = sheetObjects(CONFIG.SHEETS.push).filter((r) => {
+      if (!r.ID || !PUSH_HOSTS.test(String(r.Endpoint))) return false;
+      const group = String(r.Gruppe), nr = fitnessNr(r.Nr);
+      if (group === "Bewohner") {
+        if (!to.residents) return false;
+        return to.residents === "all" || to.residents.indexOf(String(r.Aufgang)) !== -1;
+      }
+      if (!nr || !Object.prototype.hasOwnProperty.call(staff, nr) || nr === to.exceptNr) return false;
+      return (to.roles || []).indexOf(staff[nr]) !== -1 || (to.nrs || []).indexOf(nr) !== -1;
+    }).slice(0, CONFIG.PUSH.maxPerSend);
+    if (!targets.length) return 0;
+    const item = { title: plain(msg.title, 80), body: plain(msg.body || "", 180), url: /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#notfall",
+      tag: plain(msg.tag || "", 40), at: new Date().toISOString() };
+    const cache = CacheService.getScriptCache();
+    targets.forEach((r) => {
+      let list = [];
+      try { list = JSON.parse(cache.get(`pq_${r.ID}`) || "[]"); } catch (e) { list = []; }
+      list.push(item);
+      cache.put(`pq_${r.ID}`, JSON.stringify(list.slice(-10)), 21600);
+    });
+    const res = UrlFetchApp.fetchAll(targets.map((r) => ({
+      url: String(r.Endpoint), method: "post", payload: "", muteHttpExceptions: true,
+      headers: { Authorization: vapidAuth(String(r.Endpoint)), TTL: "21600", Urgency: msg.urgent ? "high" : "normal" },
+    })));
+    // Abgemeldete Geräte (404/410) löschen, andere Fehler zählen (nach 5 Fehlern in Folge löschen)
+    const gone = [];
+    res.forEach((x, i) => {
+      const code = x.getResponseCode();
+      const r = targets[i];
+      if (code === 404 || code === 410) gone.push(r._row);
+      else if (code >= 400) {
+        const n = Number(r.Fehler || 0) + 1;
+        if (n >= 5) gone.push(r._row); else sheet.getRange(r._row, 8).setValue(n);
+      } else if (Number(r.Fehler || 0)) sheet.getRange(r._row, 8).setValue(0);
+    });
+    gone.sort((a, b) => b - a).forEach((row) => sheet.deleteRow(row));
+    return targets.length - gone.length;
+  } catch (err) {
+    console.error("Push:", err);
+    return 0;
+  }
+}
+
+/** Menü/Editor: Testnachricht an alle Geräte der Verwaltung. */
+function pushTest() {
+  const n = pushSend({ roles: ["Verwaltung"] }, { title: "Test: Benachrichtigungen funktionieren ✅", body: "Diese Nachricht kam aus dem Apps Script.", url: "#cockpit" });
+  Logger.log(n ? `OK: an ${n} Gerät(e) gesendet` : "Kein Gerät der Verwaltung angemeldet (in der App unter Cockpit → 🔔 einschalten).");
+  return n;
+}
+
+/** „Sa 26.09., 18:00–19:00 Uhr“ */
+function pushSlot(start, end) {
+  const p2 = (n) => String(n).padStart(2, "0");
+  const day = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][start.getDay()];
+  return `${day} ${p2(start.getDate())}.${p2(start.getMonth() + 1)}., ${p2(start.getHours())}:${p2(start.getMinutes())}–${p2(end.getHours())}:${p2(end.getMinutes())} Uhr`;
 }

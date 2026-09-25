@@ -28,7 +28,9 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
   DriveApp: { getFileById: (id) => ({ setTrashed() {}, getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
-  Utilities: { base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
+  Utilities: { base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => require('crypto').randomUUID(),
+    DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash(a).update(typeof t === 'string' ? Buffer.from(t, 'utf8') : Buffer.from(t)).digest()].map((b) => (b > 127 ? b - 256 : b)),
+    base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
@@ -198,6 +200,10 @@ check('A12 Fitnessraum nicht für Hausmeister, Leitung, ohne Token, per PIN', [H
   && P({ action: 'fitnessBook', pin: '13059', date: '2030-01-01', time: '08:00', minutes: 30 }).code === 'staff');
 check('A13 Fitness-Buchung: Typ-Tricks bei Datum/Zeit/Dauer', [{ date: ['2030-01-01'], time: '08:00', minutes: 30 }, { date: '2030-01-01', time: '8:00', minutes: 30 }, { date: '2030-01-01', time: '08:00', minutes: '30' + 'x' }, { date: '2030-02-31', time: '08:00', minutes: 30 }, { date: '2030-01-01', time: '08:00', minutes: 1e9 }]
   .every((b) => !P({ action: 'fitnessBook', token: FIT, ...b }).ok));
+check('A14 Push-Anmeldung: nur echte Push-Dienste (kein Senden an beliebige Adressen), Formeln/Metadaten-Adressen abgelehnt', ['https://169.254.169.254/latest', 'https://script.google.com/macros/x', '=HYPERLINK("https://fcm.googleapis.com/x")', 'https://fcm.googleapis.com@evil.example/x', 'https://fcm.googleapis.com/x\nHost: evil']
+  .every((endpoint) => !P({ action: 'pushSubscribe', pin: '13059', endpoint }).ok));
+check('A15 Push-Postfach: ohne gültige Geräte-Kennung nichts, Prototyp-Namen harmlos', ['', 'constructor', '__proto__', '../x', 'a'.repeat(100)].every((id) => { const r = G({ action: 'pushInbox', id }); return r.ok === true && r.item === null; }));
+check('A16 Push-Anmeldung als Mitarbeiter nur mit gültigem Link (sonst Bewohner)', (() => { reset(); const r = P({ action: 'pushSubscribe', pin: '13059', endpoint: 'https://fcm.googleapis.com/fcm/send/abc:def', token: 'e'.repeat(40) }); return r.ok && r.group === 'Bewohner'; })());
 
 console.log('--- B. Rechte / Datenabfluss');
 reset();

@@ -232,6 +232,7 @@
     if (!LEGAL_VIEWS.includes(viewName)) lastAppView = viewName;
     window.scrollTo(0, 0);
     updateConsentUi();
+    try { renderPushBoxes(); } catch (e) { /* egal */ }
     // Externe Dienste (z. B. Abfahrten) erst nach Zustimmung laden.
     if (hasConsent() && viewEnterHooks[viewName]) viewEnterHooks[viewName]();
   }
@@ -1561,6 +1562,8 @@
         if (!fitOnly && (!isAdmin() || currentView === "hausmeister")) loadTasks();
         if (isAdmin() && currentView === "cockpit") loadCockpit();
         fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
+        renderPushBoxes();
+        pushSync(false);
         break;
       } catch (err) {
         const cur = staff();
@@ -2380,6 +2383,8 @@
     localRemove(COCKPIT_KEY);
     localRemove(FIT_KEY);
     renderStaff();
+    renderPushBoxes();
+    pushSync(true); // Gerät wieder als Bewohner führen
     location.hash = "notfall";
     toast("Abgemeldet.", "ok");
   }
@@ -2692,6 +2697,142 @@
     });
   }
 
+  /* ======================================================================
+     Benachrichtigungen (nur Android): Web Push ohne Inhalt – der Service Worker
+     holt den Text danach direkt beim Backend ab (pushInbox). Freiwillig, jederzeit ausschaltbar.
+     ====================================================================== */
+
+  const PUSH_KEY = "mieterapp.push";   // { id, endpoint, group, obj, key, at }
+  const PUSH_CACHE = "mieterapp-push"; // für den Service Worker: { api, id }
+  let pushBusy = false;
+
+  function pushSupported() {
+    return /Android/i.test(navigator.userAgent) && "serviceWorker" in navigator && "PushManager" in window
+      && "Notification" in window && !!CFG.API_URL;
+  }
+
+  /** Gruppe dieses Geräts: Rolle bei persönlichem Link, sonst Bewohner; null = Anmeldung läuft noch. */
+  function pushGroup() {
+    const s = staff();
+    if (s && s.token) return s.user ? s.user.role : null;
+    return "Bewohner";
+  }
+
+  async function pushApi(payload) {
+    const s = staff();
+    const res = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ ...payload, pin: storedPin(), token: s && s.token }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) { const err = new Error(data.error || `HTTP ${res.status}`); err.userMessage = data.error; throw err; }
+    return data;
+  }
+
+  function b64ToBytes(b64) {
+    const bin = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  }
+
+  async function pushRegister(sub) {
+    const data = await pushApi({ action: "pushSubscribe", endpoint: sub.endpoint, obj: OBJ.key || "" });
+    writeJson(PUSH_KEY, { id: data.id, endpoint: sub.endpoint, group: data.group, obj: OBJ.key || "", key: data.key, at: Date.now() });
+    try {
+      const c = await caches.open(PUSH_CACHE);
+      await c.put("push-config", new Response(JSON.stringify({ api: CFG.API_URL, id: data.id })));
+    } catch (e) { /* ohne Cache zeigt der Service Worker einen allgemeinen Text */ }
+  }
+
+  async function pushEnable() {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      toast(t_("Benachrichtigungen wurden nicht erlaubt."), "error");
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const { key } = await pushApi({ action: "pushKey" });
+    let sub = await reg.pushManager.getSubscription();
+    const cur = readJson(PUSH_KEY);
+    if (sub && cur && cur.key && cur.key !== key) { await sub.unsubscribe(); sub = null; }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+    await pushRegister(sub);
+    toast(t_("Benachrichtigungen sind eingeschaltet."), "ok");
+  }
+
+  async function pushDisable() {
+    const cur = readJson(PUSH_KEY);
+    localRemove(PUSH_KEY);
+    try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch (e) { /* egal */ }
+    try { await caches.delete(PUSH_CACHE); } catch (e) { /* egal */ }
+    if (cur && cur.id) pushApi({ action: "pushUnsubscribe", id: cur.id }).catch(() => {});
+    toast(t_("Benachrichtigungen sind ausgeschaltet."), "ok");
+  }
+
+  /** Beim Start und nach An-/Abmelden: Gruppe/Aufgang aktuell halten (höchstens alle 3 Tage sonst). */
+  async function pushSync(force) {
+    const cur = readJson(PUSH_KEY);
+    if (!cur || !pushSupported() || !hasConsent()) return;
+    const group = pushGroup();
+    if (!group) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub || Notification.permission !== "granted") { localRemove(PUSH_KEY); renderPushBoxes(); return; }
+      const stale = Date.now() - (cur.at || 0) > 3 * 86400000;
+      if (force || stale || sub.endpoint !== cur.endpoint || cur.group !== group || (group === "Bewohner" && cur.obj !== (OBJ.key || ""))) {
+        await pushRegister(sub);
+        renderPushBoxes();
+      }
+    } catch (e) { /* nächster Start versucht es erneut */ }
+  }
+
+  function pushInfo(group) {
+    const s = staff();
+    const fit = !!(s && s.user && s.user.fitness);
+    const fitText = "Fitnessraum: wenn dich jemand als Trainingspartner einträgt oder absagt.";
+    if (group === "Verwaltung") return `Neue Meldungen von Bewohnern und Mängel vom Hausmeister.${fit ? ` ${fitText}` : ""}`;
+    if (group === "Hausmeister" || group === "Leitung") return "Neue Aufträge für den Hausmeisterdienst.";
+    if (group === "Fitness") return fitText;
+    return t_("Neue Hinweise der Hausverwaltung (z. B. Wasser abgestellt) und neue Umfragen für Ihren Aufgang.");
+  }
+
+  function renderPushBoxes() {
+    const group = pushGroup();
+    const ok = pushSupported() && !!group && hasConsent();
+    const on = !!readJson(PUSH_KEY);
+    const denied = ok && Notification.permission === "denied";
+    $$("[data-push-box]").forEach((box) => {
+      const staffBox = box.dataset.pushBox === "staff";
+      const show = ok && (staffBox ? group !== "Bewohner" : group === "Bewohner");
+      box.hidden = !show;
+      if (!show) return;
+      const tt = (x) => (staffBox ? x : t_(x));
+      const state = denied ? tt("In den Android-Einstellungen für diese Seite blockiert.")
+        : on ? tt("✓ Auf diesem Handy eingeschaltet.") : "";
+      box.innerHTML = `<div class="push-box__text"><strong>🔔 ${esc(tt("Benachrichtigungen"))}</strong>
+          <span class="muted small">${esc(pushInfo(group))}</span>${state ? `<span class="small push-box__state">${esc(state)}</span>` : ""}</div>
+        <button class="btn ${on ? "btn--ghost" : "btn--primary"} btn--small" type="button" data-push-toggle${denied || pushBusy ? " disabled" : ""}>${esc(on ? tt("Ausschalten") : tt("Einschalten"))}</button>`;
+    });
+  }
+
+  function initPush() {
+    renderPushBoxes();
+    document.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-push-toggle]");
+      if (!btn || pushBusy) return;
+      pushBusy = true;
+      renderPushBoxes();
+      try {
+        if (readJson(PUSH_KEY)) await pushDisable(); else await pushEnable();
+      } catch (err) {
+        console.warn("Push:", err);
+        toast(err.userMessage || t_("Benachrichtigungen konnten nicht eingeschaltet werden. Bitte später erneut versuchen."), "error", 7000);
+      } finally {
+        pushBusy = false;
+        renderPushBoxes();
+      }
+    });
+    setTimeout(() => pushSync(false), 1500);
+  }
+
   /* ---------- Bewohner: Hausreinigung (zuletzt erledigt / geplant) ---------- */
 
   /** Buttons „In den Kalender“: iPhone/Outlook (webcal), Google Kalender, Adresse kopieren. */
@@ -2824,7 +2965,7 @@
     [
       renderEntrancePicker, renderEmergency, renderWaste, renderInfos, initTransit,
       initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
-      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff, initFitness, initIntro, initTextSize,
+      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff, initFitness, initPush, initIntro, initTextSize,
     ].forEach((step) => {
       try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); setTimeout(() => reportError(`${step.name}: ${err.message}`, "init"), 3000); }
     });

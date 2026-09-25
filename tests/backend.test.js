@@ -4,7 +4,7 @@ const fs = require('fs'), vm = require('vm');
 process.env.TZ = 'Europe/Berlin';
 let calName = 'WEG Wartenberger Dorfkrug'; const trashed = []; const alerts = []; const cache = {}; const triggers = [];
 const events = {}; let evSeq = 0;
-const fetches = []; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
+const fetches = []; const pushLog = []; const pushCodes = {}; let pushThrow = false; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
 const mkHours = (date, icons, tmin, tmax) => Array.from({ length: 24 }, (_, h) => ({ timestamp: `${date}T${String(h).padStart(2, '0')}:00:00+02:00`, temperature: tmin + (tmax - tmin) * Math.sin(Math.PI * h / 23), icon: icons(h), precipitation: icons(h) === 'rain' ? 0.5 : 0 }));
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
@@ -30,11 +30,13 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
   DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id), getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
-  Utilities: { DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash('md5').update(t).digest()], base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64url'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
+  Utilities: { DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash(a).update(typeof t === 'string' ? Buffer.from(t, 'utf8') : Buffer.from(t)).digest()].map((b) => (b > 127 ? b - 256 : b)), base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => require('crypto').randomUUID(),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); if (f === 'HH:mm') return `${p(d.getHours())}:${p(d.getMinutes())}`; return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
-  UrlFetchApp: { fetchAll: (reqs) => { fetches.push(...reqs.map((r) => r.url)); if (wx.fail) throw new Error('DNS'); return reqs.map((r) => {
+  UrlFetchApp: { fetchAll: (reqs) => {
+    if (reqs.length && /^https:\/\/fcm\.googleapis\.com\//.test(reqs[0].url)) { if (pushThrow) throw new Error('Push down'); pushLog.push(...reqs); return reqs.map((r) => ({ getResponseCode: () => pushCodes[r.url] || 201, getContentText: () => '' })); }
+    fetches.push(...reqs.map((r) => r.url)); if (wx.fail) throw new Error('DNS'); return reqs.map((r) => {
     if (/transport\.rest/.test(r.url)) {
       const code = tr.down || (tr.onlyVbb && /bvg/.test(r.url)) ? 503 : 200;
       const body = /locations/.test(r.url) ? [{ type: 'stop', id: '900150005', name: 'Dorfstr./Lindenberger Str. (Berlin)' }]
@@ -665,6 +667,95 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
     check('Gemeinsam: Training zählt auch für den Partner (+1, gemeinsam +1)', !sameYear || (after.count === before.count + 1 && after.together === before.together + 1 && after.minutes === before.minutes + 60), [before, after]);
   }
   check('Fitness: Konstruktor-/Unsinns-IDs abgelehnt', !post({ action: 'fitnessCancel', token: fitTok, id: 'constructor' }).ok && !post({ action: 'fitnessCancel', token: fitTok }).ok);
+}
+
+// ================= Benachrichtigungen (Web Push) =================
+{
+  Object.keys(cache).forEach((k) => delete cache[k]);
+  const crypto = require('crypto');
+  const key = post({ action: 'pushKey', pin: '13059' }).key;
+  check('Push: öffentlicher Schlüssel (65 Byte, P-256) und nur mit PIN', /^[A-Za-z0-9_-]{87}$/.test(key) && Buffer.from(key, 'base64url')[0] === 4 && post({ action: 'pushKey' }).code === 'pin', key);
+  check('Push: Schlüssel bleibt gleich', post({ action: 'pushKey', pin: '13059' }).key === key && /^[a-f0-9]{64}$/.test(props.VAPID_PRIVATE));
+  const EP = (n) => `https://fcm.googleapis.com/fcm/send/dev${n}:APA91b${'x'.repeat(30)}`;
+  const sub = (x) => post({ action: 'pushSubscribe', ...x });
+  const r1 = sub({ pin: '13059', endpoint: EP(1), obj: 'lind6' });
+  const r2 = sub({ pin: '13059', endpoint: EP(2), obj: 'lind2' });
+  const rA = sub({ token: admTok, endpoint: EP(3) });
+  const rH = sub({ token: hmTok, endpoint: EP(4) });
+  const rF = sub({ token: fitTok, endpoint: EP(5) });
+  const r8 = sub({ token: adm2Tok, endpoint: EP(6) });
+  const pg = () => sheets['Benachrichtigungen'].grid;
+  check('Push: Geräte angemeldet mit Gruppe', [r1, r2].every((r) => r.group === 'Bewohner') && rA.group === 'Verwaltung' && rH.group === 'Hausmeister' && rF.group === 'Fitness' && [r1, rA].every((r) => /^[a-f0-9]{40}$/.test(r.id)), [r1, rA, rH, rF]);
+  check('Push: Blatt speichert Nummer/Aufgang, keinen Link-Token', pg().length === 7 && pg().some((r) => r[3] === '007' && r[2] === 'Verwaltung') && pg().some((r) => r[4] === 'lind6') && !JSON.stringify(pg()).includes(admTok));
+  check('Push: erneut anmelden = gleiche Zeile', sub({ pin: '13059', endpoint: EP(1), obj: 'lind6' }).id === r1.id && pg().length === 7);
+  check('Push: fremde/unsichere Adressen abgelehnt', ['http://fcm.googleapis.com/fcm/send/x', 'https://evil.example/x', 'https://fcm.googleapis.com.evil.example/x', 'javascript:alert(1)', `https://fcm.googleapis.com/fcm/send/${'a'.repeat(1000)}`, 'https://fcm.googleapis.com/fcm/send/a b', { a: 1 }]
+    .every((endpoint) => !sub({ pin: '13059', endpoint, obj: 'lind6' }).ok) && pg().length === 7);
+  check('Push: ohne PIN keine Anmeldung', sub({ endpoint: EP(9), obj: 'lind6' }).code === 'pin');
+  const fake = sub({ pin: '13059', endpoint: EP(7), obj: 'constructor', token: 'f'.repeat(40) });
+  check('Push: falscher Token → Bewohner ohne Aufgang (keine Rechte erschlichen)', fake.group === 'Bewohner' && pg()[pg().length - 1][4] === '');
+  post({ action: 'pushUnsubscribe', pin: '13059', id: fake.id });
+
+  const inbox = (id) => ctx.doGet({ parameter: { action: 'pushInbox', id } });
+  const sent = () => pushLog.splice(0).map((x) => x.url);
+  sent();
+  post({ action: 'adminNewsSave', token: admTok, title: 'Wasser abgestellt', text: 'Montag 8–12 Uhr', only: ['lind6'] });
+  const req = pushLog[0];
+  const s1 = sent();
+  check('Push: Hinweis nur an Bewohner des Aufgangs', s1.length === 1 && s1[0] === EP(1), s1);
+  const m = /^vapid t=([^,]+), k=(.+)$/.exec(req.headers.Authorization);
+  const raw = Buffer.from(m[2], 'base64url');
+  const pub = crypto.createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: raw.subarray(1, 33).toString('base64url'), y: raw.subarray(33).toString('base64url') }, format: 'jwk' });
+  const [jh, jb, js] = m[1].split('.');
+  const claims = JSON.parse(Buffer.from(jb, 'base64url'));
+  check('Push: VAPID-Signatur (ES256) gültig, richtige Zieladresse, leerer Inhalt', crypto.verify('sha256', Buffer.from(`${jh}.${jb}`), { key: pub, dsaEncoding: 'ieee-p1363' }, Buffer.from(js, 'base64url'))
+    && claims.aud === 'https://fcm.googleapis.com' && /^mailto:/.test(claims.sub) && claims.exp > Date.now() / 1000 && req.payload === '' && req.headers.TTL, claims);
+  const it = inbox(r1.id);
+  check('Push: Gerät holt den Text ab (einmal)', it.ok && it.item.title === '📢 Wasser abgestellt' && it.item.body === 'Montag 8–12 Uhr' && it.item.url === '#notfall' && inbox(r1.id).item === null, it);
+  check('Push: anderer Aufgang hat nichts, ungültige Kennung → nichts', inbox(r2.id).item === null && ['', 'constructor', '__proto__', 'x'.repeat(40)].every((id) => inbox(id).ok && inbox(id).item === null));
+
+  post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '3', name: 'Max Muster', details: 'Neues Schild' });
+  const s2 = sent();
+  const vw = inbox(rA.id).item, hmi = inbox(rH.id).item;
+  check('Push: neue Meldung → Verwaltung (007+008), Klingelschild auch Hausmeister, nicht Bewohner/Fitness', s2.length === 3 && [EP(3), EP(6), EP(4)].every((e) => s2.includes(e)), s2);
+  check('Push: ohne Namen/Wohnung auf dem Sperrbildschirm', vw.title === 'Neue Meldung: Klingelschild' && vw.body === 'Lindenberger Str. 6' && vw.url === '#cockpit' && hmi.url === '#hausmeister' && !JSON.stringify([vw, hmi]).includes('Muster'), [vw, hmi]);
+  post({ action: 'submitStaffDefect', token: hmTok, ort: 'Tiefgarage', beschreibung: 'Tor', dringend: true });
+  const s3 = sent();
+  check('Push: dringender Mangel vom Hausmeister → Verwaltung', s3.length === 2 && inbox(rA.id).item.title === 'DRINGEND – Mangel vom Hausmeister', s3);
+  post({ action: 'adminPollSave', token: admTok, question: 'Fahrradständer?', options: ['Ja', 'Nein'] });
+  const s4 = sent();
+  check('Push: neue Umfrage → alle Bewohner', s4.length === 2 && s4.includes(EP(1)) && s4.includes(EP(2)) && inbox(r2.id).item.title === '🗳️ Neue Umfrage', s4);
+
+  const d5 = new Date(); d5.setDate(d5.getDate() + 5);
+  const day5 = `${d5.getFullYear()}-${String(d5.getMonth() + 1).padStart(2, '0')}-${String(d5.getDate()).padStart(2, '0')}`;
+  const fb = post({ action: 'fitnessBook', token: fit2Tok, date: day5, time: '10:00', minutes: 60, with: ['010'] });
+  const s5 = sent(), fi = inbox(rF.id).item;
+  check('Push: Fitness – nur der eingetragene Partner', fb.ok && s5.length === 1 && s5[0] === EP(5) && fi.title === 'Nr. 011 trainiert mit dir 💪' && /10:00–11:00 Uhr/.test(fi.body) && fi.url === '#fitness', [s5, fi]);
+  post({ action: 'fitnessCancel', token: fitTok, id: fb.id });
+  check('Push: Partner sagt ab → Bucher (011 ohne Gerät) – niemand sonst', sent().length === 0);
+  const fb2 = post({ action: 'fitnessBook', token: admTok, date: day5, time: '12:00', minutes: 60, with: ['010', '008'] });
+  sent();
+  post({ action: 'fitnessCancel', token: admTok, id: fb2.id });
+  const s6 = sent();
+  check('Push: Bucher storniert → beide Partner, nicht er selbst', s6.length === 2 && s6.includes(EP(5)) && s6.includes(EP(6)) && !s6.includes(EP(3)), s6);
+  [r1, r2, rA, rH, rF, r8].forEach((r) => { while (inbox(r.id).item); });
+
+  staff[6][2] = false; delete cache.staff;
+  post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '3', name: 'x', details: 'x' });
+  check('Push: gesperrter Mitarbeiter-Link bekommt nichts mehr', !sent().includes(EP(4)));
+  staff[6][2] = true; delete cache.staff;
+
+  pushCodes[EP(2)] = 410; pushCodes[EP(1)] = 500;
+  post({ action: 'adminNewsSave', token: admTok, title: 'Test', text: 'x' });
+  check('Push: abgemeldetes Gerät (410) wird gelöscht, Fehler (500) gezählt', !pg().some((r) => r[1] === EP(2)) && pg().find((r) => r[1] === EP(1))[7] === 1);
+  delete pushCodes[EP(1)];
+  check('Push: erneute Anmeldung setzt Fehler zurück', sub({ pin: '13059', endpoint: EP(1), obj: 'lind6' }).ok && pg().find((r) => r[1] === EP(1))[7] === 0);
+  pushThrow = true;
+  check('Push: Störung beim Versand bricht die Meldung nicht ab', post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x', ort: 'Keller' }).ok);
+  pushThrow = false;
+  check('Push: künftiger Hinweis wird erst später gemeldet (nicht jetzt)', (() => { sent(); post({ action: 'adminNewsSave', token: admTok, title: 'Später', text: 'x', from: '2099-01-01' }); return sent().length === 0; })());
+  check('Push: Abmelden löscht das Gerät', post({ action: 'pushUnsubscribe', pin: '13059', id: r1.id }).ok && !pg().some((r) => r[0] === r1.id));
+  check('Push: Test-Funktion im Menü sendet an Verwaltung', ctx.pushTest() === 2 && sent().length === 2);
+  Object.keys(cache).forEach((k) => delete cache[k]);
 }
 
 // ================= Fehlerüberwachung =================

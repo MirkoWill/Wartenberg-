@@ -178,6 +178,23 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
 - Statistik „Anfeuern“: Trainings (gebuchte Zeiten, die begonnen haben) je Woche/Monat/Jahr, Minuten,
   🔥 Wochen in Folge, Wochenziel (2×). Anzeige nur mit Nummern. Buchungen werden nach 2 Jahren gelöscht.
 
+## Benachrichtigungen (nur Android)
+
+- In der App gibt es auf Android-Handys den Kasten **„🔔 Benachrichtigungen“** (Startseite für Bewohner; Hausmeister-Bereich,
+  Cockpit und Fitnessraum für Mitarbeiter). Freiwillig, jederzeit ausschaltbar.
+- Wer bekommt was:
+  - **Bewohner:** neuer Hinweis aus dem Cockpit (sofort gültig) und neue Umfrage – nur für den eigenen Aufgang.
+  - **Hausmeister / Leitung:** neuer Auftrag für den Hausmeisterdienst (z. B. Klingelschild, Zuständigkeit geändert).
+  - **Verwaltung (007/008):** jede neue Meldung von Bewohnern und Mängel vom Hausmeister (dringend = laut).
+  - **Fitnessraum:** wenn dich jemand als Trainingspartner einträgt, absagt oder die gemeinsame Buchung storniert.
+- Auf dem Sperrbildschirm stehen nur Art und Aufgang – keine Namen oder Wohnungen.
+- Technik: Web Push mit VAPID. Die Schlüssel legt das Script beim ersten Einschalten selbst an
+  (Script-Eigenschaften `VAPID_PRIVATE` / `VAPID_PUBLIC` – **nicht ändern oder löschen**, sonst müssen alle neu einschalten).
+  Über den Push-Dienst (bei Chrome: Google) geht nur ein leeres Signal; den Text holt die App bei uns ab.
+- Blatt **„Benachrichtigungen“**: je Gerät Push-Adresse, Gruppe, Nummer bzw. Aufgang. Abgemeldete Geräte löscht das Script
+  automatisch, unbenutzte nach einem Jahr.
+- Test: Menü **Mieter-App → „Benachrichtigung testen (an Verwaltung)“** schickt eine Testnachricht an alle Handys der Verwaltung.
+
 ## Hinweise und Stimmungsbild aus dem Cockpit
 
 - **Hinweise für Bewohner:** Cockpit → „Hinweise für Bewohner“ → Titel, Text, ab/bis, Aufgänge, „wichtig“ →
