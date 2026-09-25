@@ -104,8 +104,8 @@ Auftragsliste: `GET <API_URL>?action=getTasks&token=…` →
 
 ## Zugangs-PIN
 
-Alle Anfragen der App (POST sowie `GET ?action=status|news`) enthalten die PIN: im JSON als `"pin": "13059"`,
-bei GET als `&pin=13059`. Falsche oder fehlende PIN: `{ "ok": false, "error": "PIN ungültig", "code": "pin" }` –
+Alle Anfragen der App (POST sowie `GET ?action=status|news`) enthalten die PIN: im JSON als `"pin": "<PIN>"`,
+bei GET als `&pin=<PIN>`. Die App kennt die PIN nicht selbst – sie prüft sie beim ersten Öffnen mit `{"action":"checkPin","pin":"…"}`. Falsche oder fehlende PIN: `{ "ok": false, "error": "PIN ungültig", "code": "pin" }` –
 die App fragt die PIN dann erneut ab. Zu viele Fehlversuche: `"code": "pin_locked"`.
 Ausgenommen: `?action=done` (Erledigt-Link) und Hausmeister-Aktionen mit Token.
 

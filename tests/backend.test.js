@@ -7,7 +7,7 @@ const events = {}; let evSeq = 0;
 const fetches = []; const pushLog = []; const pushCodes = {}; let pushThrow = false; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
 const mkHours = (date, icons, tmin, tmax) => Array.from({ length: 24 }, (_, h) => ({ timestamp: `${date}T${String(h).padStart(2, '0')}:00:00+02:00`, temperature: tmin + (tmax - tmin) * Math.sin(Math.PI * h / 23), icon: icons(h), precipitation: icons(h) === 'rain' ? 0.5 : 0 }));
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
-const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
+const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = [];
 const chain = (o) => { const p = new Proxy(o, { get: (t, k) => (k in t || typeof k !== 'string' || k === 'toJSON' || k === 'then' ? t[k] : () => p) }); return p; };
 function mkSheet(name) {
   const sh = { name, grid: [], filter: null, bgs: {}, getName: () => name,
@@ -27,7 +27,7 @@ function mkSheet(name) {
 const ss = chain({ getSheetByName: (n) => sheets[n] || null, insertSheet: mkSheet, getSheets: () => Object.values(sheets), deleteSheet() {}, getUrl: () => 'https://sheet' });
 const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, encodeURIComponent,
   Logger: { log() {} },
-  SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
+  SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1, OK_CANCEL: 2 }, Button: { OK: 'ok', CANCEL: 'cancel' }, prompt: () => { const a = prompts.shift() || { ok: false, text: '' }; return { getSelectedButton: () => (a.ok ? 'ok' : 'cancel'), getResponseText: () => a.text }; }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
   DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id), getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash(a).update(typeof t === 'string' ? Buffer.from(t, 'utf8') : Buffer.from(t)).digest()].map((b) => (b > 127 ? b - 256 : b)), base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => require('crypto').randomUUID(),
@@ -110,7 +110,7 @@ check('GET news mit PIN ok', ctx.doGet({ parameter: { action: 'news', pin: '1305
 check('Erledigt-Link braucht keine PIN', ctx.doGet({ parameter: { action: 'done', id: 'T-x', t: 'y' } }).html.includes('Link ungültig'));
 props.APP_PIN = '55555';
 check('APP_PIN-Eigenschaft hat Vorrang', post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }).code === 'pin' && post({ ...base, pin: '55555', action: 'submitTicket', type: 'Mangel', details: 'x' }).ok);
-delete props.APP_PIN;
+props.APP_PIN = '13059';
 for (let i = 0; i < 310; i++) post({ ...base, pin: String(10000 + i), action: 'submitTicket', type: 'Mangel', details: 'x' });
 check('Nach vielen Fehlversuchen gesperrt – auch richtige PIN', post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }).code === 'pin_locked');
 Object.keys(cache).forEach((k) => delete cache[k]);
@@ -775,6 +775,53 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   Object.keys(cache).forEach((k) => delete cache[k]);
 }
 
+// ================= Sicherheit (PIN, Links, Alarme, Umfragen) =================
+{
+  Object.keys(cache).forEach((k) => delete cache[k]);
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'backend', 'Code.gs'), 'utf8');
+  check('PIN: steht nicht im Code (öffentliches Projekt)', /APP_PIN:\s*""/.test(src) && !/APP_PIN:\s*"\d+"/.test(src));
+  check('PIN: checkPin – richtig ok, falsch abgelehnt', post({ action: 'checkPin', pin: '13059' }).ok === true && post({ action: 'checkPin', pin: '99999999' }).code === 'pin');
+  const savedPin = props.APP_PIN; delete props.APP_PIN;
+  check('PIN: ohne eingerichtete PIN ist nichts offen', post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x', pin: '' }).code === 'pin' && ctx.doGet({ parameter: { action: 'news', obj: 'lind6' } }).code === 'pin');
+  check('PIN: Systemprüfung meldet fehlende PIN', ctx.healthCheck().issues.some((i) => /Zugangs-PIN/.test(i)));
+  prompts.push({ ok: true, text: '48151623' });
+  ctx.setAppPinPrompt();
+  check('PIN ändern (Menü): 8 Ziffern gespeichert, gilt sofort', props.APP_PIN === '48151623' && post({ action: 'checkPin', pin: '48151623' }).ok && post({ action: 'checkPin', pin: '13059' }).code === 'pin');
+  ['123', '12345678', '11111111', 'abcdefgh'].forEach((t) => { prompts.push({ ok: true, text: t }); ctx.setAppPinPrompt(); });
+  check('PIN ändern: zu kurz / Zahlenfolge / gleiche Ziffern / Buchstaben abgelehnt', props.APP_PIN === '48151623');
+  props.APP_PIN = savedPin;
+
+  const oldTok = staff[6][3];
+  delete cache.staff;
+  prompts.push({ ok: true, text: '100' });
+  ctx.resetStaffLinkPrompt();
+  const newTok = staff[6][3];
+  check('Link neu erzeugen: alter Link sofort ungültig, neuer funktioniert, Link-Spalte aktualisiert', newTok !== oldTok && /^[a-f0-9]{40}$/.test(newTok)
+    && post({ action: 'hmLogin', token: oldTok }).code === 'staff' && post({ action: 'hmLogin', token: newTok }).ok && staff[6][4].includes(newTok) && /#hausmeister$/.test(staff[6][4]));
+  check('Link neu erzeugen: unbekannte Nummer / Unsinn → Hinweis, nichts geändert', !ctx.resetStaffLink('999').ok && !ctx.resetStaffLink('abc').ok && !ctx.resetStaffLink('constructor').ok && staff[6][3] === newTok);
+  check('Link neu erzeugen: „10“ wird zu 010 (Fitness-Link bleibt #fitness)', ctx.resetStaffLink('10').nr === '010' && /#fitness$/.test(staff[4][4]));
+
+  mails.length = 0;
+  ctx.limitAlarm('submit'); ctx.limitAlarm('submit'); ctx.limitAlarm('staff_100');
+  check('Alarm-Mail bei erreichtem Limit (je Limit höchstens alle 6 Std.)', mails.filter((m) => /Sicherheitshinweis/.test(m.subject)).length === 2
+    && mails.some((m) => /Meldungen pro Stunde/.test(m.subject)) && mails.some((m) => /Nr\. 100/.test(m.subject) && /neu erzeugen/.test(m.body)), mails.map((m) => m.subject));
+  mails.length = 0;
+  for (let i = 0; i < 45; i++) post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'Spam ' + i, ort: 'x' });
+  check('Alarm: echtes Limit (Meldungen) löst genau eine Mail aus', mails.filter((m) => /Sicherheitshinweis/.test(m.subject)).length <= 1 && post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }).ok === false);
+  Object.keys(cache).forEach((k) => delete cache[k]);
+
+  const pv = post({ action: 'adminPollSave', token: admTok, question: 'Burst?', options: ['a', 'b'] });
+  const vg = sheets['Umfrage-Stimmen'].grid;
+  for (let i = 0; i < 16; i++) vg.push([new Date(Date.now() - i * 60000), pv.id, 0, 'lind6', 'h' + i]);
+  const ap = post({ action: 'adminOverview', token: admTok }).polls.find((x) => x.id === pv.id);
+  check('Umfrage-Warnung: 16 Stimmen in einer Stunde → auffällig', ap.burst === 16 && ap.suspicious === true, ap);
+  const pv2 = post({ action: 'adminPollSave', token: admTok, question: 'Ruhig?', options: ['a', 'b'] });
+  for (let i = 0; i < 16; i++) vg.push([new Date(Date.now() - i * 2 * 3600000), pv2.id, 1, 'lind6', 'k' + i]);
+  const ap2 = post({ action: 'adminOverview', token: admTok }).polls.find((x) => x.id === pv2.id);
+  check('Umfrage-Warnung: gleich viele Stimmen über Tage verteilt → unauffällig', ap2.total === 16 && ap2.suspicious === false, ap2.burst);
+  Object.keys(cache).forEach((k) => delete cache[k]);
+}
+
 // ================= Fehlerüberwachung =================
 Object.keys(cache).forEach((k) => delete cache[k]); mails.length = 0;
 const saveTickets = sheets['Tickets']; delete sheets['Tickets'];
@@ -797,7 +844,9 @@ mails.length = 0;
 let hc = ctx.healthCheck();
 check('Systemprüfung meldet Fehler der letzten 24 Std. per Mail', hc.issues.some((i) => /Fehler in den letzten 24 Stunden/.test(i)) && mails.some((m) => /Systemprüfung/.test(m.subject)));
 sheets['Fehlerprotokoll'].grid.splice(1); mails.length = 0;
+props.APP_PIN = '48151623'; // 8 Stellen – die Test-PIN 13059 wäre zu kurz
 hc = ctx.healthCheck();
+props.APP_PIN = '13059';
 check('Systemprüfung ohne Probleme: keine Mail', hc.issues.length === 0 && mails.length === 0, hc.issues);
 const nm = props.NOTIFY_EMAIL; delete props.NOTIFY_EMAIL;
 check('Systemprüfung erkennt fehlende NOTIFY_EMAIL', ctx.healthCheck().issues.some((i) => /NOTIFY_EMAIL/.test(i)));

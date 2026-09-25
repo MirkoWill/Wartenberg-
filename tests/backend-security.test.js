@@ -5,7 +5,7 @@ process.env.TZ = 'Europe/Berlin';
 let calName = 'WEG Wartenberger Dorfkrug'; const alerts = []; const cache = {}; const triggers = [];
 const events = {}; let evSeq = 0;
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
-const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
+const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = [];
 const chain = (o) => { const p = new Proxy(o, { get: (t, k) => (k in t || typeof k !== 'string' || k === 'toJSON' || k === 'then' ? t[k] : () => p) }); return p; };
 function mkSheet(name) {
   const sh = { name, grid: [], filter: null, bgs: {}, getName: () => name,
@@ -25,7 +25,7 @@ function mkSheet(name) {
 const ss = chain({ getSheetByName: (n) => sheets[n] || null, insertSheet: mkSheet, getSheets: () => Object.values(sheets), deleteSheet() {}, getUrl: () => 'https://sheet' });
 const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, encodeURIComponent,
   Logger: { log() {} },
-  SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
+  SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1, OK_CANCEL: 2 }, Button: { OK: 'ok', CANCEL: 'cancel' }, prompt: () => { const a = prompts.shift() || { ok: false, text: '' }; return { getSelectedButton: () => (a.ok ? 'ok' : 'cancel'), getResponseText: () => a.text }; }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
   DriveApp: { getFileById: (id) => ({ setTrashed() {}, getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => require('crypto').randomUUID(),
@@ -98,7 +98,7 @@ check('GET news mit PIN ok', ctx.doGet({ parameter: { action: 'news', pin: '1305
 check('Erledigt-Link braucht keine PIN', ctx.doGet({ parameter: { action: 'done', id: 'T-x', t: 'y' } }).html.includes('Link ungültig'));
 props.APP_PIN = '55555';
 check('APP_PIN-Eigenschaft hat Vorrang', post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }).code === 'pin' && post({ ...base, pin: '55555', action: 'submitTicket', type: 'Mangel', details: 'x' }).ok);
-delete props.APP_PIN;
+props.APP_PIN = '13059';
 for (let i = 0; i < 310; i++) post({ ...base, pin: String(10000 + i), action: 'submitTicket', type: 'Mangel', details: 'x' });
 check('Nach vielen Fehlversuchen gesperrt – auch richtige PIN', post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }).code === 'pin_locked');
 Object.keys(cache).forEach((k) => delete cache[k]);

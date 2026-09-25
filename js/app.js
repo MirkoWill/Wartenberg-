@@ -271,22 +271,17 @@
   let pinTimer = null;
   let sessionPin = null; // Ersatz, falls der Gerätespeicher blockiert ist
 
-  /** Gespeicherte PIN, sofern sie zur aktuell gültigen PIN passt (sonst ""). */
+  /** Gespeicherte PIN (vom Server bestätigt). Ändert sich die PIN, lehnt der Server ab → neu abfragen. */
   function storedPin() {
     let saved = null;
     saved = readJson(PIN_KEY);
     if (!saved && sessionPin) saved = sessionPin;
-    return saved && saved.hash === CFG.PIN_SHA256 ? String(saved.pin || "") : "";
+    return saved && /^\d{5,12}$/.test(String(saved.pin || "")) ? String(saved.pin) : "";
   }
-  function pinOk() { return !CFG.PIN_SHA256 || isStaff() || !!storedPin(); } // Hausmeister: persönlicher Link statt PIN
+  function pinOk() { return !CFG.API_URL || isStaff() || !!storedPin(); } // Hausmeister: persönlicher Link statt PIN
 
   function pinLock() { return readJson(PIN_LOCK_KEY) || { fails: 0, until: 0 }; }
   function pinLockedFor() { return Math.max(0, pinLock().until - Date.now()); }
-
-  async function sha256Hex(text) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
 
   /** Prüft die eingegebene PIN. Gibt true zurück, wenn sie stimmt. */
   async function checkPinInput() {
@@ -294,13 +289,25 @@
     const msg = $("#pinMsg");
     const pin = input.value.trim();
     if (pinLockedFor()) { updatePinUi(); return false; }
-    if (!/^\d{5}$/.test(pin)) {
-      msg.textContent = t_("Bitte die 5-stellige PIN eingeben.");
+    if (!/^\d{5,12}$/.test(pin)) {
+      msg.textContent = t_("Bitte die PIN eingeben (nur Ziffern).");
       input.focus();
       return false;
     }
-    if ((await sha256Hex(pin)) === CFG.PIN_SHA256) {
-      sessionPin = { pin, hash: CFG.PIN_SHA256 };
+    // Nur der Server kennt die PIN.
+    let res = null;
+    msg.textContent = t_("PIN wird geprüft …");
+    try {
+      const r = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "checkPin", pin }) });
+      res = await r.json();
+    } catch (e) {
+      msg.textContent = t_("Keine Verbindung. Zum ersten Öffnen wird Internet benötigt – bitte erneut versuchen.");
+      return false;
+    }
+    if (res && res.code === "pin_locked") { msg.textContent = res.error || t_("Zu viele Fehlversuche. Bitte später erneut versuchen."); return false; }
+    if (res && res.ok) {
+      sessionPin = { pin };
       writeJson(PIN_KEY, sessionPin); // bleibt auf dem Gerät, bis die PIN sich ändert oder widerrufen wird
       localRemove(PIN_LOCK_KEY);
       msg.textContent = "";
@@ -347,7 +354,7 @@
   function updateAcceptButton() {
     const accept = $("#consentAccept");
     const checked = $("#consentCheck").checked;
-    const pinReady = pinOk() || (!pinLockedFor() && $("#pinInput").value.trim().length === 5);
+    const pinReady = pinOk() || (!pinLockedFor() && $("#pinInput").value.trim().length >= 5);
     accept.disabled = !(checked && pinReady);
   }
 
@@ -362,7 +369,7 @@
     pinRejectedAt = Date.now();
     revokeConsent();
     $("#pinInput").value = "";
-    $("#pinMsg").textContent = t_("Die PIN hat sich geändert. Bitte die aktuelle PIN vom Aushang eingeben.");
+    $("#pinMsg").textContent = t_("Die PIN hat sich geändert. Bitte die aktuelle PIN eingeben (erhalten Sie von der Hausverwaltung).");
     updateConsentUi();
   }
 
@@ -398,7 +405,7 @@
     check.addEventListener("change", updateAcceptButton);
     const pinInput = $("#pinInput");
     pinInput.addEventListener("input", () => {
-      pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, 5);
+      pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, 12);
       if (!pinLockedFor()) $("#pinMsg").textContent = "";
       updateAcceptButton();
     });
@@ -2238,6 +2245,7 @@
       <li class="poll poll--admin">
         <span class="badge ${p.open ? "badge--in-Arbeit" : ""}">${p.open ? "läuft" : "beendet"}</span>
         <h3 class="poll__q">${esc(p.question)}</h3>
+        ${p.suspicious ? `<p class="poll__warn">⚠️ Auffällig: ${esc(p.burst)} Stimmen innerhalb einer Stunde – vielleicht hat jemand mehrfach abgestimmt (z. B. mit geleertem Browser). Ergebnis mit Vorsicht lesen.</p>` : ""}
         ${pollBars(Array.isArray(p.options) ? p.options : [], Array.isArray(p.counts) ? p.counts : [])}
         <p class="muted small">${esc(who(p.only))}${p.to ? ` · bis ${esc(formatDate(parseIsoDate(p.to)))}` : ""} · ${p.showResults ? "Ergebnis für Bewohner sichtbar" : "Ergebnis nur für die Verwaltung"}</p>
         ${p.open ? `<button class="btn btn--ghost btn--small" type="button" data-poll-end="${esc(p.id)}">Umfrage beenden</button>` : ""}

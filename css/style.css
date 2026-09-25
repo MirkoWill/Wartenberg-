@@ -1135,3 +1135,5 @@ html.text-large body { zoom: 1.18; }
 .push-box .btn { flex-shrink: 0; }
 .push-box--on { border-color: var(--c-ok); border-left-width: 5px; }
 .push-box__badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--c-ok); color: var(--c-surface); font-size: 13px; text-align: center; }
+.poll__warn { margin: 6px 0; padding: 8px 10px; border-radius: var(--radius); background: #fff4d6; color: #6b4d00; font-size: 14px; }
+@media (prefers-color-scheme: dark) { .poll__warn { background: #3d3217; color: #f3d98b; } }
