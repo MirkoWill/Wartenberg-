@@ -187,6 +187,8 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
   - **Hausmeister / Leitung:** neuer Auftrag für den Hausmeisterdienst (z. B. Klingelschild, Zuständigkeit geändert).
   - **Verwaltung (007/008):** jede neue Meldung von Bewohnern und Mängel vom Hausmeister (dringend = laut).
   - **Fitnessraum:** wenn dich jemand als Trainingspartner einträgt, absagt oder die gemeinsame Buchung storniert.
+    Außerdem eine **Erinnerung ca. 1 Stunde vor jeder Buchung** an alle Beteiligten (Zeitauslöser `fitnessReminders`
+    alle 15 Minuten, legt sich beim ersten Buchen selbst an; Spalte „Erinnert“ verhindert doppelte Erinnerungen).
 - Auf dem Sperrbildschirm stehen nur Art und Aufgang – keine Namen oder Wohnungen.
 - Technik: Web Push mit VAPID. Die Schlüssel legt das Script beim ersten Einschalten selbst an
   (Script-Eigenschaften `VAPID_PRIVATE` / `VAPID_PUBLIC` – **nicht ändern oder löschen**, sonst müssen alle neu einschalten).

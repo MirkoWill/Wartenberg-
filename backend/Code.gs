@@ -89,7 +89,7 @@ const CONFIG = {
     },
     fitness: {
       name: "Fitness-Buchungen",
-      headers: ["ID", "Nr", "Beginn", "Ende", "Minuten", "Gebucht am", "Storniert", "Mit"],
+      headers: ["ID", "Nr", "Beginn", "Ende", "Minuten", "Gebucht am", "Storniert", "Mit", "Erinnert"],
     },
     errors: {
       name: "Fehlerprotokoll",
@@ -110,7 +110,8 @@ const CONFIG = {
   ROLES: ["Hausmeister", "Leitung", "Verwaltung", "Fitness"],
   // Fitnessraum (privat): Mitglieder nach Nummer, Buchungsregeln, Wochenziel für die Statistik
   FITNESS: { members: ["007", "008", "010", "011"], fromHour: 6, toHour: 23, minMinutes: 30, maxMinutes: 120,
-    stepMinutes: 30, daysAhead: 28, maxFuture: 10, weeklyGoal: 2 },
+    stepMinutes: 30, daysAhead: 28, maxFuture: 10, weeklyGoal: 2,
+    remindMinutes: 60 }, // Erinnerung per Benachrichtigung ca. 1 Std. vorher (Prüfung alle 15 Min.)
   // Benachrichtigungen (Web Push, Android): Kontakt für die Push-Dienste, Obergrenzen
   PUSH: { contact: "info@willbrandt-kompagnon.de", maxSubscriptions: 1000, maxPerSend: 300 },
   // Aufgang-IDs → lesbarer Name (für Auswertungen, z. B. Mängel vom Hausmeister)
@@ -1113,6 +1114,7 @@ function setupPortalSheets() {
   ensureMaintenanceTrigger();
   ensureMorningTrigger();
   ensureReportTrigger();
+  ensureFitnessReminderTrigger();
   CacheService.getScriptCache().removeAll(["areas", "staff"]);
 }
 
@@ -2958,11 +2960,12 @@ function fitnessBook(p, user) {
     const row = lastContentRow(sheet, [1]) + 1;
     sheet.getRange(row, 2).setNumberFormat("@"); // „010“ bleibt „010“
     sheet.getRange(row, mitCol).setNumberFormat("@");
-    sheet.getRange(row, 1, 1, def.headers.length).setValues([[id, user.nr, start, end, minutes, now, "", partners.join(", ")]]);
+    sheet.getRange(row, 1, 1, def.headers.length).setValues([[id, user.nr, start, end, minutes, now, "", partners.join(", "), ""]]);
   } finally {
     lock.releaseLock();
   }
   if (partners.length) pushSend({ nrs: partners }, { title: `Nr. ${user.nr} trainiert mit dir 💪`, body: pushSlot(start, end), url: "#fitness", tag: id });
+  try { ensureFitnessReminderTrigger(); } catch (err) { console.error("Erinnerung (Trigger):", err); }
   return { ok: true, id, with: partners };
 }
 
@@ -3279,4 +3282,45 @@ function pushSlot(start, end) {
   const p2 = (n) => String(n).padStart(2, "0");
   const day = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][start.getDay()];
   return `${day} ${p2(start.getDate())}.${p2(start.getMonth() + 1)}., ${p2(start.getHours())}:${p2(start.getMinutes())}–${p2(end.getHours())}:${p2(end.getMinutes())} Uhr`;
+}
+
+/* ---------- Fitnessraum: Erinnerung ca. 1 Stunde vorher ---------- */
+
+/** Zeitgesteuert alle 15 Minuten. Legt sich beim ersten Buchen bzw. bei setup() selbst an. */
+function ensureFitnessReminderTrigger() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty("FITNESS_REMINDER_TRIGGER") === "1") return;
+  const has = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "fitnessReminders");
+  if (!has) ScriptApp.newTrigger("fitnessReminders").timeBased().everyMinutes(15).create();
+  props.setProperty("FITNESS_REMINDER_TRIGGER", "1");
+}
+
+/**
+ * Buchungen, die in den nächsten ~60 Minuten beginnen und noch nicht erinnert wurden → Benachrichtigung an alle
+ * Beteiligten, danach Spalte „Erinnert“ = ja. Wer erst kurz vorher gebucht hat, bekommt keine Erinnerung.
+ */
+function fitnessReminders() {
+  const F = CONFIG.FITNESS;
+  const def = CONFIG.SHEETS.fitness;
+  const sheet = getSpreadsheet().getSheetByName(def.name);
+  if (!sheet) return 0;
+  const col = def.headers.indexOf("Erinnert") + 1;
+  if (sheet.getRange(1, col).getValue() !== "Erinnert") sheet.getRange(1, col).setValue("Erinnert").setFontWeight("bold");
+  const now = Date.now();
+  const due = fitnessRows().filter((r) => {
+    const until = (r.Beginn.getTime() - now) / 60000;
+    const booked = r["Gebucht am"] instanceof Date ? r["Gebucht am"].getTime() : 0;
+    return r.Erinnert !== "ja" && until > 5 && until <= F.remindMinutes + 7 && (r.Beginn.getTime() - booked) / 60000 > F.remindMinutes + 10;
+  });
+  due.forEach((r) => {
+    sheet.getRange(r._row, col).setValue("ja"); // zuerst markieren: nie doppelt erinnern
+    const p2 = (n) => String(n).padStart(2, "0");
+    const slot = `${p2(r.Beginn.getHours())}:${p2(r.Beginn.getMinutes())}–${p2(r.Ende.getHours())}:${p2(r.Ende.getMinutes())} Uhr`;
+    r._people.forEach((nr) => {
+      const others = r._people.filter((x) => x !== nr);
+      pushSend({ nrs: [nr] }, { title: "⏰ In 1 Stunde: Fitnessraum", body: `${slot}${others.length ? ` · mit Nr. ${others.join(" + ")}` : ""}`,
+        url: "#fitness", tag: `${r.ID}-remind` });
+    });
+  });
+  return due.length;
 }
