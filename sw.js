@@ -3,15 +3,16 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v70";
+const CACHE_VERSION = "mieterapp-v71";
 const PUSH_CACHE = "mieterapp-push"; // Benachrichtigungen: { api, id } – bleibt bei neuen Versionen erhalten
+const VERSION = CACHE_VERSION.replace(/^.*-v/, ""); // z. B. "71" – muss zu den ?v= in index.html passen
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=70",
-  "./js/config.js?v=70",
-  "./js/i18n.js?v=70",
-  "./js/app.js?v=70",
+  "./css/style.css?v=71",
+  "./js/config.js?v=71",
+  "./js/i18n.js?v=71",
+  "./js/app.js?v=71",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
@@ -58,7 +59,14 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
-  const immutable = url.searchParams.has("v") || /\/(fonts|icons|vendor)\//.test(url.pathname);
+  // Datei einer anderen Version (alte Seite, neuer Server oder umgekehrt): nie speichern, sonst passen
+  // Seite und Programm dauerhaft nicht zusammen – einfach frisch laden.
+  const v = url.searchParams.get("v");
+  if (v && v !== VERSION) {
+    event.respondWith(fetch(req, { cache: "no-cache" }).catch(() => caches.match(req, { ignoreSearch: true })));
+    return;
+  }
+  const immutable = !!v || /\/(fonts|icons|vendor)\//.test(url.pathname);
   if (immutable) {
     event.respondWith(caches.match(req).then((hit) => hit || fromNetwork(req)));
     return;

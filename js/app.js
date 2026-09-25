@@ -39,6 +39,23 @@
     } catch (e) { /* Melden darf nie selbst stören */ }
   }
   window.addEventListener("error", (e) => reportError(e.message, `${String(e.filename || "").split("/").pop()}:${e.lineno}`));
+
+  /**
+   * Antwort des Backends lesen. Kommt kein JSON zurück (z. B. eine Google-Fehlerseite), wird das mit HTTP-Code und
+   * Textanfang ins Fehlerprotokoll geschrieben (ohne Tags, gekürzt) und ein Fehler geworfen – nie still „leer“ weitermachen.
+   */
+  async function readApiJson(res, label) {
+    const text = await res.text().catch(() => "");
+    try {
+      const data = JSON.parse(text);
+      if (data && typeof data === "object") return data;
+    } catch (e) { /* unten melden */ }
+    const snippet = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+    reportError(`${label}: keine gültige Antwort (HTTP ${res.status}, ${res.type}) ${snippet}`, "api");
+    const err = new Error(`Keine gültige Antwort (HTTP ${res.status})`);
+    err.badResponse = true;
+    throw err;
+  }
   window.addEventListener("unhandledrejection", (e) => reportError((e.reason && e.reason.message) || e.reason, "promise"));
 
   const CFG = window.APP_CONFIG;
@@ -502,7 +519,7 @@
     try {
       const url = `${CFG.API_URL}?action=status&ids=${encodeURIComponent(list.map((t) => t.id).join(","))}${pinParam()}`;
       const res = await fetch(url);
-      const data = await res.json();
+      const data = await readApiJson(res, "status");
       if (data.code === "pin") { handlePinRejected(); return; }
       const byId = {};
       (data.items || []).forEach((i) => { byId[i.id] = i; });
@@ -569,7 +586,7 @@
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
       const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}${pinParam()}`);
-      const data = await res.json();
+      const data = await readApiJson(res, "news");
       if (data.code === "pin") { handlePinRejected(); return; }
       if (!data.ok) return;
       newsLoadedAt = Date.now();
@@ -635,7 +652,7 @@
     try {
       const res = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "vote", pollId: id, option: Number(btn.dataset.vote), voter: voterId(), obj: OBJ.key || "", pin: storedPin() }) });
-      const data = await res.json();
+      const data = await readApiJson(res, "vote");
       if (!data.ok && data.code !== "voted") throw Object.assign(new Error(data.error), { userMessage: data.error });
       const voted = readJson(POLLS_KEY) || {};
       voted[id] = Number(btn.dataset.vote);
@@ -1294,7 +1311,7 @@
       redirect: "follow",
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json().catch(() => ({}));
+    const data = await readApiJson(res, String(payload.action || "post"));
     if (data.ok === false) {
       if (data.code === "pin") handlePinRejected();
       const err = new Error(data.error || "Backend-Fehler");
@@ -1530,7 +1547,7 @@
       clearTimeout(timer);
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json().catch(() => ({}));
+    const data = await readApiJson(res, String(payload.action || "post"));
     if (data.ok === false) {
       const err = new Error(data.error || "Fehler");
       err.userMessage = data.error;
@@ -1574,6 +1591,7 @@
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const data = await staffPost({ action: "hmLogin", token: s.token });
+        if (!data.user) throw new Error("Anmeldung ohne Benutzerdaten");
         // Inzwischen abgemeldet oder anderer Zugang? Dann die verspätete Antwort verwerfen.
         const cur = staff();
         if (!cur || cur.token !== s.token) return;
@@ -1591,8 +1609,9 @@
         if (!cur || cur.token !== s.token) return;
         if (err.code === "staff") { toast(err.userMessage, "error", 8000); break; }
         if (attempt === 2) {
-          staffLoginFailed = !s.user;
-          if (!s.user) toast("Anmeldung nicht möglich – bitte Internetverbindung prüfen.", "error");
+          const now = staff() || {};
+          staffLoginFailed = !now.user;
+          if (!now.user) toast(err.badResponse ? "Anmeldung nicht möglich – der Server antwortet gerade nicht richtig." : "Anmeldung nicht möglich – bitte Internetverbindung prüfen.", "error");
         }
       }
     }
@@ -2744,7 +2763,7 @@
     const s = staff();
     const res = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ ...payload, pin: storedPin(), token: s && s.token }) });
-    const data = await res.json().catch(() => ({}));
+    const data = await readApiJson(res, String(payload.action || "post"));
     if (!res.ok || data.ok === false) { const err = new Error(data.error || `HTTP ${res.status}`); err.userMessage = data.error; throw err; }
     return data;
   }
