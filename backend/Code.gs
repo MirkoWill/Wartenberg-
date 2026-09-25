@@ -3004,6 +3004,8 @@ function fitnessCancel(p, user) {
    Gespeichert je Gerät: Push-Adresse, Gruppe (Bewohner/Rolle), Nummer bzw. Aufgang – keine Namen.
    ========================================================================== */
 
+// BigInt-Konstanten als Funktion statt Literal (der Apps-Script-Editor kennt „0n“ nicht)
+const N0 = BigInt(0), N1 = BigInt(1), N2 = BigInt(2), N3 = BigInt(3), N4 = BigInt(4), N8 = BigInt(8);
 const P256 = {
   p: BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff"),
   n: BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"),
@@ -3011,20 +3013,20 @@ const P256 = {
   gy: BigInt("0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"),
 };
 
-function ecMod(a, m) { const r = a % m; return r < 0n ? r + m : r; }
-function ecPow(b, e, m) { let r = 1n; b = ecMod(b, m); while (e > 0n) { if (e & 1n) r = (r * b) % m; b = (b * b) % m; e >>= 1n; } return r; }
-function ecInv(a, m) { return ecPow(a, m - 2n, m); }
+function ecMod(a, m) { const r = a % m; return r < N0 ? r + m : r; }
+function ecPow(b, e, m) { let r = N1; b = ecMod(b, m); while (e > N0) { if (e & N1) r = (r * b) % m; b = (b * b) % m; e >>= N1; } return r; }
+function ecInv(a, m) { return ecPow(a, m - N2, m); }
 
 /** Punktverdopplung in Jacobi-Koordinaten (a = -3). */
 function ecDouble(P) {
   const p = P256.p;
-  if (!P || P[1] === 0n) return null;
+  if (!P || P[1] === N0) return null;
   const [X, Y, Z] = P;
   const delta = (Z * Z) % p, gamma = (Y * Y) % p, beta = (X * gamma) % p;
-  const alpha = (3n * ecMod(X - delta, p) * ((X + delta) % p)) % p;
-  const X3 = ecMod(alpha * alpha - 8n * beta, p);
+  const alpha = (N3 * ecMod(X - delta, p) * ((X + delta) % p)) % p;
+  const X3 = ecMod(alpha * alpha - N8 * beta, p);
   const Z3 = ecMod((Y + Z) * (Y + Z) - gamma - delta, p);
-  const Y3 = ecMod(alpha * ecMod(4n * beta - X3, p) - 8n * gamma * gamma, p);
+  const Y3 = ecMod(alpha * ecMod(N4 * beta - X3, p) - N8 * gamma * gamma, p);
   return [X3, Y3, Z3];
 }
 
@@ -3037,9 +3039,9 @@ function ecAdd(P, Q) {
   const U1 = (X1 * Z2Z2) % p, U2 = (X2 * Z1Z1) % p;
   const S1 = (Y1 * Z2 * Z2Z2) % p, S2 = (Y2 * Z1 * Z1Z1) % p;
   const H = ecMod(U2 - U1, p), r = ecMod(S2 - S1, p);
-  if (H === 0n) return r === 0n ? ecDouble(P) : null;
+  if (H === N0) return r === N0 ? ecDouble(P) : null;
   const HH = (H * H) % p, HHH = (H * HH) % p, V = (U1 * HH) % p;
-  const X3 = ecMod(r * r - HHH - 2n * V, p);
+  const X3 = ecMod(r * r - HHH - N2 * V, p);
   const Y3 = ecMod(r * ecMod(V - X3, p) - S1 * HHH, p);
   const Z3 = (H * Z1 * Z2) % p;
   return [X3, Y3, Z3];
@@ -3048,10 +3050,10 @@ function ecAdd(P, Q) {
 /** k · G → affine [x, y] */
 function ecMulG(k) {
   let R = null;
-  const G = [P256.gx, P256.gy, 1n];
-  for (let i = BigInt(k.toString(2).length - 1); i >= 0n; i--) {
+  const G = [P256.gx, P256.gy, N1];
+  for (let i = BigInt(k.toString(2).length - 1); i >= N0; i--) {
     R = ecDouble(R);
-    if ((k >> i) & 1n) R = ecAdd(R, G);
+    if ((k >> i) & N1) R = ecAdd(R, G);
   }
   if (!R) throw new Error("Punkt im Unendlichen");
   const zi = ecInv(R[2], P256.p), zi2 = (zi * zi) % P256.p;
@@ -3068,7 +3070,7 @@ function sha256Bytes(value) { return Utilities.computeDigest(Utilities.DigestAlg
 function ecRandomScalar(secret) {
   const seed = () => `${secret || ""}|${Utilities.getUuid()}|${Utilities.getUuid()}|${Date.now()}|${Math.random()}`;
   const hex = bytesToHex(sha256Bytes(seed())) + bytesToHex(sha256Bytes(seed())).slice(0, 32);
-  return (BigInt("0x" + hex) % (P256.n - 1n)) + 1n;
+  return (BigInt("0x" + hex) % (P256.n - N1)) + N1;
 }
 
 /** ES256-Signatur (r‖s, je 32 Byte) über einen Text. */
@@ -3078,9 +3080,9 @@ function es256Sign(text, dHex) {
   for (let tries = 0; tries < 8; tries++) {
     const k = ecRandomScalar(dHex);
     const r = ecMulG(k)[0] % P256.n;
-    if (r === 0n) continue;
+    if (r === N0) continue;
     const s = (ecInv(k, P256.n) * ((e + r * d) % P256.n)) % P256.n;
-    if (s === 0n) continue;
+    if (s === N0) continue;
     return bigToBytes32(r).concat(bigToBytes32(s));
   }
   throw new Error("Signatur fehlgeschlagen");
