@@ -3,14 +3,15 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v64";
+const CACHE_VERSION = "mieterapp-v65";
+const PUSH_CACHE = "mieterapp-push"; // Benachrichtigungen: { api, id } – bleibt bei neuen Versionen erhalten
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=64",
-  "./js/config.js?v=64",
-  "./js/i18n.js?v=64",
-  "./js/app.js?v=64",
+  "./css/style.css?v=65",
+  "./js/config.js?v=65",
+  "./js/i18n.js?v=65",
+  "./js/app.js?v=65",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
@@ -33,7 +34,7 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION && k !== PUSH_CACHE).map((k) => caches.delete(k))))
   );
   self.clients.claim();
 });
@@ -57,4 +58,43 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(() => caches.match(req, { ignoreSearch: true }))
   );
+});
+
+/* ---------- Benachrichtigungen (nur Android) ----------
+   Das Signal vom Push-Dienst ist leer; den Text holen wir mit der Geräte-Kennung beim Backend ab. */
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    let item = null;
+    try {
+      const res = await (await caches.open(PUSH_CACHE)).match("push-config");
+      const cfg = res ? await res.json() : null;
+      if (cfg && cfg.api && cfg.id) {
+        const r = await fetch(`${cfg.api}?action=pushInbox&id=${encodeURIComponent(cfg.id)}`, { cache: "no-store" });
+        item = (await r.json()).item || null;
+      }
+    } catch (e) { /* ohne Netz: allgemeiner Hinweis */ }
+    const msg = item || { title: "Mieter-App", body: "Es gibt Neuigkeiten – bitte die App öffnen.", url: "#notfall" };
+    await self.registration.showNotification(String(msg.title || "Mieter-App"), {
+      body: String(msg.body || ""),
+      tag: msg.tag || undefined,
+      icon: "icons/icon-192.png",
+      data: { url: /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#notfall" },
+    });
+  })());
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(`./${(event.notification.data && event.notification.data.url) || "#notfall"}`, self.registration.scope).href;
+  event.waitUntil((async () => {
+    const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of list) {
+      if (new URL(c.url).origin === self.location.origin && "focus" in c) {
+        await c.focus();
+        if ("navigate" in c) await c.navigate(url).catch(() => {});
+        return;
+      }
+    }
+    await self.clients.openWindow(url);
+  })());
 });

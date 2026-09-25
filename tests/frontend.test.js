@@ -44,11 +44,15 @@ function fakeBackend(state = {}) {
       }
       return { ok: true };
     }
+    if (d.action === "pushInbox") { const item = (state.inbox || []).shift() || null; return { ok: true, item }; }
     const pin = state.pin || PIN;
     if (d.pin !== pin && !staff) return { ok: false, error: "PIN ungültig", code: "pin" };
     if (d.action === "news") return { ok: true, items: state.news || [], care: state.care || null, weather: state.weather || null, polls: state.polls || [] };
     if (d.action === "vote") { const p = (state.polls || []).find((x) => x.id === d.pollId); return { ok: true, results: p ? p.options.map((_, i) => (i === d.option ? 1 : 0)) : null }; }
     if (d.action === "status") return { ok: true, items: [] };
+    if (d.action === "pushKey") return { ok: true, key: Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString("base64url") };
+    if (d.action === "pushSubscribe") return { ok: true, id: "a".repeat(40), group: staff ? staff.role : "Bewohner", key: "x" };
+    if (d.action === "pushUnsubscribe") return { ok: true };
     return { ok: true, id: d.action === "submitMeterReadings" ? "E-260924-ABCD" : "T-260924-ABCD", count: 1 };
   };
 }
@@ -510,6 +514,80 @@ function makeQrVideo(text) {
       check("Verwaltung (007): Fitnessraum-Link bei den Werkzeugen", await p.isVisible("#staffAdmin [data-fit-link]"));
       await ctx.close();
     }
+
+    console.log("--- Benachrichtigungen (Android)");
+    // Voller Chromium (die schlanke Headless-Variante verweigert Benachrichtigungen grundsätzlich)
+    const pushBrowser = await require("playwright").chromium.launch({ channel: "chromium" });
+    {
+      const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
+      const fakePush = () => {
+        PushManager.prototype.subscribe = async function (opts) {
+          window.__pushKeyLen = opts.applicationServerKey.byteLength; window.__pushUserVisible = opts.userVisibleOnly;
+          window.__sub = { endpoint: "https://fcm.googleapis.com/fcm/send/test:APA91b", unsubscribe: async () => { window.__sub = null; window.__unsub = true; return true; } };
+          return window.__sub;
+        };
+        PushManager.prototype.getSubscription = async function () { return window.__sub || null; };
+      };
+      const state = { inbox: [{ title: "📢 Wasser abgestellt", body: "Montag 8–12 Uhr", url: "#notfall" }] };
+      const ctx = await newContext(pushBrowser, { backend: fakeBackend(state), preset: "resident", extra: { userAgent: ANDROID } });
+      await ctx.grantPermissions(["notifications"], { origin: new URL(base).origin });
+      await ctx.addInitScript(fakePush);
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(600);
+      const box = '[data-push-box="resident"]';
+      check("Push: Android – Kasten auf der Startseite", await p.isVisible(box) && /Hinweise der Hausverwaltung/.test(await p.textContent(box)), await p.isVisible(box));
+      await p.click(`${box} [data-push-toggle]`);
+      await p.waitForFunction(() => /eingeschaltet/.test((document.querySelector('[data-push-box="resident"]') || {}).textContent || ""), null, { timeout: 8000 }).catch(() => {});
+      const subReq = ctx.requests.find((d) => d.action === "pushSubscribe");
+      check("Push: Einschalten meldet Gerät mit Aufgang an (Schlüssel 65 Byte, sichtbar)", subReq && subReq.endpoint === "https://fcm.googleapis.com/fcm/send/test:APA91b" && subReq.obj === "lind6" && subReq.pin
+        && await p.evaluate(() => window.__pushKeyLen) === 65 && await p.evaluate(() => window.__pushUserVisible) === true, subReq);
+      check("Push: Zustand „eingeschaltet“, Knopf „Ausschalten“", /Auf diesem Handy eingeschaltet/.test(await p.textContent(box)) && (await p.textContent(`${box} [data-push-toggle]`)).trim() === "Ausschalten");
+      const cfg = await p.evaluate(async () => { const r = await (await caches.open("mieterapp-push")).match("push-config"); return r ? r.json() : null; });
+      check("Push: Service Worker kennt Adresse und Geräte-Kennung", cfg && /script\.google\.com/.test(cfg.api) && cfg.id === "a".repeat(40), cfg);
+
+      // Push-Signal an den Service Worker (Chrome DevTools) → Nachricht wird abgeholt und angezeigt.
+      // Anfragen des Service Workers laufen nicht über das nachgebildete Backend – daher eine feste Antwort-Datei.
+      await p.evaluate(async (api) => { await navigator.serviceWorker.ready; await (await caches.open("mieterapp-push")).put("push-config", new Response(JSON.stringify({ api, id: "a".repeat(40) }))); }, `${base}tests/fixtures/push-inbox.json`);
+      const cdp = await ctx.newCDPSession(p);
+      const regs = [];
+      cdp.on("ServiceWorker.workerRegistrationUpdated", (e) => regs.push(...e.registrations));
+      await cdp.send("ServiceWorker.enable"); await p.waitForTimeout(500);
+      const reg = regs.find((r) => !r.isDeleted);
+      if (reg) {
+        await cdp.send("ServiceWorker.deliverPushMessage", { origin: new URL(base).origin, registrationId: reg.registrationId, data: "" });
+        await p.waitForTimeout(1500);
+        const shown = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((n) => ({ title: n.title, body: n.body, url: n.data && n.data.url })));
+        check("Push: Signal → Text abgeholt und als Benachrichtigung angezeigt", shown.some((n) => n.title === "📢 Wasser abgestellt" && n.body === "Montag 8–12 Uhr" && n.url === "#notfall"), shown);
+      } else check("Push: Service Worker registriert", false);
+
+      await p.click(`${box} [data-push-toggle]`);
+      await p.waitForTimeout(800);
+      check("Push: Ausschalten meldet ab und entfernt das Gerät", ctx.requests.some((d) => d.action === "pushUnsubscribe" && d.id === "a".repeat(40)) && await p.evaluate(() => window.__unsub === true)
+        && (await p.textContent(`${box} [data-push-toggle]`)).trim() === "Einschalten" && !(await p.evaluate(() => localStorage.getItem("mieterapp.push"))));
+      check("Push: keine Fehler auf der Seite", !p.errors.length, p.errors);
+      await ctx.close();
+    }
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend({}), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(500);
+      check("Push: iPhone/PC – kein Kasten", !(await p.isVisible('[data-push-box="resident"]')));
+      await ctx.close();
+    }
+    {
+      const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
+      const ctx = await newContext(browser, { backend: fakeBackend({}), extra: { userAgent: ANDROID } });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${ADMIN}#hausmeister`); await p.waitForTimeout(300);
+      await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
+      await p.goto(`${base}?obj=lind6#cockpit`); await p.waitForSelector("#cockpitArea:not([hidden])", { timeout: 10000 }); await p.waitForTimeout(500);
+      const txt = await p.textContent('#cockpitArea [data-push-box="staff"]');
+      check("Push: Verwaltung – Kasten im Cockpit mit Meldungen + Fitnessraum", await p.isVisible('#cockpitArea [data-push-box="staff"]') && /Neue Meldungen von Bewohnern/.test(txt) && /Trainingspartner/.test(txt), txt);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(500);
+      check("Push: als Mitarbeiter kein Bewohner-Kasten auf der Startseite", !(await p.isVisible('[data-push-box="resident"]')));
+      await ctx.close();
+    }
+    await pushBrowser.close();
 
     console.log("--- Wetter");
     {

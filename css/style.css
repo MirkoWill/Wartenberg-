@@ -1127,3 +1127,9 @@ html.text-large body { zoom: 1.18; }
 .fit-board__streak { grid-area: streak; text-align: right; }
 .fit-board .fit-bar { grid-area: bar; }
 .fit-board li.fit-board__me .fit-board__nr::after { content: " (ich)"; font-weight: 400; color: var(--c-muted); }
+
+/* ---------- Benachrichtigungen (Android) ---------- */
+.push-box { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; padding: 12px 14px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); }
+.push-box__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.push-box__state { color: var(--c-ok); font-weight: 600; }
+.push-box .btn { flex-shrink: 0; }
