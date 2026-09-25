@@ -176,7 +176,7 @@ check('A0 Cockpit nicht für Hausmeister/ohne Token', ['adminOverview', 'adminUp
 {
   const lo = P({ action: 'adminOverview', token: LEAD });
   check('A0 Leitung (001): nur Hausmeister-Aufträge, keine Zähler/Fehler/Looker', lo.ok && lo.role === 'Leitung' && lo.tasks.every((t) => t.owner === 'Hausmeister')
-    && lo.kpi.errors24 === null && lo.lookerUrl === '' && lo.months.every((m) => m['Zähler'] === 0) && Array.isArray(lo.team.members), lo.tasks.map((t) => t.owner));
+    && lo.kpi.errors24 === null && lo.lookerUrl === '' && lo.months.every((m) => m['Zähler'] === 0) && Array.isArray(lo.work.days) && !/"nr"/.test(JSON.stringify(lo.work)), lo.tasks.map((t) => t.owner));
   check('A0 Leitung darf Zuständigkeit/Notiz nicht ändern', !P({ action: 'adminUpdateTask', token: LEAD, id: 'x', owner: 'Verwaltung' }).ok);
 }
 check('A0 Cockpit für 007 und 008', P({ action: 'adminOverview', token: ADM }).ok && P({ action: 'adminOverview', token: ADM2 }).ok);

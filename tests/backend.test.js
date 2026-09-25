@@ -30,7 +30,7 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
   DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id) }), createFolder: () => ({ getId: () => 'F1' }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { DigestAlgorithm: { MD5: 'md5' }, computeDigest: (a, t) => [...require('crypto').createHash('md5').update(t).digest()], base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64url'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
-    formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
+    formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); if (f === 'HH:mm') return `${p(d.getHours())}:${p(d.getMinutes())}`; return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
   UrlFetchApp: { fetchAll: (reqs) => { fetches.push(...reqs.map((r) => r.url)); if (wx.fail) throw new Error('DNS'); return reqs.map((r) => {
@@ -283,12 +283,23 @@ check('Cockpit: Überfälliges oben und rot', cov.ok && cov.tasks[0].sla.light =
 check('Cockpit: 12 Monate Statistik, Reinigungsquote, keine Namen der Mitarbeiter', cov.months.length === 12 && 'Nachweise' in cov.months[11] && typeof cov.kpi.errors24 === 'number' && !JSON.stringify(cov).includes('Schreier'));
 check('Cockpit: Hausmeister hat keinen Zugriff', post({ action: 'adminOverview', token: hmTok }).code === 'staff');
 check('001 hat Rolle Leitung', staff[3][0] === '001' && staff[3][1] === 'Leitung' && post({ action: 'hmLogin', token: leadTok }).user.role === 'Leitung');
-check('Team-Übersicht: Nachweise je Nummer, letzte Nachweise, verpasste Plan-Einträge', cov.team.members.some((m) => m.nr === '100' && m.count >= 1) && cov.team.recent.length >= 1 && cov.team.recent[0].nr && Array.isArray(cov.team.missed) && !JSON.stringify(cov.team).includes('drive.google'), cov.team.members);
+{
+  const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  sheets['Reinigungsplan'].grid.push([dd(-2), '', 'Fensterreinigung Aufgang', 'Treppenhaus Lindenberger Str. 6', '', '']);
+  const t1 = dd(-1); t1.setHours(10, 15);
+  sheets['Reinigung'].grid.push([t1, 'TH_LIND6', '100', t1, 'Treppenhaus Lindenberger Str. 6', 'Fensterreinigung Aufgang', '', '', 'lind6', 'QR-Scan']);
+  const w = post({ action: 'adminOverview', token: admTok }).work;
+  const d2 = w.days.find((x) => x.date === ymd(dd(-2))), d1 = w.days.find((x) => x.date === ymd(dd(-1)));
+  check('Erledigte Arbeiten: Plan-Tag ohne Nachweis → „nachgeholt am“ Folgetag', d2 && d2.missed.some((m) => /Fensterreinigung/.test(m.activity) && m.lateOn === ymd(dd(-1))), d2);
+  check('Erledigte Arbeiten: Nachweis mit Uhrzeit, außerplanmäßig markiert', d1 && d1.done.some((x) => /Fensterreinigung/.test(x.activity) && x.time === '10:15' && x.planned === false), d1);
+  check('Erledigte Arbeiten: keine Mitarbeiternummern', !/"nr"|Mitarbeiter/.test(JSON.stringify(w)) && !('team' in post({ action: 'adminOverview', token: admTok })));
+  sheets['Reinigungsplan'].grid.pop(); sheets['Reinigung'].grid.pop();
+}
 const dd24 = post({ action: 'submitStaffDefect', token: hmTok, ort: 'Treppenhaus Dorfstr. 24', beschreibung: 'Licht defekt' });
 check('Aufgang-ID wird als Name angezeigt (nicht „dorf24“)', post({ action: 'adminOverview', token: admTok }).tasks.find((x) => x.id === dd24.id).entrance === 'Dorfstr. 24');
 {
   const lov = post({ action: 'adminOverview', token: leadTok });
-  check('Leitung: sieht Hausmeister-Aufträge + Team, keine Verwaltungs-Aufträge', lov.ok && lov.tasks.length > 0 && lov.tasks.every((x) => x.owner === 'Hausmeister') && lov.team && lov.kpi.errors24 === null);
+  check('Leitung: sieht Hausmeister-Aufträge + Arbeiten, keine Verwaltungs-Aufträge', lov.ok && lov.tasks.length > 0 && lov.tasks.every((x) => x.owner === 'Hausmeister') && Array.isArray(lov.work.days) && lov.kpi.errors24 === null);
   const hmTask = lov.tasks.find((x) => x.status !== 'erledigt');
   check('Leitung: Status ändern ok, Zuständigkeit nicht', post({ action: 'adminUpdateTask', token: leadTok, id: hmTask.id, status: 'in Arbeit' }).ok && !post({ action: 'adminUpdateTask', token: leadTok, id: hmTask.id, owner: 'Verwaltung' }).ok);
   const vwTask = post({ action: 'adminOverview', token: admTok }).tasks.find((x) => x.owner === 'Verwaltung');

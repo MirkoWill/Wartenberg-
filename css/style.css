@@ -1031,14 +1031,17 @@ html.text-large body { zoom: 1.18; }
 .weather__src { margin: 8px 0 0; font-size: 12px; color: var(--c-muted); text-align: right; }
 @media (prefers-color-scheme: dark) { .weather__warn--cold { background: #1d2a38; } }
 
-/* ---------- Cockpit: Team ---------- */
-.team-list, .team-missed, .team-recent { list-style: none; margin: 0 0 12px; padding: 0; }
-.team-list li { display: grid; grid-template-columns: 76px 1fr; gap: 2px 10px; padding: 10px 12px; margin-top: 8px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); }
-.team-list li .small { grid-column: 2; }
-.team-list__nr { font-weight: 800; grid-row: span 2; align-self: center; }
-.team-missed li, .team-recent li { padding: 6px 0; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; }
 
 /* Ladeanzeige (Anmeldung Hausmeister/Cockpit) */
 .spinner { display: inline-block; width: 18px; height: 18px; margin-right: 8px; vertical-align: -2px; border: 3px solid var(--c-border); border-top-color: var(--c-primary); border-radius: 50%; animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+/* Cockpit: erledigte Arbeiten je Tag */
+.work-day summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.work-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.work-list li { padding: 5px 0; border-bottom: 1px solid var(--c-border); }
+.work-list li:last-child { border-bottom: 0; }
+.work-missed { color: var(--c-danger); }
+.work-late { color: #9a5b00; }
+@media (prefers-color-scheme: dark) { .work-late { color: #f0b35a; } }
