@@ -29,6 +29,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 | `APP_PIN` | `13059` | Zugangs-PIN der App (ohne Eintrag gilt 13059). Bei Änderung auch `PIN_SHA256` in `js/config.js` anpassen. |
 | `CALENDAR_ID` | `abc…@group.calendar.google.com` | Optional: Kalender für den Reinigungsplan (sonst Suche nach Name „WEG Wartenberger Dorfkrug“) |
 | `LOOKER_URL` | `https://lookerstudio.google.com/reporting/…` | Optional: Link auf den Looker-Studio-Bericht, erscheint im Cockpit unter „Werkzeuge“ |
+| `BEIRAT_EMAILS` | `a@x.de, b@y.de, c@z.de` | Empfänger des Monatsberichts (nach Ihrer Freigabe) |
 
 ## 4. Als Web-App bereitstellen
 
@@ -164,6 +165,19 @@ verbinden sich nicht selbst mit einem Wetterdienst. Standort: `CONFIG.WEATHER` (
 Die App zeigt zusätzlich eigene Hinweise ab 30 °C (Hitze) bzw. ab −10 °C (strenger Frost) – änderbar in
 `js/config.js` unter `WEATHER`. Ist der Wetterdienst gestört, fehlt nur die Wetteranzeige.
 Beim ersten Ausführen nach dem Einspielen fragt Google einmal nach der Berechtigung „Verbindung zu einem externen Dienst“.
+
+## Monatsbericht für den Beirat (PDF)
+
+Am **1. jedes Monats um 8 Uhr** erstellt das Script den Bericht für den Vormonat: Meldungen (eingegangen, erledigt,
+offen, Vergleich Vormonat), Service-Ziele je Art, Ø Reaktions-/Erledigungszeit, Meldungen je Aufgang, Reinigung laut
+Plan (am Plantag / nachgeholt / nicht nachgewiesen), 6-Monats-Trend, derzeit überfällige Aufträge (nur Art, Aufgang,
+Datum). **Nur Zahlen – keine Namen, Wohnungen, Beschreibungen oder Mitarbeiterdaten.**
+
+1. Das PDF wird im Drive-Ordner „Beiratsberichte Mieter-App“ abgelegt und **an `NOTIFY_EMAIL` mit Freigabe-Link** geschickt.
+2. Klick auf den Link → Bestätigungsseite → „Ja, an den Beirat senden“ → Versand an die Adressen in der
+   Script-Eigenschaft **`BEIRAT_EMAILS`** (mit Komma getrennt), Kopie an `NOTIFY_EMAIL`.
+   Der Link funktioniert einmal und ist 14 Tage gültig.
+3. Menü **Mieter-App → Monatsbericht: Vorschau an mich** zeigt den Bericht jederzeit vorab (wird nicht abgelegt/versendet).
 
 ## Statistik mit Looker Studio (kostenlos) 💻 am Computer
 

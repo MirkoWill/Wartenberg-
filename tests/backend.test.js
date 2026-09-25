@@ -28,7 +28,7 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   Logger: { log() {} },
   SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
-  DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id) }), createFolder: () => ({ getId: () => 'F1' }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
+  DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id), getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { DigestAlgorithm: { MD5: 'md5' }, computeDigest: (a, t) => [...require('crypto').createHash('md5').update(t).digest()], base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64url'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); if (f === 'HH:mm') return `${p(d.getHours())}:${p(d.getMinutes())}`; return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
@@ -44,9 +44,9 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
     return { getResponseCode: () => 200, getContentText: () => JSON.stringify(/\/alerts/.test(r.url) ? { alerts: wx.alerts } : { weather: wx.hours }) };
   }); } },
   MailApp: { sendEmail: (m) => mails.push(m), getRemainingDailyQuota: () => 1500 },
-  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
+  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, onMonthDay: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
   CalendarApp: { getAllCalendars: () => [cal, { getName: () => 'Privat' }], getCalendarById: (id) => (id === 'good' ? cal : null), getCalendarsByName: (n) => (n === calName ? [cal] : []) },
-  HtmlService: { createHtmlOutput: (h) => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; } }) },
+  HtmlService: { createHtmlOutput: (h) => ({ html: h, getBlob: () => ({ getAs: (t) => ({ type: t, html: h, name: '', setName(n) { this.name = n; return this; } }) }), setTitle() { return this; }, addMetaTag() { return this; } }) },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (t) => ({ setMimeType: () => JSON.parse(t) }) },
 };
 vm.createContext(ctx);
@@ -372,6 +372,34 @@ dp = ctx.doGet({ parameter: { action: 'departures', pin: '13059' } });
 check('Dienst ausgefallen: letzter Stand wird weiter geliefert (live=false)', dp.ok && dp.live === false && dp.departures.length === 1, dp);
 check('Abfahrten ohne PIN abgelehnt', ctx.doGet({ parameter: { action: 'departures' } }).code === 'pin');
 tr.down = false; tr.onlyVbb = false;
+
+// ================= Monatsbericht Beirat =================
+{
+  const now = new Date();
+  const rd = ctx.reportData(now.getFullYear(), now.getMonth());
+  check('Monatsbericht: Kennzahlen, 6-Monats-Trend, Reinigung', typeof rd.cur.received === 'number' && rd.trend.length === 6 && typeof rd.cleaning.soll === 'number' && rd.cur.byType.length === 4, rd.cur);
+  const html = ctx.reportHtml(rd, false);
+  check('Monatsbericht: keine Namen, Wohnungen, Beschreibungen, Mitarbeiternummern', !/Müller|Max Schreier|Tor schließt nicht|Nr\. 100|Whg /.test(html) && /Monatsbericht/.test(html), html.length);
+  mails.length = 0; delete props.BEIRAT_EMAILS; delete props.REPORT_PENDING;
+  props.BEIRAT_EMAILS = 'a@beirat.de, b@beirat.de; c@beirat.de, kaputt';
+  ctx.monthlyReport();
+  const fm = mails.find((m) => /bitte freigeben/.test(m.subject));
+  const tok = JSON.parse(props.REPORT_PENDING).token;
+  check('Automatik: PDF an Verwaltung mit Freigabe-Link, noch nichts an den Beirat', fm && fm.to === props.NOTIFY_EMAIL && fm.attachments.length === 1 && /pdf/.test(fm.attachments[0].type) && fm.body.includes(`releaseReport&t=${tok}`) && !mails.some((m) => /beirat\.de/.test(m.to)) && /3 Empfänger/.test(fm.body), fm && fm.body);
+  check('PDF im Drive-Ordner abgelegt', !!JSON.parse(props.REPORT_PENDING).fileId && props.REPORT_FOLDER_ID);
+  const pg = ctx.doGet({ parameter: { action: 'releaseReport', t: tok } });
+  check('Freigabe-Link: erst Bestätigungsseite, noch kein Versand', /an den Beirat senden/.test(pg.html) && !mails.some((m) => /beirat\.de/.test(m.to)));
+  check('Falscher/leerer Token: nichts passiert', /ungültig/.test(ctx.doGet({ parameter: { action: 'releaseReport', t: 'f'.repeat(64), confirm: '1' } }).html) && /ungültig/.test(ctx.doGet({ parameter: { action: 'releaseReport', confirm: '1' } }).html) && !mails.some((m) => /beirat\.de/.test(m.to)));
+  ctx.doGet({ parameter: { action: 'releaseReport', t: tok, confirm: '1' } });
+  const bm = mails.filter((m) => /beirat\.de/.test(m.to));
+  check('Nach Bestätigung: an 3 gültige Beirats-Adressen, Kopie an Verwaltung, PDF angehängt', bm.length === 1 && bm[0].to === 'a@beirat.de,b@beirat.de,c@beirat.de' && bm[0].cc === props.NOTIFY_EMAIL && bm[0].attachments.length === 1, bm);
+  ctx.doGet({ parameter: { action: 'releaseReport', t: tok, confirm: '1' } });
+  check('Link nur einmal nutzbar', mails.filter((m) => /beirat\.de/.test(m.to)).length === 1);
+  const pd = JSON.parse(props.REPORT_PENDING); pd.sent = false; pd.created = Date.now() - 15 * 86400000; props.REPORT_PENDING = JSON.stringify(pd);
+  check('Link nach 14 Tagen abgelaufen', /ungültig/.test(ctx.doGet({ parameter: { action: 'releaseReport', t: tok, confirm: '1' } }).html));
+  check('Monats-Automatik angelegt', triggers.some((t) => t.getHandlerFunction() === 'monthlyReport'));
+  delete props.BEIRAT_EMAILS; delete props.REPORT_PENDING;
+}
 
 // Bewohner-Info
 Object.keys(cache).forEach((k) => delete cache[k]);

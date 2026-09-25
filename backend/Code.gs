@@ -216,6 +216,7 @@ function onOpen() {
     .addItem("Mitarbeiter-Links ergänzen", "ensureStaffLinks")
     .addSeparator()
     .addItem("Auswertung aktualisieren", "rebuildAnalyticsNow")
+    .addItem("Monatsbericht: Vorschau an mich", "reportPreviewNow")
     .addItem("Systemprüfung jetzt", "healthCheckNow")
     .addItem("Alte Daten jetzt löschen (Löschkonzept)", "cleanupNow")
     .addToUi();
@@ -272,6 +273,7 @@ function doGet(e) {
       return json(getTasks({}, user));
     }
     if (q.action === "done") return completeTicketPage(q);
+    if (q.action === "releaseReport") return releaseReportPage(q);
     if (q.action === "status") { requirePin(q.pin, q.token); return json(getStatus(q.ids)); }
     if (q.action === "news") { requirePin(q.pin, q.token); return json(getNews(q.obj)); }
     if (q.action === "departures") { requirePin(q.pin, q.token); return json(getDepartures()); }
@@ -1055,6 +1057,7 @@ function setupPortalSheets() {
   ensureDailyCheckTrigger();
   ensureMaintenanceTrigger();
   ensureMorningTrigger();
+  ensureReportTrigger();
   CacheService.getScriptCache().removeAll(["areas", "staff"]);
 }
 
@@ -1641,7 +1644,7 @@ function healthCheck(extra) {
     if (!ss.getSheetByName(CONFIG.SHEETS[k].name)) issues.push(`Blatt „${CONFIG.SHEETS[k].name}“ fehlt – setup ausführen.`);
   });
   const handlers = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
-  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
+  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest", "monthlyReport"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
   if (planRows().length) { try { findCalendar(); } catch (e) { issues.push(e.userMessage || e.message); } }
   if (!activeAreas().length) issues.push("Keine aktiven QR-Orte.");
 
@@ -1871,9 +1874,7 @@ function workLog(scans, areas, plan, now) {
       }));
     // Geplant, aber an dem Tag kein Nachweis – später nachgeholt (bis 7 Tage)?
     const missed = i === 0 ? [] : status.filter((x) => !x.done).map((x) => {
-      const later = valid.filter((s) => s["Zeitpunkt (Scan)"] > day && s["Zeitpunkt (Scan)"] - day < 8 * 86400000
-        && key(s["Zeitpunkt (Scan)"]) > k && low(s["Tätigkeit"]) === low(x.activity) && (low(s.Ort) === low(x.ort) || !areas.some((a) => low(a.ort) === low(x.ort))))
-        .sort((a, b) => a["Zeitpunkt (Scan)"] - b["Zeitpunkt (Scan)"])[0];
+      const later = laterScan(valid, day, x, areas);
       return { activity: plain(x.activity, 60), ort: plain(x.ort, 80), lateOn: later ? key(later["Zeitpunkt (Scan)"]) : "" };
     });
     const open = i === 0 ? status.filter((x) => !x.done).map((x) => ({ activity: plain(x.activity, 60), ort: plain(x.ort, 80) })) : [];
@@ -2096,3 +2097,257 @@ function fetchDepartures() {
   throw new Error("Kein Fahrplandienst erreichbar");
 }
 
+/* ==========================================================================
+   Monatsbericht für den Beirat (PDF) – nur Zahlen, keine personenbezogenen Daten.
+   Ablauf: Am 1. um 8 Uhr erstellt „monthlyReport“ das PDF für den Vormonat, legt es im Drive-Ordner
+   „Beiratsberichte“ ab und schickt es an NOTIFY_EMAIL mit einem Freigabe-Link. Erst nach Klick auf
+   „An den Beirat senden“ geht es an die Adressen in der Script-Eigenschaft BEIRAT_EMAILS.
+   ========================================================================== */
+
+const MONTHS_DE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+
+function beiratEmails() {
+  return String(PropertiesService.getScriptProperties().getProperty("BEIRAT_EMAILS") || "")
+    .split(/[,;\s]+/).map((x) => x.trim()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)).slice(0, 10);
+}
+
+/** Kennzahlen für einen Monat (y, m = 0–11). */
+function reportData(y, m) {
+  const now = new Date();
+  const start = new Date(y, m, 1), end = new Date(y, m + 1, 1);
+  const tasks = allTasks().map((t) => Object.assign(t, { sla: slaInfo(t, now) }));
+  const inRange = (d, a, b) => d instanceof Date && d >= a && d < b;
+  const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const TYPES = ["Mangel", "Mangel (intern)", "Klingelschild", "Elektroraum"];
+  const stats = (a, b) => {
+    const received = tasks.filter((t) => inRange(t.created, a, b));
+    const closed = tasks.filter((t) => t.status === "erledigt" && inRange(t.done, a, b));
+    const open = tasks.filter((t) => t.created instanceof Date && t.created < b && !(t.status === "erledigt" && t.done instanceof Date && t.done < b));
+    const ok = (t) => t.sla.react === "ok" && t.sla.done === "ok";
+    const byEntrance = {};
+    received.forEach((t) => { const k = t.entrance || t.object || "ohne Aufgang"; byEntrance[k] = (byEntrance[k] || 0) + 1; });
+    return {
+      received: received.length, closed: closed.length, open: open.length,
+      slaQuote: closed.length ? closed.filter(ok).length / closed.length : null,
+      avgReactHours: avg(closed.map((t) => t.sla.reactHours).filter((x) => x !== null)),
+      avgLeadDays: avg(closed.map((t) => t.sla.leadDays).filter((x) => x !== null)),
+      byType: TYPES.map((type) => {
+        const r = received.filter((t) => t.type === type), c = closed.filter((t) => t.type === type);
+        return { type, received: r.length, closed: c.length, slaQuote: c.length ? c.filter(ok).length / c.length : null };
+      }),
+      byEntrance,
+    };
+  };
+  const cur = stats(start, end);
+  const prev = stats(new Date(y, m - 1, 1), start);
+  const trend = [];
+  for (let i = 5; i >= 0; i--) {
+    const a = new Date(y, m - i, 1), b = new Date(y, m - i + 1, 1);
+    const st = stats(a, b);
+    trend.push({ label: MONTHS_DE[a.getMonth()].slice(0, 3), received: st.received, slaQuote: st.slaQuote });
+  }
+  // Reinigung laut Plan
+  const areas = activeAreas(), plan = planRows(), scans = sheetObjects(CONFIG.SHEETS.cleaning);
+  const valid = scans.filter((s) => s["Zeitpunkt (Scan)"] instanceof Date);
+  let soll = 0, ist = 0, late = 0;
+  const missing = [];
+  for (let d = new Date(start); d < end && d < now; d.setDate(d.getDate() + 1)) {
+    const day = new Date(d);
+    planStatusForDay(day, areas, scans, plan).forEach((x) => {
+      soll++;
+      if (x.done) { ist++; return; }
+      if (laterScan(valid, day, x, areas)) late++;
+      else missing.push({ date: Utilities.formatDate(day, CONFIG.TIMEZONE, "dd.MM."), activity: x.activity, ort: x.ort });
+    });
+  }
+  const overdue = tasks.filter((t) => t.status !== "erledigt" && t.sla.light === "red").map((t) => ({
+    type: t.type, entrance: t.entrance || "", since: t.created ? Utilities.formatDate(t.created, CONFIG.TIMEZONE, "dd.MM.yyyy") : "",
+  })).slice(0, 15);
+  return {
+    title: `${MONTHS_DE[m]} ${y}`, prevTitle: MONTHS_DE[(m + 11) % 12], cur, prev, trend,
+    cleaning: { soll, ist, late, missing: missing.slice(0, 20), missingCount: missing.length },
+    overdue, created: Utilities.formatDate(now, CONFIG.TIMEZONE, "dd.MM.yyyy HH:mm"),
+  };
+}
+
+/** Erster Nachweis nach dem geplanten Tag (bis 7 Tage) für einen Plan-Eintrag – oder null. */
+function laterScan(valid, day, x, areas) {
+  const key = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+  const low = (v) => String(v || "").trim().toLowerCase();
+  const k = key(day);
+  const generic = !areas.some((a) => low(a.ort) === low(x.ort));
+  return valid.filter((s) => s["Zeitpunkt (Scan)"] > day && s["Zeitpunkt (Scan)"] - day < 8 * 86400000
+    && key(s["Zeitpunkt (Scan)"]) > k && low(s["Tätigkeit"]) === low(x.activity) && (generic || low(s.Ort) === low(x.ort)))
+    .sort((a, b) => a["Zeitpunkt (Scan)"] - b["Zeitpunkt (Scan)"])[0] || null;
+}
+
+function reportHtml(r, preview) {
+  const e = escHtml;
+  const pct = (x) => (x === null || x === undefined ? "–" : `${Math.round(x * 100)} %`);
+  const num = (x, d) => (x === null || x === undefined ? "–" : (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toString().replace(".", ","));
+  const diff = (a, b) => (b === null || b === undefined || a === null ? "" : a > b ? " ▲" : a < b ? " ▼" : "");
+  const bar = (v, max, color) => `<div style="background:#eef0e6;height:10px;border-radius:5px"><div style="width:${max ? Math.round((v / max) * 100) : 0}%;background:${color};height:10px;border-radius:5px"></div></div>`;
+  const kpi = (label, value, sub) => `<td class="kpi"><div class="v">${e(value)}</div><div class="l">${e(label)}</div>${sub ? `<div class="s">${e(sub)}</div>` : ""}</td>`;
+  const c = r.cur, p = r.prev;
+  const cleanQuote = r.cleaning.soll ? r.cleaning.ist / r.cleaning.soll : null;
+  const entr = Object.keys(c.byEntrance).map((k) => [k, c.byEntrance[k]]).sort((a, b) => b[1] - a[1]);
+  const maxE = Math.max(1, ...entr.map((x) => x[1]));
+  const maxT = Math.max(1, ...r.trend.map((t) => t.received));
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
+    body{font-family:Arial,Helvetica,sans-serif;color:#151515;font-size:11pt;margin:0}
+    h1{font-family:Georgia,serif;font-weight:400;color:#6d7454;font-size:22pt;margin:0 0 2pt}
+    h2{font-family:Georgia,serif;font-weight:400;color:#6d7454;font-size:14pt;margin:16pt 0 6pt;border-bottom:1px solid #e2e3dc;padding-bottom:3pt}
+    .brand{color:#6d7454;font-weight:bold;font-size:10pt}.muted{color:#5f625a;font-size:9pt}
+    table{border-collapse:collapse;width:100%}td,th{padding:4pt 6pt;text-align:left;vertical-align:middle}
+    th{font-size:9pt;color:#5f625a;font-weight:normal;border-bottom:1px solid #e2e3dc}
+    .kpi{border:1px solid #e2e3dc;padding:8pt;width:25%}.kpi .v{font-size:18pt;font-weight:bold}.kpi .l{font-weight:bold;font-size:9.5pt}.kpi .s{font-size:8.5pt;color:#5f625a}
+    .rows td{border-bottom:1px solid #f0f0ea}.warn{color:#b3261e}.preview{background:#fff1c7;padding:6pt;margin-bottom:8pt;font-weight:bold}
+  </style></head><body>
+    ${preview ? '<div class="preview">VORSCHAU – nicht an den Beirat versendet</div>' : ""}
+    <div class="brand">Willbrandt und Kompagnon · Hausverwaltung</div>
+    <h1>Monatsbericht ${e(r.title)}</h1>
+    <div class="muted">WEG Wartenberger Dorfkrug · für den Verwaltungsbeirat · erstellt ${e(r.created)} · ohne personenbezogene Daten</div>
+
+    <h2>Überblick</h2>
+    <table><tr>
+      ${kpi("Meldungen eingegangen", String(c.received), `Vormonat ${p.received}${diff(c.received, p.received)}`)}
+      ${kpi("Erledigt", String(c.closed), `Vormonat ${p.closed}`)}
+      ${kpi("Offen am Monatsende", String(c.open), `Vormonat ${p.open}`)}
+      ${kpi("Service-Ziele eingehalten", pct(c.slaQuote), `Vormonat ${pct(p.slaQuote)}`)}
+    </tr><tr>
+      ${kpi("Ø Reaktionszeit", c.avgReactHours === null ? "–" : `${num(c.avgReactHours, 1)} Std.`, "bis „in Arbeit“")}
+      ${kpi("Ø Erledigungsdauer", c.avgLeadDays === null ? "–" : `${num(c.avgLeadDays, 1)} Tage`, "Eingang bis erledigt")}
+      ${kpi("Reinigung laut Plan", pct(cleanQuote), `${r.cleaning.ist} von ${r.cleaning.soll} am Plantag`)}
+      ${kpi("Derzeit überfällig", String(r.overdue.length), "Stand heute")}
+    </tr></table>
+
+    <h2>Meldungen nach Art</h2>
+    <table class="rows"><tr><th>Art</th><th>eingegangen</th><th>erledigt</th><th>Service-Ziel eingehalten</th></tr>
+      ${c.byType.map((t) => `<tr><td>${e(t.type === "Mangel (intern)" ? "Mangel (vom Hausmeister gemeldet)" : t.type)}</td><td>${t.received}</td><td>${t.closed}</td><td>${pct(t.slaQuote)}</td></tr>`).join("")}
+    </table>
+    <p class="muted">Service-Ziele: Dringend – Reaktion 1 Tag, erledigt 3 Tage · Mangel – Reaktion 3 Werktage, erledigt 14 Tage ·
+      Klingelschild – Reaktion 3 Werktage, erledigt 10 Werktage · Elektroraum – bestätigt 1 Werktag vor dem Termin, erledigt am Termin.</p>
+
+    <h2>Meldungen nach Aufgang</h2>
+    ${entr.length ? `<table class="rows">${entr.map(([k, v]) => `<tr><td style="width:40%">${e(k)}</td><td style="width:50%">${bar(v, maxE, "#6d7454")}</td><td>${v}</td></tr>`).join("")}</table>` : '<p class="muted">Keine Meldungen in diesem Monat.</p>'}
+
+    <h2>Reinigung laut Plan</h2>
+    <table class="rows">
+      <tr><td style="width:40%">Am geplanten Tag nachgewiesen</td><td>${r.cleaning.ist} von ${r.cleaning.soll} (${pct(cleanQuote)})</td></tr>
+      <tr><td>Später nachgeholt (bis 7 Tage)</td><td>${r.cleaning.late}</td></tr>
+      <tr><td>Nicht nachgewiesen</td><td class="${r.cleaning.missingCount ? "warn" : ""}">${r.cleaning.missingCount}</td></tr>
+    </table>
+    ${r.cleaning.missing.length ? `<p class="muted">Nicht nachgewiesen: ${r.cleaning.missing.map((x) => `${e(x.date)} ${e(x.activity)} – ${e(x.ort)}`).join(" · ")}${r.cleaning.missingCount > r.cleaning.missing.length ? " …" : ""}</p>` : ""}
+
+    <h2>Entwicklung (6 Monate)</h2>
+    <table class="rows"><tr><th>Monat</th><th>Meldungen</th><th></th><th>Service-Ziele</th></tr>
+      ${r.trend.map((t) => `<tr><td style="width:15%">${e(t.label)}</td><td style="width:10%">${t.received}</td><td style="width:50%">${bar(t.received, maxT, "#3a6ea5")}</td><td>${pct(t.slaQuote)}</td></tr>`).join("")}
+    </table>
+
+    ${r.overdue.length ? `<h2>Derzeit überfällige Aufträge</h2><table class="rows"><tr><th>Art</th><th>Aufgang</th><th>eingegangen</th></tr>
+      ${r.overdue.map((o) => `<tr><td>${e(o.type)}</td><td>${e(o.entrance)}</td><td>${e(o.since)}</td></tr>`).join("")}</table>` : ""}
+
+    <p class="muted" style="margin-top:18pt">Automatisch erstellt aus der Mieter-App. Enthält nur Zahlen – keine Namen, Wohnungen,
+      Beschreibungen oder Mitarbeiterdaten. Fragen gern an Willbrandt und Kompagnon.</p>
+  </body></html>`;
+}
+
+/** PDF für den Vormonat (bzw. y/m) erstellen und im Drive-Ordner „Beiratsberichte“ ablegen. */
+function createReportPdf(y, m, preview) {
+  const r = reportData(y, m);
+  const name = `Monatsbericht ${r.title} – WEG Wartenberger Dorfkrug${preview ? " (Vorschau)" : ""}.pdf`;
+  const blob = HtmlService.createHtmlOutput(reportHtml(r, preview)).getBlob().getAs("application/pdf").setName(name);
+  let fileId = "";
+  if (!preview) {
+    const props = PropertiesService.getScriptProperties();
+    let folder = null;
+    try { folder = props.getProperty("REPORT_FOLDER_ID") ? DriveApp.getFolderById(props.getProperty("REPORT_FOLDER_ID")) : null; } catch (e) { folder = null; }
+    if (!folder) { folder = DriveApp.createFolder("Beiratsberichte Mieter-App"); props.setProperty("REPORT_FOLDER_ID", folder.getId()); }
+    fileId = folder.createFile(blob).getId();
+  }
+  return { r, blob, fileId, name };
+}
+
+function previousMonth() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return [d.getFullYear(), d.getMonth()];
+}
+
+/** Automatik am 1. um 8 Uhr: Bericht erstellen, an Verwaltung mit Freigabe-Link. */
+function monthlyReport() {
+  const [y, m] = previousMonth();
+  const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
+  const res = createReportPdf(y, m, false);
+  const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+  PropertiesService.getScriptProperties().setProperty("REPORT_PENDING", JSON.stringify({
+    token, fileId: res.fileId, title: res.r.title, created: Date.now(), sent: false,
+  }));
+  const emails = beiratEmails();
+  const base = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
+  const link = `${base}?action=releaseReport&t=${token}`;
+  if (!to) return { ok: false, error: "NOTIFY_EMAIL fehlt" };
+  MailApp.sendEmail({
+    to, subject: oneLine(`[Mieter-App] Monatsbericht ${res.r.title} – bitte freigeben`),
+    body: [`Der Monatsbericht ${res.r.title} für den Beirat ist fertig (PDF im Anhang und im Drive-Ordner „Beiratsberichte Mieter-App“).`, "",
+      emails.length ? `Nach Freigabe geht er an ${emails.length} Empfänger:` : "ACHTUNG: Script-Eigenschaft BEIRAT_EMAILS ist nicht eingetragen – Versand nicht möglich.",
+      ...emails.map((x) => `  • ${x}`), "", "An den Beirat senden:", link, "",
+      "Der Link ist 14 Tage gültig und funktioniert einmal."].join("\n"),
+    attachments: [res.blob],
+  });
+  return { ok: true, title: res.r.title };
+}
+
+/** Freigabe-Link: erst Bestätigungsseite, dann Versand an BEIRAT_EMAILS (einmalig, 14 Tage gültig). */
+function releaseReportPage(q) {
+  const props = PropertiesService.getScriptProperties();
+  let pend = null;
+  try { pend = JSON.parse(props.getProperty("REPORT_PENDING") || "null"); } catch (e) { pend = null; }
+  const valid = pend && typeof q.t === "string" && /^[a-f0-9]{32,}$/i.test(q.t) && q.t === pend.token && Date.now() - pend.created < 14 * 86400000;
+  if (!valid) return donePage("Link ungültig", "Dieser Freigabe-Link ist ungültig oder abgelaufen.");
+  if (pend.sent) return donePage("Bereits versendet", `Der Monatsbericht ${pend.title} wurde bereits an den Beirat gesendet.`);
+  const emails = beiratEmails();
+  if (!emails.length) return donePage("Keine Empfänger", "Bitte zuerst die Script-Eigenschaft BEIRAT_EMAILS eintragen (Adressen mit Komma getrennt).");
+  if (q.confirm !== "1") {
+    const base = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
+    return donePage(`Monatsbericht ${pend.title}`, `Jetzt an ${emails.length} Empfänger im Beirat senden?`,
+      `<a class="btn" href="${escHtml(`${base}?action=releaseReport&t=${pend.token}&confirm=1`)}" target="_top">Ja, an den Beirat senden</a>`);
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const again = JSON.parse(props.getProperty("REPORT_PENDING") || "null");
+    if (!again || again.token !== pend.token || again.sent) return donePage("Bereits versendet", `Der Monatsbericht ${pend.title} wurde bereits gesendet.`);
+    const blob = DriveApp.getFileById(pend.fileId).getBlob();
+    const cc = (props.getProperty("NOTIFY_EMAIL") || "").trim();
+    MailApp.sendEmail({
+      to: emails.join(","), cc: cc || undefined, name: CONFIG.SENDER_NAME,
+      subject: oneLine(`Monatsbericht ${pend.title} – WEG Wartenberger Dorfkrug`),
+      body: ["Guten Tag,", "", `anbei der Monatsbericht ${pend.title} aus der Mieter-App: Meldungen, Einhaltung der Service-Ziele und Reinigung laut Plan.`,
+        "Der Bericht enthält nur Zahlen, keine personenbezogenen Daten.", "", "Mit freundlichen Grüßen", CONFIG.SENDER_NAME].join("\n"),
+      attachments: [blob],
+    });
+    again.sent = true;
+    again.sentAt = Date.now();
+    props.setProperty("REPORT_PENDING", JSON.stringify(again));
+  } finally {
+    lock.releaseLock();
+  }
+  return donePage("Versendet", `Der Monatsbericht ${pend.title} ging an ${emails.length} Empfänger im Beirat. Sie erhalten eine Kopie.`);
+}
+
+/** Menü: Vorschau des Vormonats an NOTIFY_EMAIL (ohne Freigabe-Link, ohne Ablage). */
+function reportPreviewNow() {
+  const [y, m] = previousMonth();
+  const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
+  const res = createReportPdf(y, m, true);
+  if (to) MailApp.sendEmail({ to, subject: oneLine(`[Mieter-App] VORSCHAU Monatsbericht ${res.r.title}`),
+    body: "Vorschau des Monatsberichts (nicht an den Beirat versendet). Empfänger laut BEIRAT_EMAILS: " + (beiratEmails().join(", ") || "– noch keine eingetragen –"),
+    attachments: [res.blob] });
+  showResult("Monatsbericht", to ? `Vorschau ${res.r.title} an ${to} gesendet.` : "NOTIFY_EMAIL fehlt – keine Vorschau versendet.");
+}
+
+function ensureReportTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "monthlyReport");
+  if (!exists) ScriptApp.newTrigger("monthlyReport").timeBased().onMonthDay(1).atHour(8).inTimezone(CONFIG.TIMEZONE).create();
+}
