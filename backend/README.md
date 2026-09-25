@@ -330,6 +330,14 @@ Offene Vorgänge und Zeilen ohne gültiges Datum werden nie gelöscht. Fotos wan
 
 ## Sicherheit & Datenschutz
 
+### Tempo
+- Die Startseite der Bewohner (Hinweise, Reinigung, Umfragen, Wetter) wird je Aufgang 60 Sekunden zwischengespeichert.
+  Hinweise, Umfragen und Stimmen aus der App/dem Cockpit leeren den Speicher sofort; direkt in der Tabelle geänderte
+  Hinweise erscheinen spätestens nach einer Minute.
+- Umfrage-Stimmen werden je Aufruf nur einmal gelesen; ohne angemeldete Geräte kostet der Versand von Benachrichtigungen nichts.
+- In der App liefert der Service Worker Programmdateien sofort aus dem Speicher; die Seite selbst kommt aus dem Netz,
+  bei schlechtem Empfang nach höchstens 3 Sekunden aus dem Speicher.
+
 ### Sicherheits-Werkzeuge (Menü „Mieter-App“)
 - **Zugangs-PIN ändern …** – neue PIN (6–12 Ziffern, keine Zahlenfolge). Gilt sofort; wer die App nutzt, wird beim nächsten
   Öffnen nach der neuen PIN gefragt. Die PIN steht nirgends im Code und nicht in der App.

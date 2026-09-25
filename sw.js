@@ -3,15 +3,15 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v68";
+const CACHE_VERSION = "mieterapp-v69";
 const PUSH_CACHE = "mieterapp-push"; // Benachrichtigungen: { api, id } – bleibt bei neuen Versionen erhalten
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=68",
-  "./js/config.js?v=68",
-  "./js/i18n.js?v=68",
-  "./js/app.js?v=68",
+  "./css/style.css?v=69",
+  "./js/config.js?v=69",
+  "./js/i18n.js?v=69",
+  "./js/app.js?v=69",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
@@ -39,25 +39,42 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Nur eigene GET-Anfragen: zuerst Netz (immer aktuelle Version), bei fehlender
-// Verbindung aus dem Cache. API-Aufrufe (Apps Script) werden nicht angefasst.
+// Nur eigene GET-Anfragen (API-Aufrufe an Apps Script werden nicht angefasst):
+// • Dateien mit Versionsnummer (?v=…), Schriften, Symbole, Bibliotheken ändern sich nie → sofort aus dem Speicher.
+// • Seite und übrige Dateien: zuerst Netz (immer aktuell), aber höchstens 3 Sekunden warten –
+//   bei schlechtem Empfang sofort die gespeicherte Fassung, ohne Netz ebenfalls.
+function fromNetwork(req) {
+  return fetch(req, { cache: "no-cache" }).then((res) => {
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
+    }
+    return res;
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    // "no-cache": beim Server nachfragen, ob es eine neuere Version gibt (sonst liefert der
-    // Browser-Cache evtl. alte Dateien und die App besteht aus alten und neuen Teilen).
-    fetch(req, { cache: "no-cache" })
-      .then((res) => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
-        }
-        return res;
-      })
-      .catch(() => caches.match(req, { ignoreSearch: true }))
-  );
+  const immutable = url.searchParams.has("v") || /\/(fonts|icons|vendor)\//.test(url.pathname);
+  if (immutable) {
+    event.respondWith(caches.match(req).then((hit) => hit || fromNetwork(req)));
+    return;
+  }
+  event.respondWith(new Promise((resolve) => {
+    let done = false;
+    const finish = (res) => { if (!done && res) { done = true; resolve(res); } };
+    const net = fromNetwork(req);
+    const timer = setTimeout(() => {
+      caches.match(req, { ignoreSearch: true }).then(finish); // langsames Netz: gespeicherte Fassung
+    }, 3000);
+    net.then((res) => { clearTimeout(timer); finish(res); })
+      .catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => finish(hit || Response.error())));
+    // Hat die Wartezeit nichts Gespeichertes gefunden, gewinnt das Netz, sobald es antwortet.
+    net.then(finish, () => {});
+  }));
 });
 
 /* ---------- Benachrichtigungen (nur Android) ----------
