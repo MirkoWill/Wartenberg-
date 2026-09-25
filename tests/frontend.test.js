@@ -542,6 +542,8 @@ function makeQrVideo(text) {
       check("Push: Einschalten meldet Gerät mit Aufgang an (Schlüssel 65 Byte, sichtbar)", subReq && subReq.endpoint === "https://fcm.googleapis.com/fcm/send/test:APA91b" && subReq.obj === "lind6" && subReq.pin
         && await p.evaluate(() => window.__pushKeyLen) === 65 && await p.evaluate(() => window.__pushUserVisible) === true, subReq);
       check("Push: Zustand „eingeschaltet“, Knopf „Ausschalten“", /Auf diesem Handy eingeschaltet/.test(await p.textContent(box)) && (await p.textContent(`${box} [data-push-toggle]`)).trim() === "Ausschalten");
+      check("Push: eingeschaltet deutlich erkennbar (grüner Rahmen, „Benachrichtigungen: an ✓“)", await p.$eval(box, (b) => b.classList.contains("push-box--on")) && /Benachrichtigungen: an\s*✓/.test(await p.textContent(box)));
+      check("Push: Kasten ganz unten auf der Startseite", await p.$eval(box, (b) => b === b.closest('[data-view="notfall"]').lastElementChild));
       const cfg = await p.evaluate(async () => { const r = await (await caches.open("mieterapp-push")).match("push-config"); return r ? r.json() : null; });
       check("Push: Service Worker kennt Adresse und Geräte-Kennung", cfg && /script\.google\.com/.test(cfg.api) && cfg.id === "a".repeat(40), cfg);
 
