@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=54">
+  <link rel="stylesheet" href="css/style.css?v=55">
 </head>
 <body>
   <header class="app-header">
@@ -260,7 +260,7 @@
 
         <div class="staff-admin" id="staffAdmin" hidden>
           <h2 class="section-title">Cockpit &amp; Werkzeuge</h2>
-          <a class="btn btn--primary btn--block" href="#cockpit">📊 Cockpit: Aufträge, SLA, Team, Statistik</a>
+          <a class="btn btn--primary btn--block" href="#cockpit">📊 Cockpit: Aufträge, SLA, Arbeiten, Statistik</a>
           <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
         </div>
 
@@ -300,8 +300,8 @@
         </div>
         <ul class="task-list" id="cockpitList"></ul>
 
-        <h2 class="section-title">Team (30 Tage)</h2>
-        <p class="muted small">Nur Mitarbeiternummern – wer hinter einer Nummer steht, weiß nur der Hausmeisterdienst.</p>
+        <h2 class="section-title">Erledigte Arbeiten (14 Tage)</h2>
+        <p class="muted small">Was wann erledigt wurde und ob es zum Reinigungsplan passt – ohne Angabe, wer es war.</p>
         <div id="cockpitTeam"></div>
 
         <h2 class="section-title">Statistik (12 Monate)</h2>
@@ -816,8 +816,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=54"></script>
-  <script src="js/i18n.js?v=54"></script>
-  <script src="js/app.js?v=54"></script>
+  <script src="js/config.js?v=55"></script>
+  <script src="js/i18n.js?v=55"></script>
+  <script src="js/app.js?v=55"></script>
 </body>
 </html>

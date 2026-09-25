@@ -1841,41 +1841,47 @@ function adminOverview(p, user) {
     tasks: list,
     lookerUrl: lead ? "" : PropertiesService.getScriptProperties().getProperty("LOOKER_URL") || "",
     role: user.role,
-    team: teamOverview(scans, areas, plan, now),
+    work: workLog(scans, areas, plan, now),
     time: now.toISOString(),
   };
 }
 
 /**
- * Team-Übersicht aus den Tätigkeitsnachweisen (nur Mitarbeiternummern, keine Namen):
- * je Nummer Anzahl der Nachweise (30 Tage) und letzter Nachweis, die letzten Nachweise und
- * Plan-Einträge der letzten 7 Tage ohne Nachweis.
+ * Erledigte Arbeiten je Tag (14 Tage) mit Abgleich gegen den Reinigungsplan – bewusst OHNE
+ * Mitarbeiternummern (Datensparsamkeit; wer eingesetzt war, weiß der Hausmeisterdienst aus seinen Einsatzplänen).
+ * Ergebnis: { days: [{ date, done: [{ time, activity, ort, planned, manual }], missed: [{ activity, ort, lateOn }] }] }
  */
-function teamOverview(scans, areas, plan, now) {
-  const since = new Date(now.getTime() - 30 * 86400000);
-  const recent = scans.filter((s) => s["Zeitpunkt (Scan)"] instanceof Date && s["Zeitpunkt (Scan)"] > since)
-    .sort((a, b) => b["Zeitpunkt (Scan)"] - a["Zeitpunkt (Scan)"]);
-  const per = {};
-  recent.forEach((s) => {
-    const nr = String(s["Mitarbeiter-Nr"] || "?");
-    const x = per[nr] || (per[nr] = { nr, count: 0, manual: 0, last: s["Zeitpunkt (Scan)"].toISOString() });
-    x.count++;
-    if (/^manuell/.test(String(s.Erfassung || ""))) x.manual++;
-  });
-  const missed = [];
-  for (let i = 1; i <= 7; i++) {
+function workLog(scans, areas, plan, now) {
+  const DAYS = 14;
+  const key = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+  const low = (x) => String(x || "").trim().toLowerCase();
+  const valid = scans.filter((s) => s["Zeitpunkt (Scan)"] instanceof Date);
+  const days = [];
+  for (let i = 0; i < DAYS; i++) {
     const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    planStatusForDay(day, areas, scans, plan).filter((x) => !x.done)
-      .forEach((x) => missed.push({ date: Utilities.formatDate(day, CONFIG.TIMEZONE, "yyyy-MM-dd"), activity: x.activity, ort: x.ort }));
+    const k = key(day);
+    const status = planStatusForDay(day, areas, scans, plan);
+    const done = valid.filter((s) => key(s["Zeitpunkt (Scan)"]) === k)
+      .sort((a, b) => a["Zeitpunkt (Scan)"] - b["Zeitpunkt (Scan)"])
+      .map((s) => ({
+        time: Utilities.formatDate(s["Zeitpunkt (Scan)"], CONFIG.TIMEZONE, "HH:mm"),
+        activity: plain(s["Tätigkeit"], 60), ort: plain(s.Ort, 80),
+        planned: status.some((x) => low(x.activity) === low(s["Tätigkeit"]) && (low(x.ort) === low(s.Ort) || !areas.some((a) => low(a.ort) === low(x.ort)))),
+        manual: /^manuell/.test(String(s.Erfassung || "")),
+      }));
+    // Geplant, aber an dem Tag kein Nachweis – später nachgeholt (bis 7 Tage)?
+    const missed = i === 0 ? [] : status.filter((x) => !x.done).map((x) => {
+      const later = valid.filter((s) => s["Zeitpunkt (Scan)"] > day && s["Zeitpunkt (Scan)"] - day < 8 * 86400000
+        && key(s["Zeitpunkt (Scan)"]) > k && low(s["Tätigkeit"]) === low(x.activity) && (low(s.Ort) === low(x.ort) || !areas.some((a) => low(a.ort) === low(x.ort))))
+        .sort((a, b) => a["Zeitpunkt (Scan)"] - b["Zeitpunkt (Scan)"])[0];
+      return { activity: plain(x.activity, 60), ort: plain(x.ort, 80), lateOn: later ? key(later["Zeitpunkt (Scan)"]) : "" };
+    });
+    const open = i === 0 ? status.filter((x) => !x.done).map((x) => ({ activity: plain(x.activity, 60), ort: plain(x.ort, 80) })) : [];
+    if (done.length || missed.length || open.length || status.length) {
+      days.push({ date: k, done, missed, open, planned: status.length, plannedDone: status.filter((x) => x.done).length });
+    }
   }
-  return {
-    members: Object.keys(per).map((k) => per[k]).sort((a, b) => b.count - a.count),
-    recent: recent.slice(0, 25).map((s) => ({
-      time: s["Zeitpunkt (Scan)"].toISOString(), nr: String(s["Mitarbeiter-Nr"] || ""), ort: plain(s.Ort, 80),
-      activity: plain(s["Tätigkeit"], 60), manual: /^manuell/.test(String(s.Erfassung || "")), note: plain(s.Notiz, 200),
-    })),
-    missed: missed.slice(0, 40),
-  };
+  return { days };
 }
 
 /** Status/Zuständigkeit/Notiz eines Auftrags ändern (Verwaltung; Leitung nur Status). Setzt die Zeitstempel. */

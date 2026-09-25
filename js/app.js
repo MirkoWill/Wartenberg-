@@ -2153,7 +2153,7 @@
     // Leitung: keine Filter nach Zuständigkeit (sieht nur Hausmeister-Aufträge)
     const lead = d.role === "Leitung";
     $$('#cockpitFilter [data-filter="Hausmeister"], #cockpitFilter [data-filter="Verwaltung"]').forEach((b) => { b.hidden = lead; });
-    renderTeam(d.team);
+    renderWork(d.work);
     renderCockpitList(Array.isArray(d.tasks) ? d.tasks : []);
     renderCockpitCharts(d);
     const looker = $("#cockpitLooker");
@@ -2247,28 +2247,26 @@
     }
   }
 
-  /** Team: Nachweise je Mitarbeiternummer, letzte Nachweise, laut Plan nicht erledigt (7 Tage). */
-  function renderTeam(team) {
+  /** Erledigte Arbeiten je Tag mit Plan-Abgleich – ohne Mitarbeiternummern. */
+  function renderWork(work) {
     const box = $("#cockpitTeam");
-    const t = team && typeof team === "object" ? team : {};
-    const members = Array.isArray(t.members) ? t.members : [];
-    const recent = Array.isArray(t.recent) ? t.recent : [];
-    const missed = Array.isArray(t.missed) ? t.missed : [];
-    const when = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); };
-    const day = (iso) => { const d = parseIsoDate(String(iso)); return d ? d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) : ""; };
-    box.innerHTML = `
-      ${members.length ? `<ul class="team-list">${members.map((m) => `<li>
-        <span class="team-list__nr">Nr. ${esc(m.nr)}</span>
-        <span><strong>${esc(m.count)}</strong> Nachweise${Number(m.manual) ? ` <span class="muted">(davon ${esc(m.manual)} ohne QR)</span>` : ""}</span>
-        <span class="muted small">zuletzt ${esc(when(m.last))}</span></li>`).join("")}</ul>`
-        : '<p class="muted">Keine Nachweise in den letzten 30 Tagen.</p>'}
-      ${missed.length ? `<details class="rule" open><summary>⚠️ Laut Plan nicht erledigt (letzte 7 Tage): ${missed.length}</summary>
-        <ul class="team-missed">${missed.map((x) => `<li><strong>${esc(day(x.date))}</strong> · ${esc(x.activity)} – ${esc(x.ort)}</li>`).join("")}</ul></details>`
-        : '<p class="muted small">✓ Alle geplanten Arbeiten der letzten 7 Tage sind nachgewiesen.</p>'}
-      ${recent.length ? `<details class="rule"><summary>Letzte Nachweise (${recent.length})</summary>
-        <ul class="team-recent">${recent.map((r) => `<li><span class="muted small">${esc(when(r.time))}</span>
-          <span>Nr. ${esc(r.nr)} · ${esc(r.activity)} – ${esc(r.ort)}${r.manual ? ' <span class="badge">ohne QR</span>' : ""}</span>
-          ${r.note ? `<span class="muted small">„${esc(r.note)}“</span>` : ""}</li>`).join("")}</ul></details>` : ""}`;
+    const days = work && Array.isArray(work.days) ? work.days : [];
+    const arr = (x) => (Array.isArray(x) ? x : []);
+    const dayName = (iso) => { const d = parseIsoDate(String(iso)); return d ? d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) : ""; };
+    if (!days.length) { box.innerHTML = '<p class="muted">Keine Nachweise und keine geplanten Arbeiten in den letzten 14 Tagen.</p>'; return; }
+    box.innerHTML = days.map((d, i) => {
+      const done = arr(d.done), missed = arr(d.missed), open = arr(d.open);
+      const planned = Number(d.planned) || 0, plannedDone = Number(d.plannedDone) || 0;
+      const badge = planned ? `<span class="badge ${plannedDone >= planned ? "badge--erledigt" : i === 0 ? "badge--offen" : "badge--unbekannt"}">Plan ${plannedDone}/${planned}</span>` : "";
+      return `<details class="rule work-day"${i < 2 || missed.some((m) => !m.lateOn) ? " open" : ""}>
+        <summary><strong>${esc(dayName(d.date))}</strong> ${badge} <span class="muted small">${done.length} erledigt</span></summary>
+        <ul class="work-list">
+          ${done.map((x) => `<li>✓ <span class="muted small">${esc(x.time)}</span> ${esc(x.activity)} – ${esc(x.ort)}${x.planned ? "" : ' <span class="badge">zusätzlich</span>'}${x.manual ? ' <span class="badge">ohne QR</span>' : ""}</li>`).join("")}
+          ${missed.map((x) => `<li class="${x.lateOn ? "work-late" : "work-missed"}">${x.lateOn ? "↻" : "✗"} ${esc(x.activity)} – ${esc(x.ort)} <span class="small">${x.lateOn ? `nachgeholt am ${esc(dayName(x.lateOn))}` : "nicht nachgewiesen"}</span></li>`).join("")}
+          ${open.map((x) => `<li class="muted">○ ${esc(x.activity)} – ${esc(x.ort)} <span class="small">heute geplant, noch offen</span></li>`).join("")}
+          ${!done.length && !missed.length && !open.length ? '<li class="muted">Nichts erfasst.</li>' : ""}
+        </ul></details>`;
+    }).join("");
   }
 
   /** Einfache Balkendiagramme als SVG (keine externe Bibliothek, keine Daten an Dritte). */

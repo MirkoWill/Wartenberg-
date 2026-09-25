@@ -250,9 +250,11 @@ function makeQrVideo(text) {
       const state = { overview: { ok: true, kpi: { open: 2, overdue: 1, dueSoon: 1, avgReactHours: 5.5, avgLeadDays: 2.25, slaQuote: 0.8, closed90: 10, cleaningQuote: 0.95, cleaningIst: 19, cleaningSoll: 20, errors24: 0 },
         months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, Mangel: i % 3, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 2, Nachweise: 20 })),
         perEntrance: { "Dorfstr. 24": 5, "Lindenberger Str. 6": 2 }, lookerUrl: "https://lookerstudio.google.com/reporting/abc", role: "Verwaltung",
-        team: { members: [{ nr: "100", count: 12, manual: 2, last: iso(-3) }, { nr: "101", count: 4, manual: 0, last: iso(-30) }],
-          recent: [{ time: iso(-3), nr: "100", ort: "Müllplatz", activity: "Müllplatzreinigung", manual: false, note: "" }],
-          missed: [{ date: "2026-09-22", activity: "Treppenhausreinigung", ort: "Treppenhaus Dorfstr. 24" }] },
+        work: { days: [
+          { date: "2026-09-24", planned: 2, plannedDone: 1, done: [{ time: "08:10", activity: "Treppenhausreinigung", ort: "Treppenhaus Dorfstr. 24", planned: true, manual: false },
+            { time: "09:00", activity: "Kontrollgang", ort: "Tiefgarage", planned: false, manual: true }], missed: [], open: [{ activity: "Müllplatzreinigung", ort: "Müllplatz" }] },
+          { date: "2026-09-22", planned: 2, plannedDone: 0, done: [], missed: [{ activity: "Treppenhausreinigung", ort: "Treppenhaus Lindenberger Str. 6", lateOn: "2026-09-23" },
+            { activity: "Fensterreinigung Aufgang", ort: "Treppenhaus Lindenberger Str. 8", lateOn: "" }], open: [] }] },
         tasks: [mk("T-1", "red"), mk("T-2", "yellow", { owner: "Verwaltung", type: "Mangel" }), mk("T-3", "done", { status: "erledigt", done: iso(-2) })] } };
       const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
       const p = await newPage(ctx);
@@ -276,7 +278,11 @@ function makeQrVideo(text) {
       check("Bearbeiten sendet Status + Notiz", (state.updates || []).some((u) => u.id === "T-1" && u.status === "in Arbeit" && u.note === "Schild bestellt" && u.owner === "Hausmeister" && u.token === ADMIN), state.updates);
       check("Diagramme (3 Monats-Charts + Aufgänge)", (await p.$$("#cockpitCharts svg")).length === 3 && (await p.$$(".hbars li")).length === 2);
       check("Looker-Link", (await p.getAttribute("#cockpitLooker", "href")) === "https://lookerstudio.google.com/reporting/abc" && await p.isVisible("#cockpitLooker"));
-      check("Team: Nachweise je Nummer + verpasste Plan-Einträge", (await p.$$(".team-list li")).length === 2 && /Nr\. 100/.test(await p.textContent("#cockpitTeam")) && /nicht erledigt.*1/.test(await p.textContent("#cockpitTeam")));
+      {
+        const txt = await p.textContent("#cockpitTeam");
+        check("Erledigte Arbeiten je Tag: Plan-Abgleich, zusätzlich, nachgeholt, nicht nachgewiesen – ohne Nummern",
+          (await p.$$(".work-day")).length === 2 && /Plan 1\/2/.test(txt) && /zusätzlich/.test(txt) && /nachgeholt am/.test(txt) && /nicht nachgewiesen/.test(txt) && /noch offen/.test(txt) && !/Nr\./.test(txt), txt);
+      }
       check("Keine Fehler im Cockpit", p.errors.length === 0, p.errors);
       await ctx.close();
     }
@@ -284,7 +290,7 @@ function makeQrVideo(text) {
       const iso = (h) => new Date(Date.now() + h * 3600000).toISOString();
       const state = { leadOverview: { ok: true, role: "Leitung", kpi: { open: 1, overdue: 0, dueSoon: 0, avgReactHours: 3, avgLeadDays: 1, slaQuote: 1, closed90: 2, cleaningQuote: 0.9, cleaningIst: 9, cleaningSoll: 10, errors24: null },
         months: [{ month: "2026-09", Mangel: 1, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 5 }], perEntrance: { "Dorfstr. 24": 1 }, lookerUrl: "",
-        team: { members: [{ nr: "100", count: 5, manual: 0, last: iso(-2) }], recent: [], missed: [] },
+        work: { days: [{ date: "2026-09-24", planned: 1, plannedDone: 1, done: [{ time: "07:30", activity: "Müllplatzreinigung", ort: "Müllplatz", planned: true, manual: false }], missed: [], open: [] }] },
         tasks: [{ id: "T-9", source: "Bewohner", type: "Klingelschild", status: "offen", owner: "Hausmeister", created: iso(-5), entrance: "Dorfstr. 24", wohnung: "3", details: "x", note: "", by: "",
           sla: { light: "green", react: "open", done: "open", reactDue: iso(20), doneDue: iso(200) } }] } };
       const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
@@ -297,7 +303,7 @@ function makeQrVideo(text) {
       check("Leitung: nur Status bearbeitbar", await p.isVisible('.task__edit select[name="status"]') && !(await p.$('.task__edit select[name="owner"]')) && !(await p.$('.task__edit textarea[name="note"]')));
       await p.selectOption('.task__edit select[name="status"]', "erledigt"); await p.click('.task__edit [type="submit"]'); await p.waitForTimeout(400);
       check("Leitung: sendet nur Status", (state.updates || []).some((u) => u.id === "T-9" && u.status === "erledigt" && !("owner" in u) && !("note" in u)), state.updates);
-      check("Team-Bereich für Leitung", /Nr\. 100/.test(await p.textContent("#cockpitTeam")) && /Alle geplanten Arbeiten/.test(await p.textContent("#cockpitTeam")));
+      check("Erledigte Arbeiten für Leitung", /Müllplatzreinigung/.test(await p.textContent("#cockpitTeam")) && /Plan 1\/1/.test(await p.textContent("#cockpitTeam")));
       check("Keine Fehler (Leitung)", p.errors.length === 0, p.errors);
       await ctx.close();
     }
@@ -462,7 +468,7 @@ function makeQrVideo(text) {
       const X = `<img src=x class=pwn onerror="window.__xss=1"><svg class=pwn onload="window.__xss=1"></svg>"'><script class=pwn>window.__xss=1</script>`;
       const evil = (d) => {
         if (d.action === "hmLogin") return { ok: true, user: { name: X, role: "Verwaltung" }, areas: [{ code: "TG", ort: X, activity: X }], activities: [X] };
-        if (d.action === "adminOverview") return { ok: true, role: X, team: { members: [{ nr: X, count: X, manual: X, last: X }, X], recent: [{ time: X, nr: X, ort: X, activity: X, manual: true, note: X }], missed: [{ date: X, activity: X, ort: X }] }, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
+        if (d.action === "adminOverview") return { ok: true, role: X, work: { days: [{ date: X, planned: X, plannedDone: X, done: [{ time: X, activity: X, ort: X, planned: false, manual: true }, X], missed: [{ activity: X, ort: X, lateOn: X }], open: [{ activity: X, ort: X }] }, X] }, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
         if (d.action === "getTasks") return { ok: true, tasks: [{ id: X, source: X, type: X, status: "offen", entrance: X, wohnung: X, name: X, contact: "javascript:window.__xss=1", details: X, ort: X, created: X, owner: X }] };
         if (d.action === "news") return { ok: true, weather: { at: new Date().toISOString(), days: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()), icon: X, min: X, max: 40 }, { date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + 86400000)), icon: "__proto__", min: 1, max: 2 }, { date: X }], alerts: [{ event: X, headline: X, headlineEn: X, severity: X, expires: X }, X] }, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
         if (d.action === "status") return { ok: true, items: [{ id: "T-260924-ABCD", type: X, status: X, created: X }] };
