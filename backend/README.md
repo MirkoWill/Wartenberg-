@@ -26,7 +26,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 | Eigenschaft | Beispiel | Zweck |
 |---|---|---|
 | `NOTIFY_EMAIL` | `verwaltung@example.org` | E-Mail bei jedem neuen Antrag, jeder Zählermeldung und jeder Erledigt-Meldung (mehrere kommagetrennt). Prüfen: Funktion **testMail** ausführen. |
-| `APP_PIN` | `13059` | Zugangs-PIN der App (ohne Eintrag gilt 13059). Bei Änderung auch `PIN_SHA256` in `js/config.js` anpassen. |
+| `APP_PIN` | – | Zugangs-PIN der App (6–12 Ziffern). **Nur über das Menü „Mieter-App → Zugangs-PIN ändern …“ setzen**, nie in den Code schreiben (das Projekt ist öffentlich). Ohne PIN sind alle Bewohner-Funktionen gesperrt. |
 | `CALENDAR_ID` | `abc…@group.calendar.google.com` | Optional: Kalender für den Reinigungsplan (sonst Suche nach Name „WEG Wartenberger Dorfkrug“) |
 | `LOOKER_URL` | `https://lookerstudio.google.com/reporting/…` | Optional: Link auf den Looker-Studio-Bericht, erscheint im Cockpit unter „Werkzeuge“ |
 | `BEIRAT_EMAILS` | `a@x.de, b@y.de, c@z.de` | Empfänger des Monatsberichts (nach Ihrer Freigabe) |
@@ -329,6 +329,16 @@ Offene Vorgänge und Zeilen ohne gültiges Datum werden nie gelöscht. Fotos wan
    „E-Mail fehlgeschlagen: …“ mit Grund.
 
 ## Sicherheit & Datenschutz
+
+### Sicherheits-Werkzeuge (Menü „Mieter-App“)
+- **Zugangs-PIN ändern …** – neue PIN (6–12 Ziffern, keine Zahlenfolge). Gilt sofort; wer die App nutzt, wird beim nächsten
+  Öffnen nach der neuen PIN gefragt. Die PIN steht nirgends im Code und nicht in der App.
+- **Mitarbeiter-Link neu erzeugen …** – z. B. bei verlorenem Handy: Nummer eingeben, der alte Link ist sofort ungültig,
+  der neue steht im Blatt „Mitarbeiter“.
+- **Alarm-Mails:** Wird ein Schutz-Limit erreicht (falsche PINs, Meldungen, Stimmen, Anmeldungen, Aktionen eines persönlichen
+  Links), kommt eine Mail an `NOTIFY_EMAIL` (je Limit höchstens alle 6 Stunden) mit Handlungsempfehlung.
+- **Umfragen:** Mehr als 15 Stimmen innerhalb einer Stunde werden im Cockpit als auffällig markiert (mögliche Mehrfachabstimmung).
+
 
 **Pen-Test (lokal, vor Einspielen):** Zugriffsschutz, Rechte Hausmeister/Verwaltung, Formel-Injection in allen
 Blättern, Uploads (SVG/HTML, Größe, Dateinamen), manipulierte Nachweise, Überlastung, Erledigt-Link, Mail-Betreff sowie

@@ -12,6 +12,12 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "(erhalten Sie von der Hausverwaltung)": ["(provided by the property management)", "(выдаётся управляющей компанией)", "(надається керуючою компанією)", "(obdržíte od správy domu)"],
+    "Bitte die PIN eingeben (nur Ziffern).": ["Please enter the PIN (digits only).", "Введите PIN-код (только цифры).", "Введіть PIN-код (лише цифри).", "Zadejte prosím PIN (pouze číslice)."],
+    "PIN wird geprüft …": ["Checking PIN …", "Проверка PIN-кода …", "Перевірка PIN-коду …", "Ověřuji PIN …"],
+    "Keine Verbindung. Zum ersten Öffnen wird Internet benötigt – bitte erneut versuchen.": ["No connection. An internet connection is needed the first time – please try again.", "Нет соединения. При первом открытии нужен интернет – попробуйте ещё раз.", "Немає з'єднання. Під час першого відкриття потрібен інтернет – спробуйте ще раз.", "Bez připojení. Při prvním otevření je potřeba internet – zkuste to prosím znovu."],
+    "Zu viele Fehlversuche. Bitte später erneut versuchen.": ["Too many failed attempts. Please try again later.", "Слишком много неудачных попыток. Попробуйте позже.", "Забагато невдалих спроб. Спробуйте пізніше.", "Příliš mnoho neúspěšných pokusů. Zkuste to prosím později."],
+    "Die PIN hat sich geändert. Bitte die aktuelle PIN eingeben (erhalten Sie von der Hausverwaltung).": ["The PIN has changed. Please enter the current PIN (provided by the property management).", "PIN-код изменился. Введите действующий PIN-код (выдаётся управляющей компанией).", "PIN-код змінився. Введіть чинний PIN-код (надається керуючою компанією).", "PIN se změnil. Zadejte prosím aktuální PIN (obdržíte od správy domu)."],
     "Benachrichtigungen: an": ["Notifications: on", "Уведомления: вкл.", "Сповіщення: увімкнено", "Oznámení: zapnuto"],
     "Benachrichtigungen": ["Notifications", "Уведомления", "Сповіщення", "Oznámení"],
     "Benachrichtigungen (nur Android)": ["Notifications (Android only)", "Уведомления (только Android)", "Сповіщення (лише Android)", "Oznámení (jen Android)"],

@@ -11,7 +11,7 @@
  *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Aufträge an den Hausmeister)
  *   CALENDAR_ID         optional, Kalender für den Reinigungsplan (sonst Suche nach CONFIG.CALENDAR_NAME)
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
- *   APP_PIN             optional, Zugangs-PIN der App (Standard: CONFIG.APP_PIN). Bei Änderung auch
+ *   APP_PIN             Zugangs-PIN der App – über das Menü „Zugangs-PIN ändern …“ setzen (nie in den Code). Bei Änderung auch
  *                       PIN_SHA256 in js/config.js anpassen.
  */
 
@@ -176,8 +176,12 @@ const CONFIG = {
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
   // Adresse dieser Web-App (für den Erledigt-Link in E-Mails). Leer = automatisch ermitteln.
-  // Zugangs-PIN (steht auf den Aushängen). Script-Eigenschaft APP_PIN hat Vorrang.
-  APP_PIN: "13059",
+  // Zugangs-PIN: NICHT hier eintragen (der Code ist öffentlich), sondern über das Menü
+  // „Mieter-App → Zugangs-PIN ändern …“ (speichert sie als Script-Eigenschaft APP_PIN).
+  APP_PIN: "",
+  PIN_PATTERN: /^\d{6,12}$/,
+  // Umfragen: so viele Stimmen innerhalb einer Stunde gelten als auffällig (Hinweis im Cockpit)
+  POLL_BURST: 15,
   // Schutz vor Missbrauch der offenen Adresse (gilt für alle Nutzer zusammen):
   LIMITS: {
     // Hoch angesetzt: Die PIN hängt ohnehin im Hausflur. Ein niedriger Wert ließe einen Störer mit
@@ -247,6 +251,8 @@ function onOpen() {
     .addItem("Reinigungsplan → Kalender übertragen", "syncPlanToCalendar")
     .addItem("Reinigungsplan heute prüfen (Test)", "checkPlanFulfilment")
     .addItem("Mitarbeiter-Links ergänzen", "ensureStaffLinks")
+    .addItem("Mitarbeiter-Link neu erzeugen …", "resetStaffLinkPrompt")
+    .addItem("Zugangs-PIN ändern …", "setAppPinPrompt")
     .addSeparator()
     .addItem("Auswertung aktualisieren", "rebuildAnalyticsNow")
     .addItem("Monatsbericht: Vorschau an mich", "reportPreviewNow")
@@ -288,6 +294,7 @@ function doPost(e) {
         return json(submitMeterReadings(Object.assign({}, p, { meters: [p] })));
       case "reportError": return json(reportClientError(p));
       case "vote": rateLimit("vote", 300, 3600); return json(submitVote(p));
+      case "checkPin": return json({ ok: true }); // PIN-Prüfung beim ersten Öffnen (die App kennt die PIN nicht mehr)
       case "pushKey": return json(pushKey());
       case "pushSubscribe": rateLimit("push", 120, 3600); return json(pushSubscribe(p));
       case "pushUnsubscribe": rateLimit("push", 120, 3600); return json(pushUnsubscribe(p));
@@ -705,12 +712,14 @@ function appPin() {
  */
 function requirePin(pin, staffToken) {
   const expected = appPin();
-  if (!expected) return;
+  // Ohne eingerichtete PIN ist nichts offen (früher: alles offen) – PIN über das Menü festlegen.
+  if (!expected) throw userError("Die App ist gerade nicht erreichbar. Bitte die Hausverwaltung informieren.", "pin");
   // Hausmeister/Verwaltung mit persönlichem Link brauchen keine PIN.
   if (staffToken) { try { authStaff(staffToken); return; } catch (e) { /* weiter mit PIN-Prüfung */ } }
   const cache = CacheService.getScriptCache();
   const fails = Number(cache.get("pinFails") || 0);
   if (fails >= CONFIG.LIMITS.pinFailsPer15Min) {
+    limitAlarm("pin");
     throw userError("Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.", "pin_locked");
   }
   if (String(pin || "").trim() === expected) return;
@@ -721,6 +730,7 @@ function requirePin(pin, staffToken) {
 /** Wie withinLimit, wirft aber einen Fehler, wenn das Limit erreicht ist. */
 function rateLimit(key, max, seconds) {
   if (!withinLimit(key, max, seconds)) {
+    limitAlarm(key);
     throw userError("Derzeit gehen sehr viele Meldungen ein. Bitte später erneut versuchen oder anrufen.");
   }
 }
@@ -1724,6 +1734,7 @@ function healthCheck(extra) {
   const info = [];
   const props = PropertiesService.getScriptProperties();
   if (!(props.getProperty("NOTIFY_EMAIL") || "").trim()) issues.push("Script-Eigenschaft NOTIFY_EMAIL fehlt – es kommen keine Benachrichtigungen an.");
+  if (!CONFIG.PIN_PATTERN.test(appPin())) issues.push("Zugangs-PIN fehlt oder ist zu kurz – Menü „Mieter-App → Zugangs-PIN ändern …“ (6–12 Ziffern).");
   try {
     const q = MailApp.getRemainingDailyQuota();
     if (q < CONFIG.LIMITS.mailReserve) issues.push(`Mail-Kontingent fast aufgebraucht (noch ${q} heute).`);
@@ -2567,8 +2578,10 @@ function pollRows() {
 function pollCounts(id, n) {
   const counts = Array.from({ length: n }, () => 0);
   const perEntrance = {};
+  const times = [];
   sheetObjects(CONFIG.SHEETS.votes).forEach((v) => {
     if (String(v["Umfrage-ID"]) !== id) return;
+    if (v.Zeit instanceof Date) times.push(v.Zeit.getTime());
     const i = Number(v.Antwort);
     if (i >= 0 && i < n) {
       counts[i]++;
@@ -2576,7 +2589,14 @@ function pollCounts(id, n) {
       (perEntrance[e] = perEntrance[e] || Array.from({ length: n }, () => 0))[i]++;
     }
   });
-  return { counts, total: counts.reduce((a, b) => a + b, 0), perEntrance };
+  // Auffälligkeit: meiste Stimmen innerhalb einer Stunde (Hinweis auf Mehrfachabstimmung)
+  times.sort((a, b) => a - b);
+  let burst = 0;
+  for (let a = 0, b = 0; b < times.length; b++) {
+    while (times[b] - times[a] > 3600000) a++;
+    burst = Math.max(burst, b - a + 1);
+  }
+  return { counts, total: counts.reduce((a, b) => a + b, 0), perEntrance, burst, suspicious: burst >= CONFIG.POLL_BURST };
 }
 
 function pollIsOpen(r, obj) {
@@ -2639,7 +2659,7 @@ function adminPollList() {
     return { id: String(r.ID), question: plain(r.Frage, 200), options: options.map((o) => plain(o, 80)), open: pollIsOpen(r, "")
       || (r.Aktiv === true && (!(r.Bis instanceof Date) || ymd(r.Bis) >= ymd(new Date()))),
       to: ymd(r.Bis), only: String(r["Nur für Aufgang-IDs"] || ""), showResults: r["Ergebnis für Bewohner sichtbar"] === true,
-      counts: c.counts, total: c.total, perEntrance: c.perEntrance };
+      counts: c.counts, total: c.total, perEntrance: c.perEntrance, burst: c.burst, suspicious: c.suspicious };
   });
 }
 
@@ -3325,4 +3345,76 @@ function fitnessReminders() {
     });
   });
   return due.length;
+}
+
+/* ==========================================================================
+   Sicherheit: Alarm bei erreichten Limits, PIN ändern, Mitarbeiter-Link neu erzeugen
+   ========================================================================== */
+
+const LIMIT_LABELS = {
+  pin: "Zu viele falsche PIN-Eingaben (App für 15 Min. gesperrt)",
+  submit: "Meldungen pro Stunde (Limit erreicht – echte Meldungen werden gerade abgewiesen)",
+  vote: "Umfrage-Stimmen pro Stunde",
+  push: "Anmeldungen für Benachrichtigungen pro Stunde",
+  inbox: "Abrufe von Benachrichtigungen pro Stunde",
+};
+
+/** Mail an die Verwaltung, wenn ein Limit erreicht ist (je Limit höchstens alle 6 Stunden). */
+function limitAlarm(key) {
+  try {
+    const staff = /^staff_(.+)$/.exec(key);
+    const label = staff ? `Persönlicher Link Nr. ${staff[1]}: mehr als ${CONFIG.LIMITS.staffActionsPerHour} Aktionen pro Stunde`
+      : Object.prototype.hasOwnProperty.call(LIMIT_LABELS, key) ? LIMIT_LABELS[key] : key;
+    if (!withinLimit(`alarm_${key}`, 1, 21600)) return;
+    notify(`⚠️ Sicherheitshinweis Mieter-App: ${label}`, [
+      `Ein Schutz-Limit wurde erreicht: ${label}.`,
+      "",
+      "Das kann ein Störer sein (jemand probiert massenhaft etwas aus) – oder ungewöhnlich viel Betrieb.",
+      "Was tun?",
+      staff ? `• Link von Nr. ${staff[1]} verdächtig? Menü „Mieter-App → Mitarbeiter-Link neu erzeugen …“ – der alte Link ist dann sofort ungültig.`
+        : "• Wenn die PIN weitergegeben wurde: Menü „Mieter-App → Zugangs-PIN ändern …“ und die neue PIN den Bewohnern mitteilen.",
+      "• Die Sperre hebt sich nach Ablauf des Zeitfensters von selbst auf.",
+      "",
+      `Zeitpunkt: ${Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd.MM.yyyy HH:mm")}`,
+    ]);
+  } catch (err) { console.error("Limit-Alarm:", err); }
+}
+
+/** Menü: neue Zugangs-PIN (6–12 Ziffern) als Script-Eigenschaft speichern. Nie in den Code schreiben. */
+function setAppPinPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt("Zugangs-PIN ändern", "Neue PIN für die Bewohner (6 bis 12 Ziffern, z. B. 8 Stellen):", ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const pin = String(r.getResponseText() || "").trim();
+  if (!CONFIG.PIN_PATTERN.test(pin)) { ui.alert("Nicht gespeichert: Die PIN muss aus 6 bis 12 Ziffern bestehen."); return; }
+  if (/^(\d)\1+$/.test(pin) || "01234567890123".indexOf(pin) !== -1 || "98765432109876".indexOf(pin) !== -1) {
+    ui.alert("Nicht gespeichert: Bitte keine leicht zu erratende PIN (gleiche Ziffern oder Zahlenfolge)."); return;
+  }
+  PropertiesService.getScriptProperties().setProperty("APP_PIN", pin);
+  CacheService.getScriptCache().remove("pinFails");
+  ui.alert("Neue PIN gespeichert ✓\n\nSie gilt sofort. Wer die App schon benutzt, wird beim nächsten Öffnen nach der neuen PIN gefragt.\n"
+    + "Bitte den Bewohnern mitteilen (nicht öffentlich aushängen).");
+}
+
+/** Menü: neuen persönlichen Link für eine Nummer erzeugen – der alte ist sofort ungültig (z. B. Handy verloren). */
+function resetStaffLinkPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt("Mitarbeiter-Link neu erzeugen", "Für welche Nummer? (z. B. 100 oder 007)", ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const res = resetStaffLink(String(r.getResponseText() || "").trim());
+  ui.alert(res.ok ? `Neuer Link für Nr. ${res.nr} erzeugt ✓\n\nDer alte Link funktioniert ab sofort nicht mehr (spätestens nach 5 Minuten).\n`
+    + "Den neuen Link finden Sie im Blatt „Mitarbeiter“ in der Zeile der Nummer." : res.error);
+}
+
+function resetStaffLink(nr) {
+  if (!/^\d{1,4}$/.test(nr)) return { ok: false, error: "Bitte eine Nummer angeben, z. B. 100." };
+  nr = nr.length < 3 ? nr.padStart(3, "0") : nr;
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.staff.name);
+  const hit = sheetObjects(CONFIG.SHEETS.staff).find((row) => String(row.Nr).trim() === nr || fitnessNr(row.Nr) === nr);
+  if (!hit) return { ok: false, error: `Nr. ${nr} steht nicht im Blatt „Mitarbeiter“.` };
+  const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
+  const role = String(hit.Rolle || "Hausmeister");
+  sheet.getRange(hit._row, 4, 1, 2).setValues([[token, `${CONFIG.APP_URL}?hm=${token}#${role === "Fitness" ? "fitness" : "hausmeister"}`]]);
+  CacheService.getScriptCache().remove("staff");
+  return { ok: true, nr, token };
 }

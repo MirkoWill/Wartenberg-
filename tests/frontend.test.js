@@ -98,6 +98,8 @@ function makeQrVideo(text) {
       await p.reload(); await p.waitForTimeout(300);
       await acceptConsent(p);
       check("Richtige PIN → App frei", !(await p.isVisible("#consent")));
+      check("PIN wird vom Server geprüft (keine Prüfsumme in der App)", ctx.requests.some((d) => d.action === "checkPin")
+        && !/[a-f0-9]{64}/.test(fs.readFileSync(path.join(__dirname, "..", "js", "config.js"), "utf8")) && !/PIN_SHA256/.test(fs.readFileSync(path.join(__dirname, "..", "js", "app.js"), "utf8")));
       check("Impressum ohne Zustimmung erreichbar", await (async () => { const q = await newPage(await newContext(browser)); await q.goto(`${base}#impressum`); await q.waitForTimeout(200); return (await q.isVisible('[data-view="impressum"]')) && !(await q.isVisible("#consent")); })());
       p = await newPage(ctx); await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(300);
       check("Neuer Start: kein Dialog (PIN pro Gerät, Zustimmung 30 Tage)", !(await p.isVisible("#consent")));
@@ -396,12 +398,14 @@ function makeQrVideo(text) {
     }
     {
       const state = { overview: { ok: true, role: "Verwaltung", kpi: {}, months: [], perEntrance: {}, tasks: [], work: { days: [] }, news: [],
-        polls: [{ id: "U-1", question: "Fahrradbügel im Hof?", options: ["Ja", "Nein"], open: true, to: "", only: "", showResults: true, counts: [7, 3], total: 10, perEntrance: {} }] } };
+        polls: [{ id: "U-1", question: "Fahrradbügel im Hof?", options: ["Ja", "Nein"], open: true, to: "", only: "", showResults: true, counts: [7, 3], total: 10, perEntrance: {} },
+          { id: "U-2", question: "Mülltonnen?", options: ["Ja", "Nein"], open: true, to: "", only: "", showResults: false, counts: [20, 1], total: 21, perEntrance: {}, burst: 19, suspicious: true }] } };
       const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
       const p = await newPage(ctx);
       await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
       await p.click("#staffTab"); await p.waitForSelector("#pollAdminList .poll");
       check("Cockpit: Ergebnis 70/30 % mit Stimmenzahl", /70 %/.test(await p.textContent("#pollAdminList")) && /10 Stimmen/.test(await p.textContent("#pollAdminList")));
+      check("Cockpit: auffällige Umfrage wird markiert (nur diese)", await p.$$eval("#pollAdminList .poll__warn", (w) => w.length) === 1 && /19 Stimmen innerhalb einer Stunde/.test(await p.textContent("#pollAdminList")));
       await p.click("#pollAdminNew summary");
       await p.fill('#formPollAdmin [name="question"]', "Grillplatz im Hof?");
       await p.fill('#formPollAdmin [name="options"]', "Ja\nNein\n\nEgal");
