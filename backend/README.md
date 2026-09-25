@@ -30,7 +30,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 | `CALENDAR_ID` | `abc…@group.calendar.google.com` | Optional: Kalender für den Reinigungsplan (sonst Suche nach Name „WEG Wartenberger Dorfkrug“) |
 | `LOOKER_URL` | `https://lookerstudio.google.com/reporting/…` | Optional: Link auf den Looker-Studio-Bericht, erscheint im Cockpit unter „Werkzeuge“ |
 | `BEIRAT_EMAILS` | `a@x.de, b@y.de, c@z.de` | Empfänger des Monatsberichts (nach Ihrer Freigabe) |
-| `CLEANING_ICS_URL` | `https://calendar.google.com/calendar/ical/…/public/basic.ics` | Öffentliche iCal-Adresse des Reinigungs-Kalenders → Bewohner können die Termine abonnieren (Startseite, „Hausreinigung & Pflege“) |
+| `CLEANING_ICS_URL` | – (leer lassen) | Nur falls der Reinigungs-Kalender doch öffentlich sein soll: dessen iCal-Adresse → Abo-Knopf in der App. Empfehlung: **nicht** setzen |
 
 ## 4. Als Web-App bereitstellen
 
@@ -183,10 +183,10 @@ Formatierungen in Blättern mit Status-Spalte werden dabei ersetzt.
 ## Kalender-Abo für Bewohner
 
 - **Müllabfuhr:** Infos → Müllabfuhr: iPhone/Outlook, Google Kalender oder Adresse kopieren (BSR-Termine aus `assets/*.ics`).
-- **Reinigung:** 💻 Google Kalender → ⚙️ beim Kalender „WEG Wartenberger Dorfkrug“ → *Zugriffsberechtigungen*:
-  „Öffentlich freigeben“ (alle Termindetails) → unter *Kalender integrieren* die **„Öffentliche Adresse im iCal-Format“**
-  kopieren → als Script-Eigenschaft `CLEANING_ICS_URL` eintragen. Danach erscheint auf der Startseite unter
-  „Hausreinigung & Pflege“ der Punkt „Reinigungstermine im eigenen Kalender“. Der Kalender enthält nur Tätigkeit und Ort.
+- **Reinigung:** Der Google-Kalender bleibt **privat** – bitte **nicht** „öffentlich freigeben“ (sonst wäre weltweit
+  sichtbar, wann der Hausmeisterdienst im Haus ist). Ausgewählten Personen teilen Sie ihn in Google Kalender → ⚙️ beim
+  Kalender → *Für bestimmte Personen freigeben* (Google-Konto nötig). Die Script-Eigenschaft `CLEANING_ICS_URL` bleibt
+  leer; dann zeigt die App keinen Abo-Knopf für die Reinigung (Müllabfuhr-Abo bleibt).
 
 ## Wetter auf der Startseite
 
