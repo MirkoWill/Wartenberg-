@@ -65,6 +65,7 @@ async function newContext(browser, { backend, preset, lang, width = 390, height 
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(res) });
   });
   await ctx.route("**/*.transport.rest/**", (route) => {
+    ctx.transitCalls = (ctx.transitCalls || 0) + 1;
     const url = route.request().url();
     const body = url.includes("/locations")
       ? [{ type: "stop", id: "900150005", name: "Dorfstr./Lindenberger Str. (Berlin)" }]

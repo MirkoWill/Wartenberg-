@@ -16,7 +16,7 @@ SIL Open Font License, keine Verbindung zu Google), mit automatischem Dark Mode.
 |---|---|---|
 | US 1.1 Startseite mit Notfall-Bereich | `#notfall` (Tab „Start“) | Klickbare `tel:`-Links, aufklappbare Verhaltensregeln; Anleitung „Wasser in der Wohnung abstellen“ mit Grafik |
 | US 1.2 Abfallkalender | `#infos` | Nächste Abholungen aus der BSR-`.ics` (`assets/abfuhrkalender-2026.ics`), Kalender-Abo per `webcal://`, PDF, Sperrmüll-Buchung, Trennhilfe |
-| US 1.3 Live-ÖPNV | `#oepnv` | transport.rest (VBB), Verspätung rot/grün, Auto-Refresh 60 s (nur solange sichtbar) |
+| US 1.3 Abfahrten | `#oepnv` | Haltestelle + Linien, Link zur offiziellen Live-Anzeige der BVG (freie Fahrplandienste waren zu unzuverlässig) |
 | US 1.4 Kiez & Dokumente | `#infos`, `#hausordnung` | Supermärkte, Apotheke, Pakete mit Kartenlink; Hausordnung als Seite; `.vcf`-Visitenkarte; Link zum aponet-Notdienst (PLZ 13059) unter Apotheke |
 | US 2.1 Zählerstände | `#wasser` | Wasser kalt/warm und Heizungszähler (kWh/MWh), mehrere pro Meldung, Kamera-Foto → verkleinert, Base64, POST |
 | US 2.2 Stromzähler | `#strom` | WhatsApp-Deep-Link `wa.me` mit vorausgefülltem Text |

@@ -116,8 +116,10 @@ function makeQrVideo(text) {
       check("Startseite: Titel Start, Abschnitt Im Notfall", (await p.textContent("#viewTitle")) === "Start" && /Im Notfall/.test(await p.textContent('[data-view="notfall"]')));
       const levels = await p.$$eval("#emergencyList .contact", (c) => c.map((x) => x.className));
       check("Notfallnummern: rote und orange Stufen", levels.filter((c) => /danger/.test(c)).length === 3 && levels.filter((c) => /urgent/.test(c)).length === 2, levels);
-      await p.goto(`${base}?obj=lind6#infos`); await p.click(".transit-link"); await p.waitForSelector(".departure__dir", { timeout: 15000 });
+      await p.goto(`${base}?obj=lind6#infos`); await p.click(".transit-link"); await p.waitForSelector("#transitInfo:visible");
       check("Abfahrten über Infos, Zurück → Infos", (await p.textContent("#backLabel")) === "Infos" && /Infos\*/.test(await tabs(p)));
+      check("Abfahrten: Haltestelle, Linien, Link zur BVG – keine Anfrage an transport.rest", /Dorfstr\./.test(await p.textContent("#transitStop")) && (await p.$$(".transit-line")).length === 3
+        && /^https:\/\/www\.bvg\.de\//.test(await p.getAttribute("#transitInfo", "href")) && !ctx.transitCalls);
       check("Apotheken-Notdienst als Link, kein eingebettetes Fenster", (await p.$$("iframe")).length === 0 && /aponet\.de/.test(await p.getAttribute(".kiez-link", "href")));
       check("Services: 5 Kacheln ohne „Meine Meldungen“", (await p.$$eval(".tile", (t) => t.map((x) => x.getAttribute("href")))).join() === "#wasser,#mangel,#elektro,#klingel,#strom");
       for (const bad of ['#x"],body,[a="', "#__proto__", "?obj=<b>#notfall"]) {
@@ -431,27 +433,6 @@ function makeQrVideo(text) {
       check("Zweimal gescheitert: „Erneut versuchen“ sichtbar", await p.isVisible("#staffRetry") && !(await p.isVisible("#staffPendingWait")));
       await p.click("#staffRetry"); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
       check("Erneut versuchen meldet an", /007/.test(await p.textContent("#staffName")));
-      await ctx.close();
-    }
-
-    console.log("--- Abfahrten über Backend");
-    {
-      const inMin = (m) => new Date(Date.now() + m * 60000).toISOString();
-      const state = {};
-      const be = fakeBackend(state);
-      const ctx = await newContext(browser, { preset: "resident", backend: (d) => (d.action === "departures"
-        ? { ok: true, live: false, time: new Date(Date.now() - 7 * 60000).toISOString(), departures: [
-          { when: inMin(6), plannedWhen: inMin(6), delay: null, direction: "Ahrensfelde", line: { name: "893", product: "bus" } },
-          { when: inMin(-5), direction: "vorbei", line: { name: "N56" } }] }
-        : be(d)) });
-      await ctx.route("**/*.transport.rest/**", (route) => route.abort("internetdisconnected"));
-      const p = await newPage(ctx);
-      await p.goto(`${base}?obj=lind6#oepnv`); await p.waitForSelector(".departure__dir", { timeout: 20000 });
-      await p.waitForTimeout(1500);
-      const txt = await p.textContent("#departures");
-      check("Fahrplandienste ausgefallen: Abfahrten kommen vom Backend (nur künftige)", /Ahrensfelde/.test(txt) && !/vorbei/.test(txt), txt);
-      check("Hinweis mit Stand statt roter Fehlermeldung, keine Technik-Details", /Fahrplan vom/.test(await p.textContent("#transitStatus")) && !/nicht erreichbar ·|bvg:/.test(await p.textContent("#transitStatus")), await p.textContent("#transitStatus"));
-      check("Keine Fehler (Abfahrten)", p.errors.length === 0, p.errors);
       await ctx.close();
     }
 

@@ -145,14 +145,6 @@ const CONFIG = {
   // Wetter für die Startseite: Daten des Deutschen Wetterdienstes über Bright Sky (kostenlos, ohne Schlüssel).
   // Abruf nur durch dieses Script (1× pro Stunde, zwischengespeichert) – die Handys verbinden sich nicht mit Wetterdiensten.
   WEATHER: { lat: 52.574, lon: 13.514, days: 3, cacheMinutes: 60 },
-  // Abfahrten: Das Script fragt die freien transport.rest-Dienste zentral ab (höchstens alle 90 s) und
-  // merkt sich die letzte gute Antwort (3 Std.). Fällt der Dienst aus, zeigt die App die geplanten
-  // Abfahrten daraus weiter an. Nur diese Haltestelle – kein offener Proxy.
-  TRANSIT: {
-    apis: ["https://v6.bvg.transport.rest", "https://v6.vbb.transport.rest", "https://v6.db.transport.rest"],
-    query: "Dorfstr./Lindenberger Str. (Berlin)", match: "dorfstr./lindenberger",
-    freshSeconds: 90, keepHours: 3, duration: 180, results: 60,
-  },
   STAFF_FIRST_NR: 100,
   STAFF_LINKS: 20,
   // Löschkonzept: Aufbewahrung in Jahren (offene Vorgänge werden nie gelöscht). Täglich um 3 Uhr.
@@ -302,7 +294,6 @@ function doGet(e) {
     if (q.action === "releaseReport") return releaseReportPage(q);
     if (q.action === "status") { requirePin(q.pin, q.token); return json(getStatus(q.ids)); }
     if (q.action === "news") { requirePin(q.pin, q.token); return json(getNews(q.obj)); }
-    if (q.action === "departures") { requirePin(q.pin, q.token); return json(getDepartures()); }
     return json({ ok: true, service: "mieter-app" });
   } catch (err) {
     return errorJson(err);
@@ -2101,86 +2092,6 @@ function morningDigest() {
   return { red: red.length, yellow: yellow.length };
 }
 
-/* ==========================================================================
-   Abfahrten (zentral abgefragt und zwischengespeichert)
-   ========================================================================== */
-
-/**
- * Ergebnis: { ok, time (ISO der Abfrage), live (true = gerade eben geladen), departures: [...] }.
- * Frisch (< freshSeconds) aus dem Zwischenspeicher; sonst holt genau eine Anfrage neu (Sperre),
- * alle anderen bekommen den letzten Stand. Schlägt das Laden fehl, bleibt der letzte Stand gültig.
- */
-function getDepartures() {
-  const cfg = CONFIG.TRANSIT;
-  const cache = CacheService.getScriptCache();
-  let last = null;
-  try { last = JSON.parse(cache.get("departures") || "null"); } catch (e) { last = null; }
-  const age = last ? (Date.now() - new Date(last.time).getTime()) / 1000 : Infinity;
-  const future = (list) => list.filter((d) => new Date(d.when || d.plannedWhen).getTime() > Date.now() - 60000);
-  const answer = (x, live) => ({ ok: true, time: x.time, live, departures: future(x.departures).slice(0, 15) });
-  if (last && age < cfg.freshSeconds) return answer(last, true);
-
-  // Eigene „weiche“ Sperre im Zwischenspeicher – NICHT die Script-Sperre: hängt der Fahrplandienst,
-  // sollen Meldungen, Scans usw. trotzdem sofort gespeichert werden können.
-  const empty = { ok: true, time: "", live: false, departures: [] };
-  if (cache.get("departures_busy")) return last ? answer(last, false) : empty;
-  cache.put("departures_busy", "1", 45);
-  try {
-    const fresh = fetchDepartures();
-    cache.put("departures", JSON.stringify(fresh), cfg.keepHours * 3600);
-    return answer(fresh, true);
-  } catch (err) {
-    console.warn("Abfahrten:", err && err.message);
-    return last ? answer(last, false) : empty;
-  } finally {
-    cache.remove("departures_busy");
-  }
-}
-
-/** Fragt alle Dienste parallel; die erste gültige Antwort zählt. Nur die nötigen Felder werden behalten. */
-function fetchDepartures() {
-  const cfg = CONFIG.TRANSIT;
-  const props = PropertiesService.getScriptProperties();
-  const stopIds = cfg.apis.map((api) => props.getProperty("STOP_" + api.replace(/\W/g, "_")) || "");
-  // Haltestellen-ID einmalig je Dienst suchen und merken
-  const missing = cfg.apis.map((api, i) => (stopIds[i] ? null : i)).filter((i) => i !== null);
-  if (missing.length) {
-    const res = UrlFetchApp.fetchAll(missing.map((i) => ({ muteHttpExceptions: true,
-      url: `${cfg.apis[i]}/locations?query=${encodeURIComponent(cfg.query)}&results=8&addresses=false&poi=false` })));
-    res.forEach((r, n) => {
-      if (r.getResponseCode() !== 200) return;
-      let list = [];
-      try { list = JSON.parse(r.getContentText()); } catch (e) { return; }
-      const hit = (Array.isArray(list) ? list : []).find((x) => x && (x.type === "stop" || x.type === "station")
-        && String(x.name || "").toLowerCase().indexOf(cfg.match) !== -1);
-      if (hit) {
-        const i = missing[n];
-        stopIds[i] = String(hit.id);
-        props.setProperty("STOP_" + cfg.apis[i].replace(/\W/g, "_"), stopIds[i]);
-      }
-    });
-  }
-  const tries = cfg.apis.map((api, i) => (stopIds[i] ? { i, url: `${api}/stops/${encodeURIComponent(stopIds[i])}/departures`
-    + `?duration=${cfg.duration}&results=${cfg.results}&remarks=false&language=de` } : null)).filter(Boolean);
-  if (!tries.length) throw new Error("Haltestelle nicht gefunden");
-  const res = UrlFetchApp.fetchAll(tries.map((t) => ({ url: t.url, muteHttpExceptions: true })));
-  for (let n = 0; n < res.length; n++) {
-    if (res[n].getResponseCode() !== 200) continue;
-    let data;
-    try { data = JSON.parse(res[n].getContentText()); } catch (e) { continue; }
-    const list = Array.isArray(data) ? data : (data && data.departures) || [];
-    if (!Array.isArray(list)) continue;
-    return {
-      time: new Date().toISOString(),
-      departures: list.filter((d) => d && (d.when || d.plannedWhen)).map((d) => ({
-        when: d.when || null, plannedWhen: d.plannedWhen || null, delay: typeof d.delay === "number" ? d.delay : null,
-        cancelled: d.cancelled === true, direction: plain(d.direction, 80), platform: plain(d.platform, 10),
-        line: { name: plain(d.line && d.line.name, 12), product: plain(d.line && d.line.product, 20) },
-      })),
-    };
-  }
-  throw new Error("Kein Fahrplandienst erreichbar");
-}
 
 /* ==========================================================================
    Monatsbericht für den Beirat (PDF) – nur Zahlen, keine personenbezogenen Daten.

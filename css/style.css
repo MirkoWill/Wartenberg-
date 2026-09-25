@@ -1095,3 +1095,8 @@ html.text-large body { zoom: 1.18; }
 .task--sla-long .task__due { color: #5e4686; }
 .kpi--long { border-top-color: #7a5ea8; }
 @media (prefers-color-scheme: dark) { .task--sla-long .task__due { color: #c7b3ea; } }
+
+/* Abfahrten: Haltestelle + Linien */
+.transit-card { margin-bottom: 14px; }
+.transit-lines { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.transit-line { padding: 3px 10px; border-radius: 999px; background: #8b1e5a; color: #fff; font-weight: 700; font-size: 14px; }

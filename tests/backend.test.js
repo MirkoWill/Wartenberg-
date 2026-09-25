@@ -360,20 +360,6 @@ ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
 check('Wetterdienst gestört: 10 Min. kein neuer Versuch', fetches.length === 4, fetches.length);
 wx.fail = false; delete cache.weather;
 
-// ================= Abfahrten (zentral) =================
-delete cache.departures; fetches.length = 0; tr.onlyVbb = true;
-let dp = ctx.doGet({ parameter: { action: 'departures', pin: '13059' } });
-check('Abfahrten über Backend: nur künftige, schlanke Daten, 2. Dienst springt ein', dp.ok && dp.live && dp.departures.length === 1 && dp.departures[0].line.name === '256' && !('stop' in dp.departures[0]) && !dp.departures[0].line.operator, dp);
-check('Haltestellen-ID gemerkt', Object.keys(props).some((k) => /^STOP_/.test(k) && props[k] === '900150005'));
-const n1 = fetches.length; ctx.doGet({ parameter: { action: 'departures', pin: '13059' } });
-check('Abfahrten 90 s zwischengespeichert (kein neuer Abruf)', fetches.length === n1);
-{ const c = JSON.parse(cache.departures); c.time = new Date(Date.now() - 10 * 60000).toISOString(); cache.departures = JSON.stringify(c); }
-tr.down = true;
-dp = ctx.doGet({ parameter: { action: 'departures', pin: '13059' } });
-check('Dienst ausgefallen: letzter Stand wird weiter geliefert (live=false)', dp.ok && dp.live === false && dp.departures.length === 1, dp);
-check('Abfahrten ohne PIN abgelehnt', ctx.doGet({ parameter: { action: 'departures' } }).code === 'pin');
-tr.down = false; tr.onlyVbb = false;
-
 // ================= Paket A: Hinweise aus dem Cockpit, Heute zu tun =================
 {
   const nsh = sheets['Aktuelles'];

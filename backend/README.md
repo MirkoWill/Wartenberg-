@@ -318,4 +318,4 @@ GitHub-Konto.
 - Formel-Injection wird verhindert (Eingaben, die mit `=`, `+`, `-`, `@`, Tab oder Zeilenumbruch beginnen, werden als Text gespeichert – auch in der Zähler-Übersicht).
 - Ein unsichtbares Honeypot-Feld filtert einfache Spam-Bots.
 - Die Daten liegen in Ihrem Google-Konto. Für den Livebetrieb bitte die Datenschutzerklärung der App um
-  Google (Speicherung) und transport.rest (Abfahrten) ergänzen.
+  Google (Speicherung) ergänzen.
