@@ -21,7 +21,7 @@ const CONFIG = {
       name: "Tickets",
       headers: ["ID", "Eingang", "Typ", "Status", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Name",
         "Termin", "Details", "Ort", "Telefon/Kontakt", "Foto", "Erledigt am", "Notiz Verwaltung",
-        "Erledigt-Code", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt"],
+        "Erledigt-Code", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt", "Langläufer", "Langläufer-Grund"],
     },
     meter: {
       name: "Zählerstände",
@@ -61,14 +61,14 @@ const CONFIG = {
     staffDefects: {
       name: "Mängel Hausmeister",
       headers: ["ID", "Eingang", "Erfasst von (Nr)", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
-        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt"],
+        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt", "Langläufer", "Langläufer-Grund"],
     },
     // Für Looker Studio / Auswertungen – werden nachts und per Menü neu aufgebaut (nicht von Hand bearbeiten)
     analytics: {
       name: "Auswertung Aufträge",
       headers: ["ID", "Quelle", "Art", "Aufgang", "Zuständig", "Status", "Dringend", "Eingang", "In Arbeit seit",
         "Erledigt am", "Reaktion fällig", "Erledigung fällig", "Reaktionszeit (Std.)", "Durchlaufzeit (Tage)",
-        "SLA Reaktion", "SLA Erledigung", "Ampel", "Monat", "Offen", "Erledigt", "Überfällig", "SLA eingehalten"],
+        "SLA Reaktion", "SLA Erledigung", "Ampel", "Monat", "Offen", "Erledigt", "Überfällig", "SLA eingehalten", "Langläufer"],
     },
     analyticsCleaning: {
       name: "Auswertung Reinigung",
@@ -203,6 +203,9 @@ function setup() {
     const sh = ss.getSheetByName(def.name);
     sh.getRange(2, def.headers.indexOf("Zuständig") + 1, sh.getMaxRows() - 1, 1).setDataValidation(
       SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.OWNERS, true).build());
+    // Langläufer: Auswahl „ja“ (bewusst kein Kästchen – leere Kästchen würden als belegte Zeilen zählen)
+    sh.getRange(2, def.headers.indexOf("Langläufer") + 1, sh.getMaxRows() - 1, 1).setDataValidation(
+      SpreadsheetApp.newDataValidation().requireValueInList(["ja"], true).setAllowInvalid(true).build());
   });
   const statusCol = CONFIG.SHEETS.tickets.headers.indexOf("Status") + 1;
   tickets.getRange(2, statusCol, tickets.getMaxRows() - 1, 1).setDataValidation(
@@ -1788,6 +1791,7 @@ function allTasks() {
     wohnung: String(r.Wohnung || ""), name: String(r.Name || ""), contact: String(r["Telefon/Kontakt"] || ""),
     details: String(r.Details || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
     by: String(r["Bearbeitet von"] || ""), _row: r._row, photo: driveUrl(r.Foto), photoDone: driveUrl(r["Foto erledigt"]),
+    longRunner: isYes(r["Langläufer"]), longReason: String(r["Langläufer-Grund"] || "").replace(/^'/, ""),
   }));
   const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter((r) => r.ID).map((r) => ({
     id: String(r.ID), kind: "defect", source: String(r["Erfasst von (Nr)"] || ""), type: "Mangel (intern)",
@@ -1796,6 +1800,7 @@ function allTasks() {
     entrance: entranceName(r["Aufgang-ID"]), object: String(r["Aufgang-ID"] || ""), wohnung: "", name: "", contact: "",
     details: String(r.Beschreibung || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
     by: String(r["Bearbeitet von"] || ""), _row: r._row, photo: driveUrl(r.Foto), photoDone: driveUrl(r["Foto erledigt"]),
+    longRunner: isYes(r["Langläufer"]), longReason: String(r["Langläufer-Grund"] || "").replace(/^'/, ""),
   }));
   return tickets.concat(defects);
 }
@@ -1820,6 +1825,10 @@ function slaInfo(t, now) {
   const react = state(reactAt, reactDue);
   const done = state(closed ? (t.done || now) : null, doneDue);
   const warn = CONFIG.SLA_WARN_HOURS * 3600000;
+  const hours0 = reactAt && t.created ? Math.max(0, (reactAt - t.created) / 3600000) : null;
+  const days0 = closed && t.done && t.created ? Math.max(0, (t.done - t.created) / 86400000) : null;
+  // Langläufer (wartet z. B. auf Firmen): außerhalb der Service-Ziele – keine Ampel, nicht in Quoten/Durchschnitten
+  if (t.longRunner) return { reactDue, doneDue, react: "long", done: "long", light: closed ? "done" : "long", reactHours: hours0, leadDays: days0, long: true };
   let light = "green";
   if (closed) light = "done";
   else if (react === "overdue" || done === "overdue") light = "red";
@@ -1827,6 +1836,10 @@ function slaInfo(t, now) {
   const hours = reactAt && t.created ? Math.max(0, (reactAt - t.created) / 3600000) : null;
   const days = closed && t.done && t.created ? Math.max(0, (t.done - t.created) / 86400000) : null;
   return { reactDue, doneDue, react, done, light, reactHours: hours, leadDays: days };
+}
+
+function isYes(v) {
+  return v === true || /^(ja|x|true|1)$/i.test(String(v || "").trim());
 }
 
 /** Nur echte Drive-Links weitergeben (keine beliebigen URLs aus der Tabelle). */
@@ -1844,7 +1857,7 @@ function adminOverview(p, user) {
   const now = new Date();
   const tasks = allTasks().filter((t) => !lead || t.owner === "Hausmeister").map((t) => Object.assign(t, { sla: slaInfo(t, now) }));
   const since = (days) => new Date(now.getTime() - days * 86400000);
-  const recentClosed = tasks.filter((t) => t.status === "erledigt" && t.done && t.done > since(90));
+  const recentClosed = tasks.filter((t) => t.status === "erledigt" && t.done && t.done > since(90) && !t.longRunner);
   const open = tasks.filter((t) => t.status !== "erledigt");
   const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const slaOk = recentClosed.filter((t) => t.sla.react === "ok" && t.sla.done === "ok").length;
@@ -1885,10 +1898,10 @@ function adminOverview(p, user) {
     id: t.id, kind: t.kind, source: t.source, type: t.type, status: t.status, owner: t.owner, urgent: t.urgent,
     created: isoOrEmpty(t.created), inWork: isoOrEmpty(t.inWork), done: isoOrEmpty(t.done), termin: isoOrEmpty(t.termin),
     entrance: t.entrance, wohnung: t.wohnung, name: t.name, contact: t.contact, details: t.details, ort: t.ort,
-    note: t.note, by: t.by, photo: t.photo, photoDone: t.photoDone,
+    note: t.note, by: t.by, photo: t.photo, photoDone: t.photoDone, longRunner: t.longRunner, longReason: t.longReason,
     sla: { light: t.sla.light, react: t.sla.react, done: t.sla.done, reactDue: isoOrEmpty(t.sla.reactDue), doneDue: isoOrEmpty(t.sla.doneDue) },
   }));
-  const rank = { red: 0, yellow: 1, green: 2, done: 3 };
+  const rank = { red: 0, yellow: 1, green: 2, long: 3, done: 4 };
   list.sort((a, b) => rank[a.sla.light] - rank[b.sla.light] || String(a.sla.doneDue).localeCompare(String(b.sla.doneDue)));
 
   return {
@@ -1903,6 +1916,7 @@ function adminOverview(p, user) {
       closed90: recentClosed.length,
       cleaningQuote: soll ? ist / soll : null, cleaningSoll: soll, cleaningIst: ist,
       errors24,
+      longRunners: open.filter((t) => t.longRunner).length,
     },
     months: months.map((m) => Object.assign({ month: m }, perMonth[m])),
     perEntrance,
@@ -1967,7 +1981,9 @@ function adminUpdateTask(p, user) {
     if (!row) throw userError("Auftrag nicht gefunden");
     if (user.role === "Leitung") {
       if (ownerOf(row, row.Typ || "Mangel (intern)") !== "Hausmeister") throw userError("Auftrag nicht gefunden");
-      if (p.owner !== undefined || p.note !== undefined) throw userError("Zuständigkeit und Notiz ändert die Verwaltung.");
+      if (p.owner !== undefined || p.note !== undefined || p.longRunner !== undefined || p.longReason !== undefined) {
+        throw userError("Zuständigkeit, Notiz und Langläufer ändert die Verwaltung.");
+      }
     }
     if (p.status !== undefined) {
       if (CONFIG.STATUS_VALUES.indexOf(p.status) === -1) throw userError("Ungültiger Status");
@@ -1979,6 +1995,8 @@ function adminUpdateTask(p, user) {
       sheet.getRange(row._row, col("Zuständig")).setValue(p.owner);
     }
     if (p.note !== undefined) sheet.getRange(row._row, col("Notiz Verwaltung")).setValue(protectCell(str(p.note, 1000)));
+    if (p.longRunner !== undefined) sheet.getRange(row._row, col("Langläufer")).setValue(p.longRunner === true ? "ja" : "");
+    if (p.longReason !== undefined) sheet.getRange(row._row, col("Langläufer-Grund")).setValue(protectCell(str(p.longReason, 300)));
     sheet.getRange(row._row, col("Bearbeitet von")).setValue(str(user.name, 40));
   } finally {
     lock.releaseLock();
@@ -2022,8 +2040,8 @@ function rebuildAnalytics() {
   const ss = getSpreadsheet();
   const monthKey = (d) => (d ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM") : "");
   const round = (x, n) => (x === null || x === undefined ? "" : Math.round(x * Math.pow(10, n)) / Math.pow(10, n));
-  const label = { ok: "eingehalten", late: "verspätet", overdue: "überfällig", open: "offen" };
-  const ampel = { red: "rot", yellow: "gelb", green: "grün", done: "erledigt" };
+  const label = { ok: "eingehalten", late: "verspätet", overdue: "überfällig", open: "offen", long: "Langläufer" };
+  const ampel = { red: "rot", yellow: "gelb", green: "grün", done: "erledigt", long: "Langläufer" };
   const rows = allTasks().map((t) => {
     const s = slaInfo(t, now);
     return [t.id, t.source === "Bewohner" ? "Bewohner" : "Hausmeister", t.type, t.entrance || t.object, t.owner, t.status,
@@ -2031,7 +2049,7 @@ function rebuildAnalytics() {
       round(s.leadDays, 1), label[s.react], label[s.done], ampel[s.light], monthKey(t.created),
       // Fertige Zähler für Looker Studio (keine Formeln nötig): Summe bzw. Durchschnitt (= Quote)
       t.status === "erledigt" ? 0 : 1, t.status === "erledigt" ? 1 : 0, s.light === "red" ? 1 : 0,
-      t.status === "erledigt" ? (s.react === "ok" && s.done === "ok" ? 1 : 0) : ""].map(protectCell);
+      t.status === "erledigt" && !t.longRunner ? (s.react === "ok" && s.done === "ok" ? 1 : 0) : "", t.longRunner ? 1 : 0].map(protectCell);
   });
   writeTable(ss, CONFIG.SHEETS.analytics, rows);
 
@@ -2188,19 +2206,20 @@ function reportData(y, m) {
   const TYPES = ["Mangel", "Mangel (intern)", "Klingelschild", "Elektroraum"];
   const stats = (a, b) => {
     const received = tasks.filter((t) => inRange(t.created, a, b));
-    const closed = tasks.filter((t) => t.status === "erledigt" && inRange(t.done, a, b));
+    const closedAll = tasks.filter((t) => t.status === "erledigt" && inRange(t.done, a, b));
+    const closed = closedAll.filter((t) => !t.longRunner); // Langläufer zählen nicht in die Service-Ziele
     const open = tasks.filter((t) => t.created instanceof Date && t.created < b && !(t.status === "erledigt" && t.done instanceof Date && t.done < b));
     const ok = (t) => t.sla.react === "ok" && t.sla.done === "ok";
     const byEntrance = {};
     received.forEach((t) => { const k = t.entrance || t.object || "ohne Aufgang"; byEntrance[k] = (byEntrance[k] || 0) + 1; });
     return {
-      received: received.length, closed: closed.length, open: open.length,
+      received: received.length, closed: closedAll.length, open: open.length, longOpen: open.filter((t) => t.longRunner).length,
       slaQuote: closed.length ? closed.filter(ok).length / closed.length : null,
       avgReactHours: avg(closed.map((t) => t.sla.reactHours).filter((x) => x !== null)),
       avgLeadDays: avg(closed.map((t) => t.sla.leadDays).filter((x) => x !== null)),
       byType: TYPES.map((type) => {
         const r = received.filter((t) => t.type === type), c = closed.filter((t) => t.type === type);
-        return { type, received: r.length, closed: c.length, slaQuote: c.length ? c.filter(ok).length / c.length : null };
+        return { type, received: r.length, closed: closedAll.filter((t) => t.type === type).length, slaQuote: c.length ? c.filter(ok).length / c.length : null };
       }),
       byEntrance,
     };
@@ -2227,13 +2246,20 @@ function reportData(y, m) {
       else missing.push({ date: Utilities.formatDate(day, CONFIG.TIMEZONE, "dd.MM."), activity: x.activity, ort: x.ort });
     });
   }
+  // Langläufer: offen am Monatsende oder im Monat erledigt – gesondert aufgeführt
+  const fmtD = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "dd.MM.yyyy");
+  const longRunners = tasks.filter((t) => t.longRunner && t.created instanceof Date && t.created < end
+    && (t.status !== "erledigt" || (t.done instanceof Date && t.done >= start))).map((t) => ({
+    type: t.type, entrance: t.entrance || "", since: fmtD(t.created), reason: plain(t.longReason, 200),
+    state: t.status === "erledigt" && t.done instanceof Date ? `erledigt ${fmtD(t.done)}` : t.status,
+  })).slice(0, 20);
   const overdue = tasks.filter((t) => t.status !== "erledigt" && t.sla.light === "red").map((t) => ({
     type: t.type, entrance: t.entrance || "", since: t.created ? Utilities.formatDate(t.created, CONFIG.TIMEZONE, "dd.MM.yyyy") : "",
   })).slice(0, 15);
   return {
     title: `${MONTHS_DE[m]} ${y}`, prevTitle: MONTHS_DE[(m + 11) % 12], cur, prev, trend,
     cleaning: { soll, ist, late, missing: missing.slice(0, 20), missingCount: missing.length },
-    overdue, created: Utilities.formatDate(now, CONFIG.TIMEZONE, "dd.MM.yyyy HH:mm"),
+    overdue, longRunners, created: Utilities.formatDate(now, CONFIG.TIMEZONE, "dd.MM.yyyy HH:mm"),
   };
 }
 
@@ -2311,6 +2337,11 @@ function reportHtml(r, preview, comment) {
     <table class="rows"><tr><th>Monat</th><th>Meldungen</th><th></th><th>Service-Ziele</th></tr>
       ${r.trend.map((t) => `<tr><td style="width:15%">${e(t.label)}</td><td style="width:10%">${t.received}</td><td style="width:50%">${bar(t.received, maxT, "#3a6ea5")}</td><td>${pct(t.slaQuote)}</td></tr>`).join("")}
     </table>
+
+    ${(r.longRunners || []).length ? `<h2>Langläufer (gesondert, nicht in den Service-Zielen)</h2>
+      <p class="muted">Maßnahmen, die von Dritten abhängen (z. B. Fachfirmen, Ersatzteile) und daher nicht in die Service-Ziele eingerechnet werden.</p>
+      <table class="rows"><tr><th>Art</th><th>Aufgang</th><th>seit</th><th>Stand</th><th>Grund</th></tr>
+      ${r.longRunners.map((o) => `<tr><td>${e(o.type)}</td><td>${e(o.entrance)}</td><td>${e(o.since)}</td><td>${e(o.state)}</td><td>${e(o.reason)}</td></tr>`).join("")}</table>` : ""}
 
     ${r.overdue.length ? `<h2>Derzeit überfällige Aufträge</h2><table class="rows"><tr><th>Art</th><th>Aufgang</th><th>eingegangen</th></tr>
       ${r.overdue.map((o) => `<tr><td>${e(o.type)}</td><td>${e(o.entrance)}</td><td>${e(o.since)}</td></tr>`).join("")}</table>` : ""}
@@ -2410,6 +2441,7 @@ function reportMail(r, comment) {
     `Service-Ziele eingehalten: ${pct(c.slaQuote)} (Vormonat ${pct(r.prev.slaQuote)})`,
     `Reinigung laut Plan: ${pct(clean)} am geplanten Tag${r.cleaning.late ? `, ${r.cleaning.late} nachgeholt` : ""}`,
   ];
+  if ((r.longRunners || []).length) facts.push(`Langläufer (abhängig von Fachfirmen, gesondert aufgeführt): ${r.longRunners.length}`);
   const note = String(comment || "").trim();
   const sig = CONFIG.REPORT_SIGNATURE;
   const text = [
@@ -2749,7 +2781,11 @@ function formatSpreadsheet() {
         const range = sheet.getRange(2, 1, Math.max(sheet.getMaxRows() - 1, 1), n);
         const rule = (value, color) => SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=$${L}2="${value}"`)
           .setBackground(color).setRanges([range]).build();
-        sheet.setConditionalFormatRules([rule("offen", "#fff4d6"), rule("in Arbeit", "#e3eefa"), rule("erledigt", "#e8f3e0")]);
+        const rules = [rule("offen", "#fff4d6"), rule("in Arbeit", "#e3eefa"), rule("erledigt", "#e8f3e0")];
+        const lc = def.headers.indexOf("Langläufer") + 1;
+        if (lc) rules.unshift(SpreadsheetApp.newConditionalFormatRule() // Langläufer (nicht erledigt) lila
+          .whenFormulaSatisfied(`=AND($${columnLetter(lc)}2="ja",$${L}2<>"erledigt")`).setBackground("#efe7f6").setRanges([range]).build());
+        sheet.setConditionalFormatRules(rules);
       }
       const group = (SHEET_GROUPS.find((g) => g[0] === def.name) || [])[1];
       if (group) sheet.setTabColor(GROUP_COLORS[group]);

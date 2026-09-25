@@ -156,6 +156,12 @@ Werktage = Mo–Fr (Feiertage zählen als Werktage). Zeitstempel „In Arbeit se
 System selbst – auch wenn der Status **direkt in der Tabelle** geändert wird (dann steht „Tabelle“ bei „Bearbeitet von“).
 Wird ein erledigter Auftrag wieder geöffnet, wird „Erledigt am“ geleert.
 
+**Langläufer:** Aufträge, die von Dritten abhängen (Fachfirma, Ersatzteile, Teilreparatur), im Cockpit beim
+Bearbeiten als „⏳ Langläufer“ kennzeichnen und kurz begründen (ohne Namen – der Grund erscheint im Beiratsbericht).
+Sie zählen dann **nicht** in Ampel, „überfällig“, SLA-Quote, Ø-Zeiten und Morgen-Mail, werden aber **gesondert**
+geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und in der Mail an den Beirat, Spalte
+„Langläufer“ in der Auswertung (Looker). In der Tabelle: Spalten „Langläufer“ (ja) und „Langläufer-Grund“, Zeile lila.
+
 **Morgen-Mail um 7 Uhr** an `NOTIFY_EMAIL` – **nur**, wenn Aufträge überfällig oder bald fällig sind.
 
 ## Hinweise und Stimmungsbild aus dem Cockpit

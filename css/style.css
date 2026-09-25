@@ -1088,3 +1088,10 @@ html.text-large body { zoom: 1.18; }
 .poll__bar i { display: block; height: 100%; background: #3a6ea5; }
 .poll__pct { text-align: right; font-weight: 700; }
 .poll-admin { list-style: none; margin: 0 0 10px; padding: 0; }
+
+/* Langläufer */
+.sla-dot--long { background: #7a5ea8; }
+.task--sla-long { border-left-color: #7a5ea8; }
+.task--sla-long .task__due { color: #5e4686; }
+.kpi--long { border-top-color: #7a5ea8; }
+@media (prefers-color-scheme: dark) { .task--sla-long .task__due { color: #c7b3ea; } }
