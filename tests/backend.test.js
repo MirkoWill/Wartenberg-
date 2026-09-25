@@ -394,6 +394,28 @@ tr.down = false; tr.onlyVbb = false;
   check('Heute zu tun: Plan für heute kommt mit der Anmeldung', lg2.plan && /^\d{4}-\d{2}-\d{2}$/.test(lg2.plan.day) && Array.isArray(lg2.plan.items), lg2.plan);
 }
 
+// ================= Paket B: Nachher-Foto, Kalender-Abo =================
+{
+  const TH2 = vm.runInContext('CONFIG', ctx).SHEETS.tickets.headers;
+  const r = TH2.map(() => ''); r[TH2.indexOf('ID')] = 'T-FOTO'; r[TH2.indexOf('Typ')] = 'Klingelschild'; r[TH2.indexOf('Status')] = 'offen'; r[TH2.indexOf('Eingang')] = new Date();
+  r[TH2.indexOf('Foto')] = 'https://drive.google.com/file/d/vorher'; r[TH2.indexOf('Zuständig')] = 'Hausmeister';
+  sheets['Tickets'].grid.push(r);
+  const res = post({ action: 'completeTask', token: hmTok, id: 'T-FOTO', photo });
+  check('Erledigen mit Nachher-Foto: Foto gespeichert, Status erledigt', res.ok && /drive\.google\.com/.test(r[TH2.indexOf('Foto erledigt')]) && r[TH2.indexOf('Status')] === 'erledigt', r);
+  const t = post({ action: 'adminOverview', token: admTok }).tasks.find((x) => x.id === 'T-FOTO');
+  check('Cockpit: Vorher- und Nachher-Foto', t && t.photo === 'https://drive.google.com/file/d/vorher' && /drive\.google\.com/.test(t.photoDone), t);
+  r[TH2.indexOf('Foto')] = 'javascript:alert(1)';
+  check('Nur echte Drive-Links werden weitergegeben', post({ action: 'adminOverview', token: admTok }).tasks.find((x) => x.id === 'T-FOTO').photo === '');
+  check('Erledigen ohne Foto geht weiterhin', post({ action: 'completeTask', token: hmTok, id: 'T-FOTO' }).ok);
+  delete props.CLEANING_ICS_URL;
+  check('Kalender-Abo: ohne Eintrag keine Adresse', ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } }).cleaningIcs === '');
+  props.CLEANING_ICS_URL = 'https://evil.example/x.ics';
+  check('Kalender-Abo: nur Google-Kalender-Adressen', ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } }).cleaningIcs === '');
+  props.CLEANING_ICS_URL = 'https://calendar.google.com/calendar/ical/abc%40group.calendar.google.com/public/basic.ics';
+  check('Kalender-Abo: öffentliche iCal-Adresse wird an die App gegeben', /public\/basic\.ics$/.test(ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } }).cleaningIcs));
+  delete props.CLEANING_ICS_URL;
+}
+
 // ================= Monatsbericht Beirat =================
 {
   const now = new Date();

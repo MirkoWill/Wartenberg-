@@ -30,6 +30,7 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 | `CALENDAR_ID` | `abc…@group.calendar.google.com` | Optional: Kalender für den Reinigungsplan (sonst Suche nach Name „WEG Wartenberger Dorfkrug“) |
 | `LOOKER_URL` | `https://lookerstudio.google.com/reporting/…` | Optional: Link auf den Looker-Studio-Bericht, erscheint im Cockpit unter „Werkzeuge“ |
 | `BEIRAT_EMAILS` | `a@x.de, b@y.de, c@z.de` | Empfänger des Monatsberichts (nach Ihrer Freigabe) |
+| `CLEANING_ICS_URL` | `https://calendar.google.com/calendar/ical/…/public/basic.ics` | Öffentliche iCal-Adresse des Reinigungs-Kalenders → Bewohner können die Termine abonnieren (Startseite, „Hausreinigung & Pflege“) |
 
 ## 4. Als Web-App bereitstellen
 
@@ -156,6 +157,14 @@ System selbst – auch wenn der Status **direkt in der Tabelle** geändert wird 
 Wird ein erledigter Auftrag wieder geöffnet, wird „Erledigt am“ geleert.
 
 **Morgen-Mail um 7 Uhr** an `NOTIFY_EMAIL` – **nur**, wenn Aufträge überfällig oder bald fällig sind.
+
+## Kalender-Abo für Bewohner
+
+- **Müllabfuhr:** Infos → Müllabfuhr: iPhone/Outlook, Google Kalender oder Adresse kopieren (BSR-Termine aus `assets/*.ics`).
+- **Reinigung:** 💻 Google Kalender → ⚙️ beim Kalender „WEG Wartenberger Dorfkrug“ → *Zugriffsberechtigungen*:
+  „Öffentlich freigeben“ (alle Termindetails) → unter *Kalender integrieren* die **„Öffentliche Adresse im iCal-Format“**
+  kopieren → als Script-Eigenschaft `CLEANING_ICS_URL` eintragen. Danach erscheint auf der Startseite unter
+  „Hausreinigung & Pflege“ der Punkt „Reinigungstermine im eigenen Kalender“. Der Kalender enthält nur Tätigkeit und Ort.
 
 ## Wetter auf der Startseite
 
