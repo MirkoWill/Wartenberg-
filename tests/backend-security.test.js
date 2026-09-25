@@ -5,7 +5,7 @@ process.env.TZ = 'Europe/Berlin';
 let calName = 'WEG Wartenberger Dorfkrug'; const alerts = []; const cache = {}; const triggers = [];
 const events = {}; let evSeq = 0;
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
-const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = [];
+const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = []; let cacheNews = false;
 const chain = (o) => { const p = new Proxy(o, { get: (t, k) => (k in t || typeof k !== 'string' || k === 'toJSON' || k === 'then' ? t[k] : () => p) }); return p; };
 function mkSheet(name) {
   const sh = { name, grid: [], filter: null, bgs: {}, getName: () => name,
@@ -32,7 +32,7 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
     DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash(a).update(typeof t === 'string' ? Buffer.from(t, 'utf8') : Buffer.from(t)).digest()].map((b) => (b > 127 ? b - 256 : b)),
     base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
-  CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
+  CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { if (!cacheNews && /^news_/.test(k)) return; cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
   MailApp: { sendEmail: (m) => mails.push(m), getRemainingDailyQuota: () => 1500 },
   ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, everyMinutes: () => b, onMonthDay: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },

@@ -322,7 +322,7 @@ function doGet(e) {
     if (q.action === "done") return completeTicketPage(q);
     if (q.action === "releaseReport") return releaseReportPage(q);
     if (q.action === "status") { requirePin(q.pin, q.token); return json(getStatus(q.ids)); }
-    if (q.action === "news") { requirePin(q.pin, q.token); return json(getNews(q.obj)); }
+    if (q.action === "news") { requirePin(q.pin, q.token); return json(cachedNews(q.obj)); }
     return json({ ok: true, service: "mieter-app" });
   } catch (err) {
     return errorJson(err);
@@ -577,6 +577,25 @@ function setupNewsSheet() {
       "Am Mittwoch von 9 bis 12 Uhr ist wegen Wartungsarbeiten das Wasser abgestellt.", false, "",
     ]]);
   }
+}
+
+/**
+ * Startseite der Bewohner: häufigster Aufruf überhaupt. 60 Sekunden zwischenspeichern (je Aufgang);
+ * Änderungen über das Cockpit (Hinweise, Umfragen, Stimmen) leeren den Speicher sofort.
+ */
+function cachedNews(obj) {
+  const key = `news_${objectId(obj) || "-"}`;
+  const cache = CacheService.getScriptCache();
+  try { const hit = cache.get(key); if (hit) return JSON.parse(hit); } catch (e) { /* neu laden */ }
+  const data = getNews(obj);
+  try { cache.put(key, JSON.stringify(data), 60); } catch (e) { /* zu groß – egal */ }
+  return data;
+}
+
+function clearNewsCache() {
+  try {
+    CacheService.getScriptCache().removeAll(["news_-"].concat(Object.keys(CONFIG.ENTRANCE_NAMES).map((k) => `news_${k}`), ["news_dorf27"]));
+  } catch (e) { /* egal */ }
 }
 
 function getNews(obj) {
@@ -2535,6 +2554,7 @@ function adminNewsSave(p, user) {
   } finally {
     lock.releaseLock();
   }
+  clearNewsCache();
   // Bewohner benachrichtigen – nur wenn der Hinweis schon gilt (nicht erst in einigen Tagen)
   if (from <= new Date()) {
     pushSend({ residents: only ? only.split(", ") : "all" }, { title: `📢 ${title || "Neuer Hinweis der Hausverwaltung"}`,
@@ -2549,6 +2569,7 @@ function adminNewsEnd(p, user) {
   const hit = sheetObjects(CONFIG.SHEETS.news).find((r) => r._row === row && r.Aktiv === true && plain(r.Titel, 120) === String(p.title || ""));
   if (!hit) throw userError("Hinweis nicht gefunden");
   getSpreadsheet().getSheetByName(CONFIG.SHEETS.news.name).getRange(row, 1).setValue(false);
+  clearNewsCache();
   return { ok: true };
 }
 
@@ -2575,11 +2596,23 @@ function pollRows() {
   return sheetObjects(CONFIG.SHEETS.polls).filter((r) => String(r.ID || "").trim() && String(r.Frage || "").trim());
 }
 
-function pollCounts(id, n) {
+/** Alle Stimmen einmal lesen, nach Umfrage gruppiert (statt das Blatt für jede Umfrage neu zu lesen). */
+function voteIndex() {
+  const idx = {};
+  sheetObjects(CONFIG.SHEETS.votes).forEach((v) => {
+    const id = String(v["Umfrage-ID"]);
+    if (!Object.prototype.hasOwnProperty.call(idx, id)) idx[id] = [];
+    idx[id].push(v);
+  });
+  return idx;
+}
+
+function pollCounts(id, n, idx) {
   const counts = Array.from({ length: n }, () => 0);
   const perEntrance = {};
   const times = [];
-  sheetObjects(CONFIG.SHEETS.votes).forEach((v) => {
+  const votes = idx ? (Object.prototype.hasOwnProperty.call(idx, id) ? idx[id] : []) : sheetObjects(CONFIG.SHEETS.votes);
+  votes.forEach((v) => {
     if (String(v["Umfrage-ID"]) !== id) return;
     if (v.Zeit instanceof Date) times.push(v.Zeit.getTime());
     const i = Number(v.Antwort);
@@ -2609,12 +2642,14 @@ function pollIsOpen(r, obj) {
 
 /** Für die App (mit „Aktuelles“): offene Umfragen für diesen Aufgang, Ergebnis nur falls freigegeben. */
 function residentPolls(obj) {
-  return pollRows().filter((r) => pollIsOpen(r, obj)).slice(0, 3).map((r) => {
+  const open = pollRows().filter((r) => pollIsOpen(r, obj)).slice(0, 3);
+  const idx = open.some((r) => r["Ergebnis für Bewohner sichtbar"] === true) ? voteIndex() : null;
+  return open.map((r) => {
     const options = pollOptions(r.Antworten);
     const show = r["Ergebnis für Bewohner sichtbar"] === true;
     return { id: String(r.ID), question: plain(r.Frage, 200), options: options.map((o) => plain(o, 80)),
       to: r.Bis instanceof Date ? Utilities.formatDate(r.Bis, CONFIG.TIMEZONE, "yyyy-MM-dd") : "",
-      results: show ? pollCounts(String(r.ID), options.length).counts : null };
+      results: show ? pollCounts(String(r.ID), options.length, idx).counts : null };
   });
 }
 
@@ -2647,15 +2682,17 @@ function submitVote(p) {
     lock.releaseLock();
   }
   const show = poll["Ergebnis für Bewohner sichtbar"] === true;
+  clearNewsCache(); // Ergebnis für andere sofort aktuell
   return { ok: true, results: show ? pollCounts(id, options.length).counts : null };
 }
 
 /** Cockpit: Umfragen der letzten Zeit mit Ergebnis. */
 function adminPollList() {
   const ymd = (d) => (d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd") : "");
+  const idx = voteIndex();
   return pollRows().slice(-10).reverse().map((r) => {
     const options = pollOptions(r.Antworten);
-    const c = pollCounts(String(r.ID), options.length);
+    const c = pollCounts(String(r.ID), options.length, idx);
     return { id: String(r.ID), question: plain(r.Frage, 200), options: options.map((o) => plain(o, 80)), open: pollIsOpen(r, "")
       || (r.Aktiv === true && (!(r.Bis instanceof Date) || ymd(r.Bis) >= ymd(new Date()))),
       to: ymd(r.Bis), only: String(r["Nur für Aufgang-IDs"] || ""), showResults: r["Ergebnis für Bewohner sichtbar"] === true,
@@ -2683,6 +2720,7 @@ function adminPollSave(p, user) {
   } finally {
     lock.releaseLock();
   }
+  clearNewsCache();
   pushSend({ residents: only ? only.split(", ") : "all" }, { title: "🗳️ Neue Umfrage", body: question, url: "#notfall", tag: id });
   return { ok: true, id };
 }
@@ -2692,6 +2730,7 @@ function adminPollEnd(p, user) {
   const hit = pollRows().find((r) => String(r.ID) === String(p.id || ""));
   if (!hit) throw userError("Umfrage nicht gefunden");
   getSpreadsheet().getSheetByName(CONFIG.SHEETS.polls.name).getRange(hit._row, 2).setValue(false);
+  clearNewsCache();
   return { ok: true };
 }
 
@@ -3247,7 +3286,7 @@ function activeStaffRoles() {
 function pushSend(to, msg) {
   try {
     const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.push.name);
-    if (!sheet) return 0;
+    if (!sheet || sheet.getLastRow() < 2) return 0; // noch niemand angemeldet: nichts weiter lesen
     const staff = (to.roles || to.nrs) ? activeStaffRoles() : {};
     const targets = sheetObjects(CONFIG.SHEETS.push).filter((r) => {
       if (!r.ID || !PUSH_HOSTS.test(String(r.Endpoint))) return false;

@@ -7,7 +7,7 @@ const events = {}; let evSeq = 0;
 const fetches = []; const pushLog = []; const pushCodes = {}; let pushThrow = false; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
 const mkHours = (date, icons, tmin, tmax) => Array.from({ length: 24 }, (_, h) => ({ timestamp: `${date}T${String(h).padStart(2, '0')}:00:00+02:00`, temperature: tmin + (tmax - tmin) * Math.sin(Math.PI * h / 23), icon: icons(h), precipitation: icons(h) === 'rain' ? 0.5 : 0 }));
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
-const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = [];
+const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = []; let cacheNews = false;
 const chain = (o) => { const p = new Proxy(o, { get: (t, k) => (k in t || typeof k !== 'string' || k === 'toJSON' || k === 'then' ? t[k] : () => p) }); return p; };
 function mkSheet(name) {
   const sh = { name, grid: [], filter: null, bgs: {}, getName: () => name,
@@ -32,7 +32,7 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id), getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash(a).update(typeof t === 'string' ? Buffer.from(t, 'utf8') : Buffer.from(t)).digest()].map((b) => (b > 127 ? b - 256 : b)), base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => require('crypto').randomUUID(),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); if (f === 'HH:mm') return `${p(d.getHours())}:${p(d.getMinutes())}`; return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
-  CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
+  CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { if (!cacheNews && /^news_/.test(k)) return; cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
   UrlFetchApp: { fetchAll: (reqs) => {
     if (reqs.length && /^https:\/\/fcm\.googleapis\.com\//.test(reqs[0].url)) { if (pushThrow) throw new Error('Push down'); pushLog.push(...reqs); return reqs.map((r) => ({ getResponseCode: () => pushCodes[r.url] || 201, getContentText: () => '' })); }
@@ -820,6 +820,29 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   const ap2 = post({ action: 'adminOverview', token: admTok }).polls.find((x) => x.id === pv2.id);
   check('Umfrage-Warnung: gleich viele Stimmen über Tage verteilt → unauffällig', ap2.total === 16 && ap2.suspicious === false, ap2.burst);
   Object.keys(cache).forEach((k) => delete cache[k]);
+}
+
+// ================= Tempo: Zwischenspeicher der Startseite =================
+{
+  Object.keys(cache).forEach((k) => delete cache[k]); cacheNews = true;
+  const ng = sheets['Aktuelles'].grid;
+  const n1 = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
+  ng.push([true, '', '', 'Direkt in der Tabelle', 'x', false, '']);
+  const n2 = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
+  check('Startseite: 60 Sek. zwischengespeichert (gleiche Antwort, Tabelle nicht neu gelesen)', !!cache.news_lind6 && JSON.stringify(n1) === JSON.stringify(n2));
+  check('Startseite: Cache nur mit PIN erreichbar', ctx.doGet({ parameter: { action: 'news', obj: 'lind6' } }).code === 'pin');
+  post({ action: 'adminNewsSave', token: admTok, title: 'Neu aus dem Cockpit', text: 'x' });
+  const n3 = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } });
+  check('Startseite: Hinweis aus dem Cockpit leert den Speicher sofort', n3.items.some((i) => i.title === 'Neu aus dem Cockpit'));
+  sheets['Umfragen'].grid.slice(1).forEach((row) => { row[1] = false; }); // ältere Umfragen beenden (App zeigt höchstens 3)
+  delete cache.news_lind6; delete cache.news_lind2;
+  ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } }); ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind2' } }); // Speicher füllen
+  const pv = post({ action: 'adminPollSave', token: admTok, question: 'Cache?', options: ['a', 'b'], showResults: true });
+  check('Startseite: neue Umfrage sofort sichtbar', ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } }).polls.some((x) => x.id === pv.id));
+  post({ action: 'vote', pin: '13059', pollId: pv.id, option: 1, voter: 'c'.repeat(32), obj: 'lind6' });
+  const r = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind2' } }).polls.find((x) => x.id === pv.id);
+  check('Startseite: nach einer Stimme ist das Ergebnis überall aktuell', r && r.results && r.results[1] >= 1, r);
+  cacheNews = false; Object.keys(cache).forEach((k) => delete cache[k]);
 }
 
 // ================= Fehlerüberwachung =================

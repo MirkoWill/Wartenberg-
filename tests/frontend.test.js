@@ -595,6 +595,24 @@ function makeQrVideo(text) {
     }
     await pushBrowser.close();
 
+    console.log("--- Schneller Start (Service Worker)");
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend({}), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`);
+      await p.evaluate(() => navigator.serviceWorker.ready); await p.waitForTimeout(800);
+      const hits = [];
+      await ctx.route(/\/(js|css)\/.*\?v=/, (route) => { hits.push(route.request().url()); return route.abort(); }); // Netz für Programmdateien gesperrt
+      await p.reload(); await p.waitForTimeout(800);
+      check("Zweiter Start: Programmdateien kommen aus dem Speicher (ohne Netz)", hits.length === 0 && (await p.$$eval("#emergencyList li", (l) => l.length)) > 0, hits);
+      await ctx.unroute(/\/(js|css)\/.*\?v=/);
+      await ctx.setOffline(true);
+      await p.reload(); await p.waitForTimeout(800);
+      check("Ohne Internet: App startet mit Notfallnummern", (await p.$$eval("#emergencyList li", (l) => l.length)) > 0);
+      await ctx.setOffline(false);
+      await ctx.close();
+    }
+
     console.log("--- Wetter");
     {
       const day = (off) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + off * 86400000));
