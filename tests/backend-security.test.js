@@ -26,15 +26,15 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
   Logger: { log() {} },
   SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
-  DriveApp: { createFolder: () => ({ getId: () => 'F1' }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
+  DriveApp: { getFileById: (id) => ({ setTrashed() {}, getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
   MailApp: { sendEmail: (m) => mails.push(m), getRemainingDailyQuota: () => 1500 },
-  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
+  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, onMonthDay: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
   CalendarApp: { getAllCalendars: () => [cal, { getName: () => 'Privat' }], getCalendarById: (id) => (id === 'good' ? cal : null), getCalendarsByName: (n) => (n === calName ? [cal] : []) },
-  HtmlService: { createHtmlOutput: (h) => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; } }) },
+  HtmlService: { createHtmlOutput: (h) => ({ html: h, getBlob: () => ({ getAs: (t) => ({ type: t, html: h, name: '', setName(n) { this.name = n; return this; } }) }), setTitle() { return this; }, addMetaTag() { return this; } }) },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (t) => ({ setMimeType: () => JSON.parse(t) }) },
 };
 vm.createContext(ctx);
