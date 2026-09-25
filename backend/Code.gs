@@ -1194,17 +1194,23 @@ function staffLogin(user) {
   return {
     ok: true, user: { name: user.name, role: user.role },
     areas: activeAreas().map(({ residents, ...a }) => a), activities: activeActivities(),
-    plan: todayPlan(),
+    // „Heute zu tun“ nur für den Hausmeisterdienst – die Verwaltung braucht es nicht (Anmeldung bleibt schnell)
+    plan: user.role === "Verwaltung" ? null : todayPlan(),
   };
 }
 
 /** „Heute zu tun“: eintägige Einträge des Reinigungsplans für heute mit Stand laut Nachweisen. */
 function todayPlan() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get("todayPlan");
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* neu berechnen */ } }
   try {
     const day = berlinToday();
     const items = planStatusForDay(day, activeAreas(), sheetObjects(CONFIG.SHEETS.cleaning), planRows())
       .map((x) => ({ activity: plain(x.activity, 60), ort: plain(x.ort, 80), done: x.done === true }));
-    return { day: Utilities.formatDate(day, CONFIG.TIMEZONE, "yyyy-MM-dd"), items: items.slice(0, 40) };
+    const out = { day: Utilities.formatDate(day, CONFIG.TIMEZONE, "yyyy-MM-dd"), items: items.slice(0, 40) };
+    cache.put("todayPlan", JSON.stringify(out), 120); // 2 Min.: mehrere Anmeldungen hintereinander rechnen nicht neu
+    return out;
   } catch (err) {
     console.warn("Heute zu tun:", err);
     return { day: "", items: [] };

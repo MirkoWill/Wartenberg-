@@ -286,7 +286,7 @@ function makeQrVideo(text) {
       {
         const txt = await p.textContent("#cockpitTeam");
         check("Erledigte Arbeiten je Tag: Plan-Abgleich, zusätzlich, nachgeholt, nicht nachgewiesen – ohne Nummern",
-          (await p.$$(".work-day")).length === 2 && /Plan 1\/2/.test(txt) && /zusätzlich/.test(txt) && /nachgeholt am/.test(txt) && /nicht nachgewiesen/.test(txt) && /noch offen/.test(txt) && !/Nr\./.test(txt), txt);
+          (await p.$$(".work-day")).length === 2 && /Plan 1\/2/.test(txt) && /außerplanmäßig/.test(txt) && /nachgeholt/.test(txt) && /nicht nachgewiesen/.test(txt) && /heute geplant/.test(txt) && !/Nr\./.test(txt), txt);
       }
       check("Keine Fehler im Cockpit", p.errors.length === 0, p.errors);
       await ctx.close();
