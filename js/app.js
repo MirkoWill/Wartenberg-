@@ -2769,12 +2769,15 @@
   /** Beim Start und nach An-/Abmelden: Gruppe/Aufgang aktuell halten (höchstens alle 3 Tage sonst). */
   async function pushSync(force) {
     const cur = readJson(PUSH_KEY);
-    if (!cur || !pushSupported() || !hasConsent()) return;
+    if (!pushSupported() || !hasConsent()) return;
+    if (!cur && Notification.permission !== "granted") return;
     const group = pushGroup();
     if (!group) return;
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
+      // Eingeschaltet, aber der gespeicherte Zustand fehlt (z. B. Speicher geleert): wieder anmelden und anzeigen
+      if (!cur) { if (sub) { await pushRegister(sub); renderPushBoxes(); } return; }
       if (!sub || Notification.permission !== "granted") { localRemove(PUSH_KEY); renderPushBoxes(); return; }
       const stale = Date.now() - (cur.at || 0) > 3 * 86400000;
       if (force || stale || sub.endpoint !== cur.endpoint || cur.group !== group || (group === "Bewohner" && cur.obj !== (OBJ.key || ""))) {
@@ -2807,7 +2810,8 @@
       const tt = (x) => (staffBox ? x : t_(x));
       const state = denied ? tt("In den Android-Einstellungen für diese Seite blockiert.")
         : on ? tt("✓ Auf diesem Handy eingeschaltet.") : "";
-      box.innerHTML = `<div class="push-box__text"><strong>🔔 ${esc(tt("Benachrichtigungen"))}</strong>
+      box.classList.toggle("push-box--on", on);
+      box.innerHTML = `<div class="push-box__text"><strong>🔔 ${esc(on ? tt("Benachrichtigungen: an") : tt("Benachrichtigungen"))}${on ? ' <span class="push-box__badge">✓</span>' : ""}</strong>
           <span class="muted small">${esc(pushInfo(group))}</span>${state ? `<span class="small push-box__state">${esc(state)}</span>` : ""}</div>
         <button class="btn ${on ? "btn--ghost" : "btn--primary"} btn--small" type="button" data-push-toggle${denied || pushBusy ? " disabled" : ""}>${esc(on ? tt("Ausschalten") : tt("Einschalten"))}</button>`;
     });

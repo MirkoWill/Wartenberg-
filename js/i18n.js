@@ -12,6 +12,7 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "Benachrichtigungen: an": ["Notifications: on", "Уведомления: вкл.", "Сповіщення: увімкнено", "Oznámení: zapnuto"],
     "Benachrichtigungen": ["Notifications", "Уведомления", "Сповіщення", "Oznámení"],
     "Benachrichtigungen (nur Android)": ["Notifications (Android only)", "Уведомления (только Android)", "Сповіщення (лише Android)", "Oznámení (jen Android)"],
     "Einschalten": ["Turn on", "Включить", "Увімкнути", "Zapnout"],

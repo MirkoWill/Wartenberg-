@@ -1133,3 +1133,5 @@ html.text-large body { zoom: 1.18; }
 .push-box__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .push-box__state { color: var(--c-ok); font-weight: 600; }
 .push-box .btn { flex-shrink: 0; }
+.push-box--on { border-color: var(--c-ok); border-left-width: 5px; }
+.push-box__badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--c-ok); color: var(--c-surface); font-size: 13px; text-align: center; }
