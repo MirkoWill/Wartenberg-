@@ -287,16 +287,6 @@ check('I3 Leerer Auftrags-ID wird abgelehnt (erledigen/ändern)', !P({ action: '
 check('I4 Leitung: fremde Rolle per Anfrage nicht erschleichbar', (() => { const r = P({ action: 'adminOverview', token: LEAD, role: 'Verwaltung', user: { role: 'Verwaltung' } }); return r.ok && r.role === 'Leitung' && r.tasks.every((t) => t.owner === 'Hausmeister'); })());
 check('I5 Hausmeister: Cockpit-Aktionen gesperrt, auch mit role-Feld', P({ action: 'adminOverview', token: HM, role: 'Verwaltung' }).code === 'staff');
 check('I6 Notiz-Formel wird Text (adminUpdateTask)', (() => { const t = P({ action: 'adminOverview', token: ADM }).tasks[0]; P({ action: 'adminUpdateTask', token: ADM, id: t.id, note: '=HYPERLINK("http://x")' }); const g = [sheets['Tickets'], sheets['Mängel Hausmeister']].map((s) => s.grid).flat(); return g.some((r) => r[0] === t.id && r.some((c) => typeof c === 'string' && c.startsWith("'=HYPERLINK"))); })());
-{
-  let locks = 0;
-  const orig = ctx.LockService.getScriptLock;
-  ctx.LockService.getScriptLock = () => { locks++; return orig(); };
-  G({ action: 'departures', pin: '13059' });
-  ctx.LockService.getScriptLock = orig;
-  check('I7 Abfahrten blockieren nicht die Script-Sperre (Formulare laufen weiter, auch wenn der Fahrplandienst hängt)', locks === 0, locks);
-}
-check('I8 Abfahrten nur mit PIN/Token', G({ action: 'departures' }).code === 'pin' && G({ action: 'departures', pin: '99999' }).code === 'pin');
-check('I9 Abfahrten: keine fremde Haltestelle/URL steuerbar (Parameter ignoriert)', (() => { const r = G({ action: 'departures', pin: '13059', stop: 'x', url: 'http://evil' }); return r.ok !== undefined; })());
 
 console.log(fails ? `>>> ${fails} BEFUND(E)` : '>>> KEINE BEFUNDE');
 process.exitCode = fails ? 1 : 0;

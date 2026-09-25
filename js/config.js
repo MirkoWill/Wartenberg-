@@ -23,16 +23,6 @@ window.APP_CONFIG = {
   PIN_MAX_TRIES: 3,
   PIN_LOCK_MINUTES: 15,
 
-  // transport.rest-Dienste für Abfahrten, werden der Reihe nach versucht (kostenlos, ohne Gewähr).
-  TRANSIT_APIS: [
-    "https://v6.bvg.transport.rest",
-    "https://v6.vbb.transport.rest",
-    "https://v6.db.transport.rest",
-  ],
-  TRANSIT_TIMEOUT_SECONDS: 12,
-  TRANSIT_REFRESH_SECONDS: 60,
-  TRANSIT_RESULTS: 10,
-
   // Wetter auf der Startseite: eigene Hinweise ab dieser Höchst- bzw. Tiefsttemperatur (°C) in den nächsten 3 Tagen.
   // Amtliche Warnungen des Deutschen Wetterdienstes werden zusätzlich immer angezeigt.
   WEATHER: { hot: 30, cold: -10 },
@@ -125,14 +115,11 @@ window.APP_CONFIG = {
       },
     ],
 
-    // Live-ÖPNV (US 1.3) – Bus 256, 893, N56.
-    // Ohne "id" sucht die App die Haltestelle beim ersten Aufruf über "query" und merkt sich die ID.
-    // Die gefundene ID steht in der Browser-Konsole und kann hier als id: "900…" fest eingetragen werden.
+    // Abfahrten (US 1.3): Haltestelle, Linien und Link zur offiziellen Live-Anzeige der BVG.
     transitStop: {
       name: "Dorfstr./Lindenberger Str.",
-      query: "Dorfstr./Lindenberger Str. (Berlin)",
-      match: "dorfstr./lindenberger",
       infoUrl: "https://www.bvg.de/en/connections/station-overview/dorfstr-lindenberger-str",
+      lines: ["Bus 256", "Bus 893", "Nachtbus N56"],
     },
 
     // Abfall (US 1.2) – Termine der BSR für die Wohnanlage.

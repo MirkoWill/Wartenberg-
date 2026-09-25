@@ -12,6 +12,9 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "Dorfstr./Lindenberger Str. · Bus 256, 893, N56 · Live bei der BVG": ["Dorfstr./Lindenberger Str. · Bus 256, 893, N56 · live at BVG", "Dorfstr./Lindenberger Str. · автобусы 256, 893, N56 · онлайн на BVG", "Dorfstr./Lindenberger Str. · автобуси 256, 893, N56 · онлайн на BVG", "Dorfstr./Lindenberger Str. · autobusy 256, 893, N56 · živě u BVG"],
+    "🚌 Live-Abfahrten bei der BVG": ["🚌 Live departures at BVG", "🚌 Отправления онлайн на сайте BVG", "🚌 Відправлення онлайн на сайті BVG", "🚌 Aktuální odjezdy u BVG"],
+    "Öffnet die offizielle Abfahrtsanzeige der BVG mit Echtzeit und Verspätungen.": ["Opens the official BVG departure board with real-time data and delays.", "Открывает официальное табло отправлений BVG с данными в реальном времени и задержками.", "Відкриває офіційне табло відправлень BVG з даними в реальному часі та затримками.", "Otevře oficiální tabuli odjezdů BVG s aktuálními údaji a zpožděními."],
     "Ihre Meinung ist gefragt": ["Your opinion counts", "Ваше мнение важно", "Ваша думка важлива", "Zajímá nás váš názor"],
     "Anonym – eine Stimme je Gerät.": ["Anonymous – one vote per device.", "Анонимно – один голос с устройства.", "Анонімно – один голос з пристрою.", "Anonymně – jeden hlas na zařízení."],
     "Läuft bis {datum}.": ["Open until {datum}.", "Идёт до {datum}.", "Триває до {datum}.", "Probíhá do {datum}."],
