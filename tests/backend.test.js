@@ -373,6 +373,27 @@ check('Dienst ausgefallen: letzter Stand wird weiter geliefert (live=false)', dp
 check('Abfahrten ohne PIN abgelehnt', ctx.doGet({ parameter: { action: 'departures' } }).code === 'pin');
 tr.down = false; tr.onlyVbb = false;
 
+// ================= Paket A: Hinweise aus dem Cockpit, Heute zu tun =================
+{
+  const nsh = sheets['Aktuelles'];
+  while (nsh.grid.length < 30) nsh.grid.push([false, '', '', '', '', false, '']); // Kästchen bis weit unten (wie in der echten Tabelle)
+  const before = nsh.grid.length;
+  const ymdL = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  const r1 = post({ action: 'adminNewsSave', token: admTok, title: 'Cockpit-Testhinweis', text: '=HYPERLINK("x")', from: ymdL(new Date()), to: '', important: true, only: ['lind6', 'constructor', '<b>'] });
+  const row = nsh.grid.findIndex((r) => r[3] === 'Cockpit-Testhinweis');
+  check('Hinweis aus dem Cockpit: direkt unter dem letzten Hinweis (nicht hinter den Kästchen), Formel als Text', r1.ok && row > 0 && row < before && nsh.grid[row][0] === true && nsh.grid[row][4].startsWith("'") && nsh.grid[row][5] === true, nsh.grid[row]);
+  check('Hinweis: nur gültige Aufgang-IDs', nsh.grid[row][6] === 'lind6, constructor' || nsh.grid[row][6] === 'lind6', nsh.grid[row][6]);
+  const nw6 = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind6' } }), nw2 = ctx.doGet({ parameter: { action: 'news', pin: '13059', obj: 'lind2' } });
+  check('Hinweis erscheint bei Lindenberger 6, nicht bei 2', nw6.items.some((n) => n.title === 'Cockpit-Testhinweis') && !nw2.items.some((n) => n.title === 'Cockpit-Testhinweis'));
+  const lst = post({ action: 'adminOverview', token: admTok }).news;
+  check('Cockpit listet aktive Hinweise', lst.some((n) => n.title === 'Cockpit-Testhinweis' && n.row === row + 1 && n.important));
+  check('Hinweise: Leitung/Hausmeister dürfen nicht veröffentlichen', post({ action: 'adminNewsSave', token: leadTok, title: 'x' }).code === 'staff' && post({ action: 'adminNewsSave', token: hmTok, title: 'x' }).code === 'staff' && !post({ action: 'adminOverview', token: leadTok }).news.length);
+  check('Hinweis: leer / Bis vor Von abgelehnt', !post({ action: 'adminNewsSave', token: admTok, title: '', text: '' }).ok && !post({ action: 'adminNewsSave', token: admTok, title: 'x', from: '2026-10-10', to: '2026-10-01' }).ok);
+  check('Beenden nur mit passendem Titel', !post({ action: 'adminNewsEnd', token: admTok, row: row + 1, title: 'falsch' }).ok && post({ action: 'adminNewsEnd', token: admTok, row: row + 1, title: 'Cockpit-Testhinweis' }).ok && nsh.grid[row][0] === false);
+  const lg2 = post({ action: 'hmLogin', token: hmTok });
+  check('Heute zu tun: Plan für heute kommt mit der Anmeldung', lg2.plan && /^\d{4}-\d{2}-\d{2}$/.test(lg2.plan.day) && Array.isArray(lg2.plan.items), lg2.plan);
+}
+
 // ================= Monatsbericht Beirat =================
 {
   const now = new Date();

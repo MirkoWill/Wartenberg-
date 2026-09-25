@@ -1708,7 +1708,7 @@
         // Inzwischen abgemeldet oder anderer Zugang? Dann die verspätete Antwort verwerfen.
         const cur = staff();
         if (!cur || cur.token !== s.token) return;
-        writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities });
+        writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities, plan: data.plan || null });
         loadTasks(); // Aufträge schon im Hintergrund holen
         if (isAdmin() && currentView === "cockpit") loadCockpit();
         fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
@@ -1960,6 +1960,31 @@
         <span><strong>${esc(i.activity)}</strong><br>${esc(i.ort)}</span>
         ${i.queued && idx < pending ? '<span class="badge badge--offen">wartet</span>' : '<span class="badge badge--erledigt">✓</span>'}</li>`).join("")
       : '<li class="muted">Noch nichts erfasst.</li>';
+    renderPlanToday();
+  }
+
+  /** „Heute zu tun“ aus dem Reinigungsplan; eigene Scans von heute haken sofort ab (auch offline). */
+  function renderPlanToday() {
+    const box = $("#planToday");
+    const s = staff() || {};
+    const plan = s.plan;
+    const day = toIsoDate(today());
+    const items = plan && plan.day === day && Array.isArray(plan.items) ? plan.items : [];
+    box.hidden = !items.length;
+    if (!items.length) return;
+    const low = (v) => String(v || "").trim().toLowerCase();
+    const t = readJson(STAFF_TODAY_KEY);
+    const mine = t && t.day === day ? t.items : [];
+    const areaNames = (s.areas || []).map((a) => low(a.ort));
+    const isDone = (x) => x.done || mine.some((m) => low(m.activity) === low(x.activity)
+      && (low(m.ort) === low(x.ort) || !areaNames.includes(low(x.ort))));
+    const list = items.map((x) => ({ ...x, ok: isDone(x) }));
+    const n = list.filter((x) => x.ok).length;
+    $("#planTodayCount").textContent = `${n}/${list.length}`;
+    $("#planTodayCount").className = `badge ${n === list.length ? "badge--erledigt" : "badge--offen"}`;
+    $("#planTodayList").innerHTML = list.sort((a, b) => a.ok - b.ok).map((x) => `
+      <li class="${x.ok ? "is-done" : ""}"><span aria-hidden="true">${x.ok ? "✓" : "○"}</span>
+        <span><strong>${esc(x.activity)}</strong><br><span class="muted small">${esc(x.ort)}</span></span></li>`).join("");
   }
 
   /* ---------- Aufträge ---------- */
@@ -2154,6 +2179,7 @@
     const lead = d.role === "Leitung";
     $$('#cockpitFilter [data-filter="Hausmeister"], #cockpitFilter [data-filter="Verwaltung"]').forEach((b) => { b.hidden = lead; });
     renderWork(d.work);
+    renderNewsAdmin(d);
     renderCockpitList(Array.isArray(d.tasks) ? d.tasks : []);
     renderCockpitCharts(d);
     const looker = $("#cockpitLooker");
@@ -2244,6 +2270,69 @@
     } catch (err) {
       btn.disabled = false;
       toast(err.userMessage || "Speichern fehlgeschlagen – bitte erneut versuchen.", "error");
+    }
+  }
+
+  /** Hinweise für Bewohner: aktive Liste + Formular (nur Verwaltung). */
+  function renderNewsAdmin(d) {
+    const box = $("#cockpitNews");
+    const show = d.role !== "Leitung" && Array.isArray(d.news);
+    box.hidden = !show;
+    if (!show) return;
+    const names = {};
+    CFG.HOUSES.forEach((h) => h.entrances.forEach((e) => { names[e.id] = e.name; }));
+    const who = (only) => { const ids = String(only || "").split(/[,;\s]+/).filter(Boolean); return ids.length ? ids.map((i) => names[i] || i).join(", ") : "alle Aufgänge"; };
+    const day = (iso) => (iso ? formatDate(parseIsoDate(iso)) : "");
+    $("#newsAdminList").innerHTML = d.news.length ? d.news.map((n) => `
+      <li class="news__item${n.important ? " news__item--important" : ""}">
+        ${n.important ? '<span class="news__flag">Wichtig</span>' : ""}
+        <h3 class="news__title">${esc(n.title)}</h3>
+        ${n.text ? `<p class="news__text">${esc(n.text)}</p>` : ""}
+        <p class="muted small">${esc(who(n.only))} · ab ${esc(day(n.from) || "sofort")}${n.to ? ` bis ${esc(day(n.to))}` : " · ohne Enddatum"}</p>
+        <button class="btn btn--ghost btn--small" type="button" data-news-end="${esc(n.row)}" data-news-title="${esc(n.title)}">Beenden</button>
+      </li>`).join("") : '<li class="muted">Derzeit keine Hinweise.</li>';
+    const chips = $("#newsAdminEntrances");
+    if (!chips.children.length) {
+      chips.innerHTML = CFG.HOUSES.flatMap((h) => h.entrances).map((e) =>
+        `<label class="chip chip--check"><input type="checkbox" name="only" value="${esc(e.id)}"><span>${esc(e.name)}</span></label>`).join("");
+      const f = $("#formNewsAdmin");
+      if (!f.elements.from.value) f.elements.from.value = toIsoDate(new Date());
+    }
+  }
+
+  async function saveNewsAdmin(e) {
+    e.preventDefault();
+    const f = e.currentTarget;
+    if (!validate(f)) return;
+    const btn = f.querySelector('[type="submit"]');
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "adminNewsSave", title: f.elements.title.value.trim(), text: f.elements.text.value.trim(),
+        from: f.elements.from.value, to: f.elements.to.value, important: f.elements.important.checked,
+        only: $$('input[name="only"]:checked', f).map((x) => x.value) }, 30000);
+      toast("Hinweis veröffentlicht – Bewohner sehen ihn auf der Startseite.", "ok", 6000);
+      f.reset();
+      f.elements.from.value = toIsoDate(new Date());
+      $("#newsAdminNew").open = false;
+      loadCockpit();
+    } catch (err) {
+      toast(err.userMessage || "Veröffentlichen fehlgeschlagen – bitte erneut versuchen.", "error");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function endNewsAdmin(btn) {
+    if (!window.confirm("Diesen Hinweis beenden? Er verschwindet dann bei den Bewohnern.")) return;
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "adminNewsEnd", row: Number(btn.dataset.newsEnd), title: btn.dataset.newsTitle }, 30000);
+      btn.closest("li").remove();
+      toast("Hinweis beendet.", "ok");
+      loadCockpit();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.userMessage || "Beenden fehlgeschlagen.", "error");
     }
   }
 
@@ -2400,6 +2489,8 @@
       if (c && c.data) renderCockpitList(Array.isArray(c.data.tasks) ? c.data.tasks : []);
     });
     $("#cockpitList").addEventListener("submit", saveCockpitTask);
+    $("#formNewsAdmin").addEventListener("submit", saveNewsAdmin);
+    $("#newsAdminList").addEventListener("click", (e) => { const b = e.target.closest("[data-news-end]"); if (b) endNewsAdmin(b); });
   }
 
   /* ---------- Bewohner: Hausreinigung (zuletzt erledigt / geplant) ---------- */

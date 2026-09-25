@@ -18,17 +18,17 @@ const ACTIVITIES = ["Treppenhausreinigung", "Fensterreinigung Aufgang", "Müllpl
 function fakeBackend(state = {}) {
   return (d) => {
     const staff = { [STAFF]: { name: "Nr. 100", role: "Hausmeister" }, [ADMIN]: { name: "Nr. 007", role: "Verwaltung" }, [LEAD]: { name: "Nr. 001", role: "Leitung" } }[d.token];
-    if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask"].includes(d.action)) {
+    if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd"].includes(d.action)) {
       if (!staff) return { ok: false, error: "Kein gültiger Zugang", code: "staff" };
       if (state.offline && d.action === "logCleaning") return "abort";
-      if (d.action === "hmLogin") return { ok: true, user: staff, areas: AREAS, activities: ACTIVITIES };
+      if (d.action === "hmLogin") return { ok: true, user: staff, areas: AREAS, activities: ACTIVITIES, plan: state.plan || null };
       if (d.action === "getTasks") return state.hangTasks ? null : { ok: true, tasks: state.tasks || [] };
       if (d.action === "completeTask") { state.tasks = (state.tasks || []).filter((t) => t.id !== d.id); return { ok: true }; }
       if (d.action === "submitStaffDefect") return { ok: true, id: "M-260924-ABCD" };
-      if (d.action === "adminOverview" || d.action === "adminUpdateTask") {
+      if (["adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd"].includes(d.action)) {
         if (staff.role === "Hausmeister") return { ok: false, error: "Nur für Verwaltung und Leitung.", code: "staff" };
         if (staff.role === "Leitung" && state.leadOverview && d.action === "adminOverview") return state.leadOverview;
-        if (d.action === "adminUpdateTask") { (state.updates = state.updates || []).push(d); return { ok: true }; }
+        if (["adminUpdateTask", "adminNewsSave", "adminNewsEnd"].includes(d.action)) { (state.updates = state.updates || []).push(d); return { ok: true }; }
         return state.overview || { ok: true, kpi: { open: 0, overdue: 0, dueSoon: 0, avgReactHours: null, avgLeadDays: null, slaQuote: null, closed90: 0, cleaningQuote: null, errors24: 0 }, months: [], perEntrance: {}, tasks: [], lookerUrl: "" };
       }
       return { ok: true };
@@ -314,6 +314,43 @@ function makeQrVideo(text) {
       check("Hausmeister: Tab heißt Hausmeister, kein Cockpit", /Hausmeister/.test(await p.textContent("#staffTab")) && !(await p.isVisible("#staffAdmin")));
       await p.goto(`${base}#cockpit`); await p.waitForTimeout(500);
       check("Hausmeister sieht Cockpit nicht", await p.isVisible("#cockpitNone") && !(await p.isVisible("#cockpitArea")) && !ctx.requests.some((r) => r.action === "adminOverview"));
+      await ctx.close();
+    }
+
+    console.log("--- Paket A: Hinweise aus dem Cockpit, Heute zu tun");
+    {
+      const state = { overview: { ok: true, role: "Verwaltung", kpi: {}, months: [], perEntrance: {}, tasks: [], work: { days: [] },
+        news: [{ row: 5, title: "Wasser abgestellt", text: "Mi 9–12 Uhr", important: true, from: "2026-09-25", to: "2026-09-30", only: "lind6" }] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
+      await p.click("#staffTab"); await p.waitForSelector("#newsAdminList li .news__title");
+      check("Cockpit: aktive Hinweise mit Zielgruppe und Zeitraum", /Wasser abgestellt/.test(await p.textContent("#newsAdminList")) && /Lindenberger Str\. 6/.test(await p.textContent("#newsAdminList")) && /bis 30\.09\.2026/.test(await p.textContent("#newsAdminList")));
+      await p.click("#newsAdminNew summary");
+      await p.fill('#formNewsAdmin [name="title"]', "Treppenhaus frisch gestrichen");
+      await p.fill('#formNewsAdmin [name="text"]', "Bitte Geländer bis Freitag nicht berühren.");
+      await p.$eval('#newsAdminEntrances', (el) => el.scrollIntoView({ block: "center" }));
+      await p.click('#newsAdminEntrances label:has(input[value="dorf24"])');
+      await p.$eval('#formNewsAdmin [type="submit"]', (el) => el.scrollIntoView({ block: "center" }));
+      await p.check('#formNewsAdmin [name="important"]');
+      await p.click('#formNewsAdmin [type="submit"]'); await p.waitForTimeout(400);
+      const up = (state.updates || []).find((u) => u.action === "adminNewsSave");
+      check("Veröffentlichen sendet Titel, Text, Ab-Datum, Aufgang, wichtig", up && up.title === "Treppenhaus frisch gestrichen" && up.only.join() === "dorf24" && up.important === true && /^\d{4}-\d{2}-\d{2}$/.test(up.from), up);
+      p.once("dialog", (dlg) => dlg.accept()); await p.click('[data-news-end="5"]'); await p.waitForTimeout(300);
+      check("Beenden sendet Zeile + Titel", (state.updates || []).some((u) => u.action === "adminNewsEnd" && u.row === 5 && u.title === "Wasser abgestellt"));
+      check("Keine Fehler (Hinweise)", p.errors.length === 0, p.errors);
+      await ctx.close();
+    }
+    {
+      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date());
+      const state = { plan: { day, items: [{ activity: "Müllplatzreinigung", ort: "Müllplatz (außen)", done: false }, { activity: "Treppenhausreinigung", ort: "Treppenhaus Lindenberger Str. 6", done: false }] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${STAFF}#hausmeister`); await p.waitForSelector("#planToday:not([hidden])");
+      check("Heute zu tun: Plan für heute sichtbar (0/2)", (await p.textContent("#planTodayCount")) === "0/2" && /Müllplatzreinigung/.test(await p.textContent("#planTodayList")));
+      await p.click("#manualBtn"); await p.selectOption("#scanManual", "MUELL"); await p.click("#scanForm [type=submit]"); await p.waitForTimeout(600);
+      check("Scan hakt passenden Punkt sofort ab (1/2)", (await p.textContent("#planTodayCount")) === "1/2" && (await p.$$("#planTodayList li.is-done")).length === 1);
+      check("Keine Fehler (Heute zu tun)", p.errors.length === 0, p.errors);
       await ctx.close();
     }
 
