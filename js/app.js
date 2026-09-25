@@ -2486,6 +2486,7 @@
   const fitDayLabel = (d) => d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
   const fitHm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   const fitDuration = (min) => (min < 60 ? `${min} Min` : `${String(min / 60).replace(".", ",")} Std`);
+  const fitWho = (b) => `Nr. ${[b.nr].concat(b.with || []).join(" + ")}`;
 
   function renderFitnessAccess() {
     const s = staff();
@@ -2536,7 +2537,7 @@
     const day = $("#fitDate").value;
     const list = ((c && c.data && c.data.upcoming) || []).filter((b) => isoDay(new Date(b.start)) === day);
     $("#fitDayInfo").textContent = list.length
-      ? `Schon belegt: ${list.map((b) => `${fitHm(new Date(b.start))}–${fitHm(new Date(b.end))} (Nr. ${b.nr})`).join(", ")}`
+      ? `Schon belegt: ${list.map((b) => `${fitHm(new Date(b.start))}–${fitHm(new Date(b.end))} (${fitWho(b)})`).join(", ")}`
       : "An diesem Tag ist noch nichts gebucht.";
   }
 
@@ -2582,12 +2583,23 @@
         + `<div class="fit-bar"><i style="width:${pct}%"></i></div><p class="muted small">${esc(cheer)}</p>`;
     } else $("#fitMe").innerHTML = "";
 
-    // Meine Buchungen (kommende + die letzten 7 Tage zum Austragen)
+    // Trainingspartner zur Auswahl (andere Mitglieder); gewählte bleiben beim Aktualisieren gewählt
+    const picked = $$("#fitWith [aria-pressed=true]").map((x) => x.dataset.with);
+    const others = members.map((m) => m.nr).filter((nr) => nr !== me);
+    $("#fitWith").innerHTML = others.map((nr) => `<button class="chip" type="button" data-with="${esc(nr)}" aria-pressed="${picked.includes(nr)}">Nr. ${esc(nr)}</button>`).join("");
+    $("#fitWithWrap").hidden = !others.length;
+
+    // Meine Buchungen (kommende + die letzten 7 Tage zum Austragen) – auch als Trainingspartner
     const my = Array.isArray(d.mine) ? d.mine : [];
-    $("#fitMine").innerHTML = my.length ? my.map((b) => `<li class="${b.past ? "fit-list__past" : "fit-list__mine"}">
-        <span><strong>${esc(fitDayLabel(new Date(b.start)))}</strong> · ${esc(slot(b))}</span>
-        <button class="btn btn--ghost btn--small" type="button" data-fit-cancel="${esc(b.id)}">${b.past ? "Nicht trainiert" : "Stornieren"}</button></li>`).join("")
-      : `<li class="muted">Keine Buchung. Oben einfach Tag und Uhrzeit wählen.</li>`;
+    const others_ = (b) => [b.nr].concat(b.with || []).filter((nr) => nr !== me);
+    $("#fitMine").innerHTML = my.length ? my.map((b) => {
+      const partner = b.own === false;
+      const kind = b.past ? "past" : partner ? "leave" : "cancel";
+      const mit = others_(b).length ? ` · mit Nr. ${others_(b).join(" + ")}` : "";
+      return `<li class="${b.past ? "fit-list__past" : "fit-list__mine"}">
+        <span><strong>${esc(fitDayLabel(new Date(b.start)))}</strong> · ${esc(slot(b))}${esc(mit)}</span>
+        <button class="btn btn--ghost btn--small" type="button" data-fit-cancel="${esc(b.id)}" data-kind="${kind}" data-partner="${partner}">${b.past ? "Nicht trainiert" : partner ? "Absagen" : "Stornieren"}</button></li>`;
+    }).join("") : `<li class="muted">Keine Buchung. Oben einfach Tag und Uhrzeit wählen.</li>`;
 
     // Belegung der nächsten 7 Tage, nach Tag gruppiert
     const now = new Date();
@@ -2598,7 +2610,7 @@
       const day = fitDayLabel(new Date(b.start));
       const head = day !== lastDay ? `<li class="fit-list__day">${esc(day)}</li>` : "";
       lastDay = day;
-      return `${head}<li class="${b.mine ? "fit-list__mine" : ""}"><span>${esc(slot(b))} · Nr. ${esc(b.nr)}${b.mine ? " (ich)" : ""}</span>`
+      return `${head}<li class="${b.mine ? "fit-list__mine" : ""}"><span>${esc(slot(b))} · ${esc(fitWho(b))}${b.mine ? " (ich)" : ""}</span>`
         + (admin && !b.mine ? `<button class="btn btn--ghost btn--small" type="button" data-fit-cancel="${esc(b.id)}">Stornieren</button>` : "")
         + `</li>`;
     }).join("") : `<li class="muted">In den nächsten 7 Tagen ist der Raum frei.</li>`;
@@ -2612,7 +2624,7 @@
       const pct = Math.min(100, Math.round((m.week.count / goal) * 100));
       return `<li class="${m.nr === me ? "fit-board__me" : ""}"><span class="fit-board__medal" aria-hidden="true">${medal}</span>
         <span class="fit-board__nr">Nr. ${esc(m.nr)}</span>
-        <span class="fit-board__val">${s.count}× · ${esc(s.minutes ? fitDuration(Math.round(s.minutes / 30) * 30) : "0 Min")}</span>
+        <span class="fit-board__val">${s.count}× · ${esc(s.minutes ? fitDuration(Math.round(s.minutes / 30) * 30) : "0 Min")}${s.together ? ` · 👥 ${s.together}` : ""}</span>
         <span class="fit-board__streak">${m.streak ? `🔥 ${m.streak}` : ""}</span>
         <span class="fit-bar fit-bar--small" title="Wochenziel ${m.week.count}/${goal}"><i style="width:${pct}%"></i></span></li>`;
     }).join("");
@@ -2623,11 +2635,14 @@
     e.preventDefault();
     const form = e.target;
     const btn = form.querySelector("button[type=submit]");
-    const body = { action: "fitnessBook", date: $("#fitDate").value, time: $("#fitTime").value, minutes: Number($("#fitMinutes").value) };
+    const partners = $$("#fitWith [aria-pressed=true]").map((x) => x.dataset.with);
+    const body = { action: "fitnessBook", date: $("#fitDate").value, time: $("#fitTime").value, minutes: Number($("#fitMinutes").value), with: partners };
     btn.disabled = true;
     try {
       await staffPost(body, 30000);
-      toast(`Gebucht: ${fitDayLabel(new Date(`${body.date}T00:00`))}, ${body.time} Uhr, ${fitDuration(body.minutes)}. Viel Spaß! 💪`, "ok", 6000);
+      toast(`Gebucht: ${fitDayLabel(new Date(`${body.date}T00:00`))}, ${body.time} Uhr, ${fitDuration(body.minutes)}`
+        + `${partners.length ? ` mit Nr. ${partners.join(" + ")}` : ""}. Viel Spaß! 💪`, "ok", 6000);
+      $$("#fitWith [aria-pressed=true]").forEach((x) => x.setAttribute("aria-pressed", "false"));
       await loadFitness();
     } catch (err) {
       toast(err.userMessage || "Buchen nicht möglich – bitte Internetverbindung prüfen.", "error", 8000);
@@ -2637,12 +2652,15 @@
   }
 
   async function cancelFitness(btn) {
-    const past = btn.textContent.trim() === "Nicht trainiert";
-    if (!window.confirm(past ? "Diese Buchung austragen (nicht trainiert)?" : "Diese Buchung stornieren?")) return;
+    const past = btn.dataset.kind === "past";
+    const partner = btn.dataset.partner === "true";
+    const question = partner ? (past ? "Mich aus diesem Training austragen (nicht trainiert)?" : "Für mich absagen? Die Buchung bleibt für die anderen bestehen.")
+      : past ? "Diese Buchung austragen (nicht trainiert)?" : "Diese Buchung stornieren?";
+    if (!window.confirm(question)) return;
     btn.disabled = true;
     try {
       await staffPost({ action: "fitnessCancel", id: btn.dataset.fitCancel }, 30000);
-      toast(past ? "Ausgetragen." : "Storniert.", "ok");
+      toast(partner ? "Abgesagt." : past ? "Ausgetragen." : "Storniert.", "ok");
       await loadFitness();
     } catch (err) {
       btn.disabled = false;
@@ -2657,6 +2675,10 @@
     };
     $("#formFit").addEventListener("submit", submitFitness);
     $("#fitDate").addEventListener("change", renderFitnessDayInfo);
+    $("#fitWith").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-with]");
+      if (b) b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"));
+    });
     $("#fitRefresh").addEventListener("click", loadFitness);
     $("#fitLogout").addEventListener("click", logoutStaff);
     $("#fitArea").addEventListener("click", (e) => { const b = e.target.closest("[data-fit-cancel]"); if (b) cancelFitness(b); });

@@ -85,7 +85,7 @@ const CONFIG = {
     },
     fitness: {
       name: "Fitness-Buchungen",
-      headers: ["ID", "Nr", "Beginn", "Ende", "Minuten", "Gebucht am", "Storniert"],
+      headers: ["ID", "Nr", "Beginn", "Ende", "Minuten", "Gebucht am", "Storniert", "Mit"],
     },
     errors: {
       name: "Fehlerprotokoll",
@@ -2821,7 +2821,23 @@ function requireStaffWork(user) {
 }
 
 function fitnessRows() {
-  return sheetObjects(CONFIG.SHEETS.fitness).filter((r) => r.ID && r.Beginn instanceof Date && r.Ende instanceof Date && r.Storniert !== "ja");
+  return sheetObjects(CONFIG.SHEETS.fitness).filter((r) => r.ID && r.Beginn instanceof Date && r.Ende instanceof Date && r.Storniert !== "ja")
+    .map((r) => {
+      const nr = fitnessNr(r.Nr);
+      const mit = String(r.Mit == null ? "" : r.Mit).split(/[,;\s]+/).map(fitnessNr).filter((x) => x && x !== nr);
+      return Object.assign(r, { Nr: nr, _with: mit, _people: [nr].concat(mit) });
+    });
+}
+
+/** Google Sheets macht aus „010“ gern die Zahl 10 – beim Lesen wieder dreistellig. */
+function fitnessNr(v) {
+  const s = String(v == null ? "" : v).trim();
+  return /^\d{1,2}$/.test(s) ? s.padStart(3, "0") : s;
+}
+
+/** „Nr. 007 + 008“ */
+function fitnessWho(r) {
+  return `Nr. ${r._people.join(" + ")}`;
 }
 
 function fitnessWeekStart(d) {
@@ -2830,7 +2846,7 @@ function fitnessWeekStart(d) {
   return x;
 }
 
-/** Übersicht: Belegung (bis 4 Wochen), eigene Buchungen, Statistik je Nummer. */
+/** Übersicht: Belegung (bis 4 Wochen), eigene Buchungen (auch als Trainingspartner), Statistik je Nummer. */
 function fitnessOverview(p, user) {
   requireFitness(user);
   const F = CONFIG.FITNESS;
@@ -2840,22 +2856,23 @@ function fitnessOverview(p, user) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const until = new Date(today.getTime() + (F.daysAhead + 1) * 86400000);
   const upcoming = rows.filter((r) => r.Ende > now && r.Beginn < until).sort((a, b) => a.Beginn - b.Beginn)
-    .map((r) => ({ id: String(r.ID), nr: String(r.Nr), start: iso(r.Beginn), end: iso(r.Ende), mine: String(r.Nr) === user.nr }));
-  const mine = rows.filter((r) => String(r.Nr) === user.nr && r.Ende > new Date(now.getTime() - 7 * 86400000)).sort((a, b) => a.Beginn - b.Beginn)
-    .map((r) => ({ id: String(r.ID), start: iso(r.Beginn), end: iso(r.Ende), past: r.Beginn < now }));
-  // Statistik: vergangene Buchungen zählen als Training
+    .map((r) => ({ id: String(r.ID), nr: r.Nr, with: r._with, start: iso(r.Beginn), end: iso(r.Ende), mine: r._people.indexOf(user.nr) !== -1 }));
+  const mine = rows.filter((r) => r._people.indexOf(user.nr) !== -1 && r.Ende > new Date(now.getTime() - 7 * 86400000)).sort((a, b) => a.Beginn - b.Beginn)
+    .map((r) => ({ id: String(r.ID), nr: r.Nr, with: r._with, own: r.Nr === user.nr, start: iso(r.Beginn), end: iso(r.Ende), past: r.Beginn < now }));
+  // Statistik: vergangene Buchungen zählen als Training – für jeden, der dabei war
   const done = rows.filter((r) => r.Beginn < now);
   const weekStart = fitnessWeekStart(now);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const yearStart = new Date(now.getFullYear(), 0, 1);
   const stat = (nr, from) => {
-    const list = done.filter((r) => String(r.Nr) === nr && r.Beginn >= from);
-    return { count: list.length, minutes: list.reduce((a, r) => a + Math.round((r.Ende - r.Beginn) / 60000), 0) };
+    const list = done.filter((r) => r._people.indexOf(nr) !== -1 && r.Beginn >= from);
+    return { count: list.length, together: list.filter((r) => r._people.length > 1).length,
+      minutes: list.reduce((a, r) => a + Math.round((r.Ende - r.Beginn) / 60000), 0) };
   };
   const streak = (nr) => { // Wochen in Folge mit mind. einem Training (laufende Woche zählt, wenn schon trainiert)
     let n = 0;
     let ws = fitnessWeekStart(now);
-    const has = (a, b) => done.some((r) => String(r.Nr) === nr && r.Beginn >= a && r.Beginn < b);
+    const has = (a, b) => done.some((r) => r._people.indexOf(nr) !== -1 && r.Beginn >= a && r.Beginn < b);
     if (!has(ws, new Date(ws.getTime() + 7 * 86400000))) ws = new Date(ws.getTime() - 7 * 86400000);
     while (n < 104 && has(ws, new Date(ws.getTime() + 7 * 86400000))) { n++; ws = new Date(ws.getTime() - 7 * 86400000); }
     return n;
@@ -2876,6 +2893,15 @@ function fitnessBook(p, user) {
   if (mi % F.stepMinutes !== 0 || !Number.isInteger(minutes) || minutes < F.minMinutes || minutes > F.maxMinutes || minutes % F.stepMinutes !== 0) {
     throw userError(`Dauer ${F.minMinutes}–${F.maxMinutes} Minuten in ${F.stepMinutes}-Minuten-Schritten.`);
   }
+  // Optional gemeinsam trainieren: nur andere Mitglieder, jede Nummer einmal
+  const withList = p.with == null || p.with === "" ? [] : Array.isArray(p.with) ? p.with : [p.with];
+  if (withList.length > F.members.length - 1) throw userError("Zu viele Trainingspartner.");
+  const partners = [];
+  withList.forEach((v) => {
+    const nr = typeof v === "string" || typeof v === "number" ? fitnessNr(v) : "";
+    if (F.members.indexOf(nr) === -1 || nr === user.nr) throw userError("Trainingspartner nicht gefunden.");
+    if (partners.indexOf(nr) === -1) partners.push(nr);
+  });
   const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi);
   const end = new Date(start.getTime() + minutes * 60000);
   const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), F.toHour, 0);
@@ -2887,29 +2913,45 @@ function fitnessBook(p, user) {
   lock.waitLock(20000);
   try {
     const rows = fitnessRows();
-    if (rows.filter((r) => String(r.Nr) === user.nr && r.Beginn > now).length >= F.maxFuture) throw userError(`Höchstens ${F.maxFuture} offene Buchungen je Person.`);
+    if (rows.filter((r) => r._people.indexOf(user.nr) !== -1 && r.Beginn > now).length >= F.maxFuture) throw userError(`Höchstens ${F.maxFuture} offene Buchungen je Person.`);
     const clash = rows.find((r) => r.Beginn < end && r.Ende > start);
     if (clash) {
       const t = (x) => Utilities.formatDate(x, CONFIG.TIMEZONE, "HH:mm");
-      throw userError(`Schon belegt von ${t(clash.Beginn)} bis ${t(clash.Ende)} Uhr (Nr. ${clash.Nr}).`);
+      throw userError(`Schon belegt von ${t(clash.Beginn)} bis ${t(clash.Ende)} Uhr (${fitnessWho(clash)}).`);
     }
     const id = newId("F");
-    const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.fitness.name);
-    sheet.getRange(lastContentRow(sheet, [1]) + 1, 1, 1, CONFIG.SHEETS.fitness.headers.length)
-      .setValues([[id, user.nr, start, end, minutes, now, ""]]);
-    return { ok: true, id };
+    const def = CONFIG.SHEETS.fitness;
+    const sheet = getSpreadsheet().getSheetByName(def.name);
+    const mitCol = def.headers.indexOf("Mit") + 1;
+    if (sheet.getRange(1, mitCol).getValue() !== "Mit") sheet.getRange(1, mitCol).setValue("Mit").setFontWeight("bold"); // ältere Tabelle ohne Spalte
+    const row = lastContentRow(sheet, [1]) + 1;
+    sheet.getRange(row, 2).setNumberFormat("@"); // „010“ bleibt „010“
+    sheet.getRange(row, mitCol).setNumberFormat("@");
+    sheet.getRange(row, 1, 1, def.headers.length).setValues([[id, user.nr, start, end, minutes, now, "", partners.join(", ")]]);
+    return { ok: true, id, with: partners };
   } finally {
     lock.releaseLock();
   }
 }
 
-/** Eigene Buchung stornieren (auch nachträglich bis 7 Tage, z. B. „nicht stattgefunden“); Verwaltung darf jede. */
+/**
+ * Stornieren (auch nachträglich bis 7 Tage, z. B. „nicht trainiert“): Wer gebucht hat, storniert die ganze Buchung,
+ * die Verwaltung darf jede. Ein Trainingspartner sagt nur für sich ab – die Buchung bleibt für die anderen bestehen.
+ */
 function fitnessCancel(p, user) {
   requireFitness(user);
   const hit = fitnessRows().find((r) => String(r.ID) === String(p.id || ""));
-  if (!hit || (String(hit.Nr) !== user.nr && user.role !== "Verwaltung")) throw userError("Buchung nicht gefunden.");
+  const partner = !!hit && hit._with.indexOf(user.nr) !== -1;
+  if (!hit || (hit.Nr !== user.nr && user.role !== "Verwaltung" && !partner)) throw userError("Buchung nicht gefunden.");
   if (hit.Beginn < new Date(Date.now() - 7 * 86400000)) throw userError("Ältere Buchungen können nicht mehr storniert werden.");
   const def = CONFIG.SHEETS.fitness;
-  getSpreadsheet().getSheetByName(def.name).getRange(hit._row, def.headers.indexOf("Storniert") + 1).setValue("ja");
+  const sheet = getSpreadsheet().getSheetByName(def.name);
+  if (partner && hit.Nr !== user.nr) {
+    const col = def.headers.indexOf("Mit") + 1;
+    sheet.getRange(hit._row, col).setNumberFormat("@");
+    sheet.getRange(hit._row, col).setValue(hit._with.filter((x) => x !== user.nr).join(", "));
+    return { ok: true, left: true };
+  }
+  sheet.getRange(hit._row, def.headers.indexOf("Storniert") + 1).setValue("ja");
   return { ok: true };
 }

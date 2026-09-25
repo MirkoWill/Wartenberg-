@@ -631,12 +631,39 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   check('Fitness: Statistik zählt vergangene, nicht stornierte', (new Date(Date.now() - 15 * 86400000).getFullYear() < new Date().getFullYear() || (m11.year.count === 3 && m11.year.minutes === 210)) && m11.streak >= 3 && ov.members.find((m) => m.nr === '008').year.count === 0, m11);
   check('Fitness: eigene vergangene Buchung zum Austragen', ov.mine.some((b) => b.id === 'F-OLD-0' && b.past) && !ov.mine.some((b) => b.id === 'F-OLD-2'));
 
+  { // Google Sheets speichert „010“ als Zahl 10 – eigene Buchung muss trotzdem erkannt und stornierbar sein
+    const r10 = g.find((r) => r[1] === '010' && r[2] > new Date() && r[2].getHours() === 22); r10[1] = 10;
+    const o10 = post({ action: 'fitnessOverview', token: fitTok });
+    check('Fitness: Nummer als Zahl im Blatt (10) → trotzdem „010“, eigene Buchung erkannt', o10.mine.some((b) => b.id === r10[0]) && o10.upcoming.some((b) => b.id === r10[0] && b.mine && b.nr === '010') && o10.members.every((m) => /^\d{3}$/.test(m.nr)), o10.mine);
+    check('Fitness: diese Buchung ist stornierbar', post({ action: 'fitnessCancel', token: fitTok, id: r10[0] }).ok && r10[6] === 'ja');
+  }
   check('Fitness: fremde Buchung nicht stornierbar', !post({ action: 'fitnessCancel', token: fit2Tok, id: b1.id }).ok);
   check('Fitness: zu alte Buchung nicht stornierbar', !post({ action: 'fitnessCancel', token: fit2Tok, id: 'F-OLD-2' }).ok);
   check('Fitness: eigene stornieren', post({ action: 'fitnessCancel', token: fitTok, id: b1.id }).ok && g.find((r) => r[0] === b1.id)[6] === 'ja');
   check('Fitness: danach wieder frei', post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '18:00', minutes: 60 }).ok);
   const own = post({ action: 'fitnessOverview', token: fit2Tok }).mine.find((b) => !b.past);
   check('Fitness: Verwaltung darf jede stornieren', post({ action: 'fitnessCancel', token: admTok, id: own.id }).ok);
+  { // Gemeinsam trainieren
+    const pb = post({ action: 'fitnessBook', token: admTok, date: day, time: '06:00', minutes: 60, with: ['008'] });
+    const pr = g.find((r) => r[0] === pb.id);
+    check('Gemeinsam: 007 bucht mit 008 (Spalte „Mit“)', pb.ok && pr && pr[1] === '007' && pr[7] === '008' && sheets['Fitness-Buchungen'].grid[0][7] === 'Mit', pr);
+    const o8 = post({ action: 'fitnessOverview', token: adm2Tok });
+    const b8 = o8.mine.find((b) => b.id === pb.id), u8 = o8.upcoming.find((b) => b.id === pb.id);
+    check('Gemeinsam: 008 sieht die Buchung als eigene (von 007 gebucht)', b8 && b8.own === false && b8.nr === '007' && u8.mine && u8.with.join() === '008', b8);
+    check('Gemeinsam: ungültige Partner abgelehnt (Hausmeister, sich selbst, unbekannt, Objekt, zu viele)', [['100'], ['007'], ['999'], 'constructor', [{}], ['008', '010', '011', '001']]
+      .every((w) => !post({ action: 'fitnessBook', token: admTok, date: day, time: '07:00', minutes: 30, with: w }).ok));
+    const cl = post({ action: 'fitnessBook', token: fitTok, date: day, time: '06:30', minutes: 30 });
+    check('Gemeinsam: Belegt-Meldung nennt beide', !cl.ok && /Nr\. 007 \+ 008/.test(cl.error), cl);
+    const lv = post({ action: 'fitnessCancel', token: adm2Tok, id: pb.id });
+    check('Gemeinsam: 008 sagt nur für sich ab, Buchung bleibt für 007', lv.ok && lv.left && pr[7] === '' && pr[6] !== 'ja'
+      && !post({ action: 'fitnessOverview', token: adm2Tok }).mine.some((b) => b.id === pb.id) && post({ action: 'fitnessOverview', token: admTok }).mine.some((b) => b.id === pb.id));
+    check('Gemeinsam: Partner darf fremde Buchung ohne ihn nicht stornieren', !post({ action: 'fitnessCancel', token: fit2Tok, id: pb.id }).ok);
+    const before = post({ action: 'fitnessOverview', token: fitTok }).members.find((m) => m.nr === '011').year;
+    const [ts, te] = ago(4, 8, 60); g.push(['F-TOG', '010', ts, te, 60, ts, '', 11]); // Sheets macht aus „011“ die Zahl 11
+    const after = post({ action: 'fitnessOverview', token: fitTok }).members.find((m) => m.nr === '011').year;
+    const sameYear = ts.getFullYear() === new Date().getFullYear();
+    check('Gemeinsam: Training zählt auch für den Partner (+1, gemeinsam +1)', !sameYear || (after.count === before.count + 1 && after.together === before.together + 1 && after.minutes === before.minutes + 60), [before, after]);
+  }
   check('Fitness: Konstruktor-/Unsinns-IDs abgelehnt', !post({ action: 'fitnessCancel', token: fitTok, id: 'constructor' }).ok && !post({ action: 'fitnessCancel', token: fitTok }).ok);
 }
 
