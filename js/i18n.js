@@ -12,6 +12,7 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "Termine in den eigenen Kalender übernehmen:": ["Add the dates to your own calendar:", "Добавить даты в свой календарь:", "Додати дати до свого календаря:", "Přidat termíny do vlastního kalendáře:"],
     "Dorfstr./Lindenberger Str. · Bus 256, 893, N56 · Live bei der BVG": ["Dorfstr./Lindenberger Str. · Bus 256, 893, N56 · live at BVG", "Dorfstr./Lindenberger Str. · автобусы 256, 893, N56 · онлайн на BVG", "Dorfstr./Lindenberger Str. · автобуси 256, 893, N56 · онлайн на BVG", "Dorfstr./Lindenberger Str. · autobusy 256, 893, N56 · živě u BVG"],
     "🚌 Live-Abfahrten bei der BVG": ["🚌 Live departures at BVG", "🚌 Отправления онлайн на сайте BVG", "🚌 Відправлення онлайн на сайті BVG", "🚌 Aktuální odjezdy u BVG"],
     "Öffnet die offizielle Abfahrtsanzeige der BVG mit Echtzeit und Verspätungen.": ["Opens the official BVG departure board with real-time data and delays.", "Открывает официальное табло отправлений BVG с данными в реальном времени и задержками.", "Відкриває офіційне табло відправлень BVG з даними в реальному часі та затримками.", "Otevře oficiální tabuli odjezdů BVG s aktuálními údaji a zpožděními."],

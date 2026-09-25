@@ -754,7 +754,6 @@
     const w = OBJ.waste;
     const icsAbs = new URL(w.icsUrl, location.href).href;
     // webcal:// öffnet auf iPhone und vielen Android-Geräten direkt das Kalender-Abo.
-    $("#wasteSubscribe").href = icsAbs.replace(/^https?:\/\//, "webcal://");
     $("#wasteCal").innerHTML = calendarButtons(icsAbs);
     $("#wastePdf").href = w.pdfUrl;
     $("#bulkyLink").href = w.bulkyUrl;
