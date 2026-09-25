@@ -164,6 +164,18 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
 
 **Morgen-Mail um 7 Uhr** an `NOTIFY_EMAIL` – **nur**, wenn Aufträge überfällig oder bald fällig sind.
 
+## Fitnessraum (privat: 007, 008, 010, 011)
+
+- `setup()` legt die Nummern **010** und **011** (Rolle „Fitness“) und das Blatt **Fitness-Buchungen** an.
+  Die Links von 010/011 stehen im Blatt „Mitarbeiter“ und öffnen direkt den Fitnessraum (`#fitness`).
+- 010/011 sehen nur den Fitnessraum – keine Aufträge, Nachweise, Mängel oder das Cockpit.
+  007/008 erreichen ihn über „💪 Fitnessraum“ bei den Werkzeugen.
+- Regeln (`CONFIG.FITNESS`): eine Buchung zur Zeit, 6–23 Uhr, 30 Min bis 2 Std in 30-Minuten-Schritten,
+  bis 28 Tage im Voraus, höchstens 10 offene Buchungen je Nummer. Stornieren: eigene Buchung (bis 7 Tage danach
+  als „nicht trainiert“), die Verwaltung darf jede.
+- Statistik „Anfeuern“: Trainings (gebuchte Zeiten, die begonnen haben) je Woche/Monat/Jahr, Minuten,
+  🔥 Wochen in Folge, Wochenziel (2×). Anzeige nur mit Nummern. Buchungen werden nach 2 Jahren gelöscht.
+
 ## Hinweise und Stimmungsbild aus dem Cockpit
 
 - **Hinweise für Bewohner:** Cockpit → „Hinweise für Bewohner“ → Titel, Text, ab/bis, Aufgänge, „wichtig“ →

@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=62">
+  <link rel="stylesheet" href="css/style.css?v=63">
 </head>
 <body>
   <header class="app-header">
@@ -265,6 +265,7 @@
           <h2 class="section-title">Cockpit &amp; Werkzeuge</h2>
           <a class="btn btn--primary btn--block" href="#cockpit">📊 Cockpit: Aufträge, SLA, Arbeiten, Statistik</a>
           <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
+          <a class="btn btn--ghost btn--block" href="#fitness" data-fit-link hidden>💪 Fitnessraum</a>
         </div>
 
         <details class="rule staff-privacy">
@@ -360,10 +361,69 @@
         <h2 class="section-title">Werkzeuge</h2>
         <a class="btn btn--ghost btn--block" href="#hausmeister">🧹 Hausmeister-Tools (Scannen, Mangel erfassen)</a>
         <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
+        <a class="btn btn--ghost btn--block" href="#fitness" data-fit-link hidden>💪 Fitnessraum</a>
         <a class="btn btn--ghost btn--block" id="cockpitLooker" href="#" target="_blank" rel="noopener" hidden>📈 Auswertung in Looker Studio</a>
         <p class="muted small">SLA-Ziele: Dringend – Reaktion 1 Tag, erledigt 3 Tage · Mangel – Reaktion 3 Werktage, erledigt
           14 Tage · Klingelschild – Reaktion 3 Werktage, erledigt 10 Werktage · Elektroraum – bestätigt 1 Werktag vor dem
           Termin, erledigt am Termin. Reaktion = Status „in Arbeit“.</p>
+      </div>
+    </section>
+
+    <!-- ============ Fitnessraum (privat: 007/008/010/011) ============ -->
+    <section class="view" data-view="fitness" data-title="Fitnessraum" hidden>
+      <div data-no-i18n>
+      <p class="lead" id="fitPending" hidden><span class="spinner" aria-hidden="true"></span> Anmeldung läuft …</p>
+      <p class="muted" id="fitNone">Dieser Bereich ist nur für die Nutzer des Fitnessraums. Bitte einmal den persönlichen Link öffnen.</p>
+      <div id="fitArea" hidden>
+        <div class="cockpit-bar">
+          <span class="muted small" id="fitStatus">–</span>
+          <button class="btn btn--ghost btn--small" id="fitRefresh" type="button">↻ Aktualisieren</button>
+        </div>
+        <div class="fit-me" id="fitMe"></div>
+
+        <h2 class="section-title">Raum buchen</h2>
+        <form class="form fit-form" id="formFit" novalidate>
+          <label class="field">
+            <span class="field__label">Tag</span>
+            <select name="date" id="fitDate" required></select>
+          </label>
+          <div class="fit-form__row">
+            <label class="field">
+              <span class="field__label">Beginn</span>
+              <select name="time" id="fitTime" required></select>
+            </label>
+            <label class="field">
+              <span class="field__label">Dauer</span>
+              <select name="minutes" id="fitMinutes" required></select>
+            </label>
+          </div>
+          <p class="muted small" id="fitDayInfo"></p>
+          <button class="btn btn--primary btn--block" type="submit">Buchen</button>
+        </form>
+
+        <h2 class="section-title">Meine Buchungen</h2>
+        <ul class="fit-list" id="fitMine"></ul>
+
+        <h2 class="section-title">Belegung (7 Tage)</h2>
+        <ul class="fit-list" id="fitUpcoming"></ul>
+
+        <h2 class="section-title">Anfeuern 💪</h2>
+        <div class="chips" id="fitPeriod" role="group" aria-label="Zeitraum">
+          <button class="chip" type="button" data-period="week" aria-pressed="true">Diese Woche</button>
+          <button class="chip" type="button" data-period="month" aria-pressed="false">Monat</button>
+          <button class="chip" type="button" data-period="year" aria-pressed="false">Jahr</button>
+        </div>
+        <ol class="fit-board" id="fitBoard"></ol>
+        <p class="muted small">Gezählt werden gebuchte Zeiten, die schon begonnen haben. Nicht trainiert? Einfach bis zu 7 Tage
+          danach austragen. 🔥 = Wochen in Folge mit Training.</p>
+
+        <details class="rule staff-privacy">
+          <summary>Datenschutz-Hinweis</summary>
+          <p>Gespeichert werden nur Ihre Nummer, Beginn und Ende der Buchung. Sichtbar ist das nur für die Nutzer des
+            Fitnessraums. Buchungen werden nach 2 Jahren automatisch gelöscht.</p>
+        </details>
+        <button class="btn btn--ghost btn--block" id="fitLogout" type="button">Auf diesem Gerät abmelden</button>
+      </div>
       </div>
     </section>
 
@@ -866,8 +926,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=62"></script>
-  <script src="js/i18n.js?v=62"></script>
-  <script src="js/app.js?v=62"></script>
+  <script src="js/config.js?v=63"></script>
+  <script src="js/i18n.js?v=63"></script>
+  <script src="js/app.js?v=63"></script>
 </body>
 </html>

@@ -83,6 +83,10 @@ const CONFIG = {
       name: "Umfrage-Stimmen",
       headers: ["Zeit", "Umfrage-ID", "Antwort", "Aufgang-ID", "Stimm-Kennung"],
     },
+    fitness: {
+      name: "Fitness-Buchungen",
+      headers: ["ID", "Nr", "Beginn", "Ende", "Minuten", "Gebucht am", "Storniert"],
+    },
     errors: {
       name: "Fehlerprotokoll",
       headers: ["Zeit", "Quelle", "Meldung", "Details", "Ansicht", "Browser"],
@@ -99,7 +103,10 @@ const CONFIG = {
   // die Verwaltung sieht alle. Pro Auftrag in der Spalte „Zuständig“ änderbar.
   OWNERS: ["Hausmeister", "Verwaltung"],
   // Rollen im Blatt „Mitarbeiter“: Leitung = Chef des Hausmeisterdienstes (Team-Cockpit, nur Hausmeister-Aufträge)
-  ROLES: ["Hausmeister", "Leitung", "Verwaltung"],
+  ROLES: ["Hausmeister", "Leitung", "Verwaltung", "Fitness"],
+  // Fitnessraum (privat): Mitglieder nach Nummer, Buchungsregeln, Wochenziel für die Statistik
+  FITNESS: { members: ["007", "008", "010", "011"], fromHour: 6, toHour: 23, minMinutes: 30, maxMinutes: 120,
+    stepMinutes: 30, daysAhead: 28, maxFuture: 10, weeklyGoal: 2 },
   // Aufgang-IDs → lesbarer Name (für Auswertungen, z. B. Mängel vom Hausmeister)
   ENTRANCE_NAMES: {
     dorf24: "Dorfstr. 24", lind2: "Lindenberger Str. 2", lind4: "Lindenberger Str. 4",
@@ -121,7 +128,7 @@ const CONFIG = {
   // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
   CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
   // Mitarbeiternummern: feste Nummern plus STAFF_LINKS Nummern ab STAFF_FIRST_NR.
-  STAFF_FIXED: [["007", "Verwaltung"], ["008", "Verwaltung"], ["001", "Leitung"]], // 007/008 Verwaltung, 001 Leitung Hausmeisterdienst
+  STAFF_FIXED: [["007", "Verwaltung"], ["008", "Verwaltung"], ["001", "Leitung"], ["010", "Fitness"], ["011", "Fitness"]], // 007/008 Verwaltung, 001 Leitung Hausmeisterdienst
   // Service-Ziele (SLA): Reaktion = Status „in Arbeit“ (oder erledigt), Erledigung = Status „erledigt“.
   // days = Kalendertage, workdays = Mo–Fr. Elektroraum: bestätigt 1 Werktag vor dem Termin, erledigt am Termin.
   SLA: {
@@ -156,6 +163,7 @@ const CONFIG = {
     planYears: 2,             // vergangene Einträge im Reinigungsplan
     errorLogDays: 90,         // Fehlerprotokoll
     votesYears: 2,            // anonyme Umfrage-Stimmen
+    fitnessYears: 2,          // Fitnessraum-Buchungen
   },
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
@@ -288,6 +296,7 @@ function doGet(e) {
     if (q.action === "getTasks") {
       const user = authStaff(q.token);
       rateLimit(`staff_${user.nr}`, CONFIG.LIMITS.staffActionsPerHour, 3600); // wie bei POST
+      requireStaffWork(user);
       return json(getTasks({}, user));
     }
     if (q.action === "done") return completeTicketPage(q);
@@ -1014,10 +1023,13 @@ const STAFF_ACTIONS = {
   adminPollEnd: (p, user) => adminPollEnd(p, user),
   adminNewsEnd: (p, user) => adminNewsEnd(p, user),
   hmLogin: (p, user) => staffLogin(user),
-  logCleaning: (p, user) => logCleaning(p, user),
-  getTasks: (p, user) => getTasks(p, user),
-  completeTask: (p, user) => completeTask(p, user),
-  submitStaffDefect: (p, user) => submitStaffDefect(p, user),
+  logCleaning: (p, user) => { requireStaffWork(user); return logCleaning(p, user); },
+  getTasks: (p, user) => { requireStaffWork(user); return getTasks(p, user); },
+  completeTask: (p, user) => { requireStaffWork(user); return completeTask(p, user); },
+  submitStaffDefect: (p, user) => { requireStaffWork(user); return submitStaffDefect(p, user); },
+  fitnessOverview: (p, user) => fitnessOverview(p, user),
+  fitnessBook: (p, user) => fitnessBook(p, user),
+  fitnessCancel: (p, user) => fitnessCancel(p, user),
 };
 
 const DEFAULT_ACTIVITIES = [
@@ -1119,7 +1131,7 @@ function ensureStaffLinks() {
   while (lastUsed > 1 && String(colA[lastUsed - 1][0]).trim() === "") lastUsed--;
   sheet.getRange(lastUsed + 1, 1, add.length, 5).setValues(add.map(([nr, role, active]) => {
     const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "").slice(0, 8);
-    return [nr, role, active !== false, token, `${CONFIG.APP_URL}?hm=${token}#hausmeister`];
+    return [nr, role, active !== false, token, `${CONFIG.APP_URL}?hm=${token}#${role === "Fitness" ? "fitness" : "hausmeister"}`];
   }));
   sheet.getRange(2, 3, sheet.getMaxRows() - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   CacheService.getScriptCache().remove("staff");
@@ -1185,8 +1197,10 @@ function activeActivities() {
 
 /** US 3.1 – Anmeldung: Name, Rolle, Orte und Tätigkeiten für die App. */
 function staffLogin(user) {
+  const fitness = CONFIG.FITNESS.members.indexOf(String(user.nr)) !== -1;
+  if (user.role === "Fitness") return { ok: true, user: { name: user.name, role: user.role, fitness }, areas: [], activities: [], plan: null };
   return {
-    ok: true, user: { name: user.name, role: user.role },
+    ok: true, user: { name: user.name, role: user.role, fitness },
     areas: activeAreas().map(({ residents, ...a }) => a), activities: activeActivities(),
     // „Heute zu tun“ nur für den Hausmeisterdienst – die Verwaltung braucht es nicht (Anmeldung bleibt schnell)
     plan: user.role === "Verwaltung" ? null : todayPlan(),
@@ -1634,6 +1648,7 @@ function cleanupOldData() {
     meter: deleteRowsWhere(CONFIG.SHEETS.meter, (r) => older(date(r.Ablesedatum) || date(r.Eingang), before(R.meterYears))),
     cleaning: deleteRowsWhere(CONFIG.SHEETS.cleaning, (r) => older(date(r["Zeitpunkt (Scan)"]), before(R.cleaningYears))),
     plan: deleteRowsWhere(CONFIG.SHEETS.plan, (r) => older(date(r.Bis) || date(r.Datum), before(R.planYears))),
+    fitness: deleteRowsWhere(CONFIG.SHEETS.fitness, (r) => older(date(r.Beginn), before(R.fitnessYears))),
     votes: deleteRowsWhere(CONFIG.SHEETS.votes, (r) => older(date(r.Zeit), before(R.votesYears))),
     errors: deleteRowsWhere(CONFIG.SHEETS.errors, (r) => older(date(r.Zeit), new Date(now.getTime() - R.errorLogDays * 86400000))),
   };
@@ -2638,7 +2653,7 @@ const SHEET_GROUPS = [
   ["Tickets", "arbeit"], ["Mängel Hausmeister", "arbeit"], ["Aktuelles", "arbeit"], ["Umfragen", "arbeit"],
   ["Reinigungsplan", "arbeit"], ["Übersicht Zähler", "auswertung"], ["Zählerstände", "daten"], ["Reinigung", "daten"],
   ["Mitarbeiter", "einstellung"], ["QR-Orte", "einstellung"], ["Tätigkeiten", "einstellung"],
-  ["Auswertung Aufträge", "auswertung"], ["Auswertung Reinigung", "auswertung"], ["Umfrage-Stimmen", "daten"], ["Fehlerprotokoll", "daten"],
+  ["Auswertung Aufträge", "auswertung"], ["Auswertung Reinigung", "auswertung"], ["Umfrage-Stimmen", "daten"], ["Fitness-Buchungen", "daten"], ["Fehlerprotokoll", "daten"],
 ];
 const GROUP_COLORS = { start: "#151515", arbeit: "#6d7454", auswertung: "#3a6ea5", daten: "#9aa0a6", einstellung: "#b36b00" };
 const GROUP_TEXT = {
@@ -2775,7 +2790,7 @@ function sheetPurpose(name) {
     "Übersicht Zähler": "Zählerstände je Wohnung, übersichtlich (wird neu aufgebaut).",
     "Zählerstände": "Alle gemeldeten Zählerstände mit Foto.",
     "Reinigung": "Tätigkeitsnachweise per QR-Scan.",
-    "Mitarbeiter": "Persönliche Links (007/008 Verwaltung, 001 Leitung, 100+ Hausmeister). „Aktiv“ = freigeschaltet.",
+    "Mitarbeiter": "Persönliche Links (007/008 Verwaltung, 001 Leitung, 010/011 Fitnessraum, 100+ Hausmeister). „Aktiv“ = freigeschaltet.",
     "QR-Orte": "Orte mit QR-Code für die Nachweise.",
     "Tätigkeiten": "Auswahl der Tätigkeiten beim Scannen.",
     "Auswertung Aufträge": "Für Looker Studio – nachts neu berechnet.",
@@ -2788,4 +2803,113 @@ function sheetPurpose(name) {
 function formatSpreadsheetNow() {
   const r = formatSpreadsheet();
   showResult("Tabelle", `${r.formatted} Blätter übersichtlich formatiert. Das Blatt „Start“ erklärt alle Blätter.`);
+}
+
+/* ==========================================================================
+   Fitnessraum (privat): Buchung, Belegung, Statistik zum gegenseitigen Anfeuern.
+   Nur für die Nummern in CONFIG.FITNESS.members (007/008 Verwaltung, 010/011 Rolle „Fitness“).
+   Anzeige nur mit Nummern. Eine Buchung zur Zeit.
+   ========================================================================== */
+
+function requireFitness(user) {
+  if (!user || CONFIG.FITNESS.members.indexOf(String(user.nr)) === -1) throw userError("Kein Zugang zum Fitnessraum.", "staff");
+}
+
+/** Hausmeister-Funktionen: nicht für reine Fitness-Zugänge. */
+function requireStaffWork(user) {
+  if (!user || ["Hausmeister", "Leitung", "Verwaltung"].indexOf(user.role) === -1) throw userError("Kein Zugang zu dieser Funktion.", "staff");
+}
+
+function fitnessRows() {
+  return sheetObjects(CONFIG.SHEETS.fitness).filter((r) => r.ID && r.Beginn instanceof Date && r.Ende instanceof Date && r.Storniert !== "ja");
+}
+
+function fitnessWeekStart(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // Montag
+  return x;
+}
+
+/** Übersicht: Belegung (bis 4 Wochen), eigene Buchungen, Statistik je Nummer. */
+function fitnessOverview(p, user) {
+  requireFitness(user);
+  const F = CONFIG.FITNESS;
+  const now = new Date();
+  const rows = fitnessRows();
+  const iso = (d) => d.toISOString();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const until = new Date(today.getTime() + (F.daysAhead + 1) * 86400000);
+  const upcoming = rows.filter((r) => r.Ende > now && r.Beginn < until).sort((a, b) => a.Beginn - b.Beginn)
+    .map((r) => ({ id: String(r.ID), nr: String(r.Nr), start: iso(r.Beginn), end: iso(r.Ende), mine: String(r.Nr) === user.nr }));
+  const mine = rows.filter((r) => String(r.Nr) === user.nr && r.Ende > new Date(now.getTime() - 7 * 86400000)).sort((a, b) => a.Beginn - b.Beginn)
+    .map((r) => ({ id: String(r.ID), start: iso(r.Beginn), end: iso(r.Ende), past: r.Beginn < now }));
+  // Statistik: vergangene Buchungen zählen als Training
+  const done = rows.filter((r) => r.Beginn < now);
+  const weekStart = fitnessWeekStart(now);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const stat = (nr, from) => {
+    const list = done.filter((r) => String(r.Nr) === nr && r.Beginn >= from);
+    return { count: list.length, minutes: list.reduce((a, r) => a + Math.round((r.Ende - r.Beginn) / 60000), 0) };
+  };
+  const streak = (nr) => { // Wochen in Folge mit mind. einem Training (laufende Woche zählt, wenn schon trainiert)
+    let n = 0;
+    let ws = fitnessWeekStart(now);
+    const has = (a, b) => done.some((r) => String(r.Nr) === nr && r.Beginn >= a && r.Beginn < b);
+    if (!has(ws, new Date(ws.getTime() + 7 * 86400000))) ws = new Date(ws.getTime() - 7 * 86400000);
+    while (n < 104 && has(ws, new Date(ws.getTime() + 7 * 86400000))) { n++; ws = new Date(ws.getTime() - 7 * 86400000); }
+    return n;
+  };
+  const members = F.members.map((nr) => ({ nr, week: stat(nr, weekStart), month: stat(nr, monthStart), year: stat(nr, yearStart), streak: streak(nr) }));
+  return { ok: true, me: user.nr, upcoming, mine, members, weeklyGoal: F.weeklyGoal,
+    rules: { fromHour: F.fromHour, toHour: F.toHour, minMinutes: F.minMinutes, maxMinutes: F.maxMinutes, stepMinutes: F.stepMinutes, daysAhead: F.daysAhead } };
+}
+
+function fitnessBook(p, user) {
+  requireFitness(user);
+  const F = CONFIG.FITNESS;
+  const d = parseIsoDate(String(p.date || ""));
+  const tm = /^(\d{2}):(\d{2})$/.exec(String(p.time || ""));
+  const minutes = Number(p.minutes);
+  if (!d || !tm) throw userError("Bitte Tag und Uhrzeit wählen.");
+  const h = Number(tm[1]), mi = Number(tm[2]);
+  if (mi % F.stepMinutes !== 0 || !Number.isInteger(minutes) || minutes < F.minMinutes || minutes > F.maxMinutes || minutes % F.stepMinutes !== 0) {
+    throw userError(`Dauer ${F.minMinutes}–${F.maxMinutes} Minuten in ${F.stepMinutes}-Minuten-Schritten.`);
+  }
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi);
+  const end = new Date(start.getTime() + minutes * 60000);
+  const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), F.toHour, 0);
+  if (h < F.fromHour || end > dayEnd) throw userError(`Buchbar von ${F.fromHour} bis ${F.toHour} Uhr.`);
+  const now = new Date();
+  if (end <= now) throw userError("Dieser Zeitraum liegt in der Vergangenheit.");
+  if (start > new Date(now.getTime() + F.daysAhead * 86400000)) throw userError(`Höchstens ${F.daysAhead} Tage im Voraus.`);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const rows = fitnessRows();
+    if (rows.filter((r) => String(r.Nr) === user.nr && r.Beginn > now).length >= F.maxFuture) throw userError(`Höchstens ${F.maxFuture} offene Buchungen je Person.`);
+    const clash = rows.find((r) => r.Beginn < end && r.Ende > start);
+    if (clash) {
+      const t = (x) => Utilities.formatDate(x, CONFIG.TIMEZONE, "HH:mm");
+      throw userError(`Schon belegt von ${t(clash.Beginn)} bis ${t(clash.Ende)} Uhr (Nr. ${clash.Nr}).`);
+    }
+    const id = newId("F");
+    const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.fitness.name);
+    sheet.getRange(lastContentRow(sheet, [1]) + 1, 1, 1, CONFIG.SHEETS.fitness.headers.length)
+      .setValues([[id, user.nr, start, end, minutes, now, ""]]);
+    return { ok: true, id };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Eigene Buchung stornieren (auch nachträglich bis 7 Tage, z. B. „nicht stattgefunden“); Verwaltung darf jede. */
+function fitnessCancel(p, user) {
+  requireFitness(user);
+  const hit = fitnessRows().find((r) => String(r.ID) === String(p.id || ""));
+  if (!hit || (String(hit.Nr) !== user.nr && user.role !== "Verwaltung")) throw userError("Buchung nicht gefunden.");
+  if (hit.Beginn < new Date(Date.now() - 7 * 86400000)) throw userError("Ältere Buchungen können nicht mehr storniert werden.");
+  const def = CONFIG.SHEETS.fitness;
+  getSpreadsheet().getSheetByName(def.name).getRange(hit._row, def.headers.indexOf("Storniert") + 1).setValue("ja");
+  return { ok: true };
 }

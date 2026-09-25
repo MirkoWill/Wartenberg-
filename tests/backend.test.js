@@ -175,10 +175,11 @@ check('Unbekannte Art abgelehnt', !post({ ...base, action: 'submitMeterReadings'
 // ================= Epic 3 – Hausmeister-Portal =================
 ctx.setup();
 const staff = sheets['Mitarbeiter'].grid;
-check('Mitarbeiter: 007, 008, 001, 100–119 ohne Namen', staff.length === 24 && staff[1][0] === '007' && staff[1][1] === 'Verwaltung' && staff[2][0] === '008' && staff[2][1] === 'Verwaltung' && staff[3][0] === '001' && staff[4][0] === '100' && staff[23][0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
-check('Links mit Token', /^https:\/\/app\.willbrandt-kompagnon\.de\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[4][4]), staff[4][4]);
+check('Mitarbeiter: 007, 008, 001, 010, 011, 100–119 ohne Namen', staff.length === 26 && staff[1][0] === '007' && staff[1][1] === 'Verwaltung' && staff[2][0] === '008' && staff[2][1] === 'Verwaltung' && staff[3][0] === '001' && staff[4][0] === '010' && staff[5][0] === '011' && staff[6][0] === '100' && staff[25][0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
+check('Links mit Token', /^https:\/\/app\.willbrandt-kompagnon\.de\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[6][4]), staff[6][4]);
+check('010/011: Rolle Fitness, aktiv, Link öffnet den Fitnessraum', staff[4][1] === 'Fitness' && staff[5][1] === 'Fitness' && staff[4][2] === true && /#fitness$/.test(staff[4][4]) && /#fitness$/.test(staff[5][4]));
 ctx.setup();
-check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 24);
+check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 26);
 sheets['Mitarbeiter'].grid[3][1] = 'Hausmeister'; delete props.ROLE_001_LEITUNG; ctx.ensureStaffLinks();
 check('Bestehendes Blatt: 001 wird einmalig auf Leitung umgestellt', sheets['Mitarbeiter'].grid[3][1] === 'Leitung' && props.ROLE_001_LEITUNG === '1');
 sheets['Mitarbeiter'].grid[3][1] = 'Hausmeister'; ctx.ensureStaffLinks();
@@ -189,7 +190,7 @@ sheets['Mitarbeiter'].grid[3][1] = 'Leitung';
   const i8 = g.findIndex((r) => r[0] === '008'); g.splice(i8, 1);
   while (g.length < 40) g.push(['', '', false, '', '']);
   ctx.ensureStaffLinks();
-  check('008 wird direkt unter die letzte Nummer geschrieben (nicht hinter leere Kästchen)', g[23][0] === '008' && g[23][1] === 'Verwaltung' && g[23][2] === true && /hm=/.test(g[23][4]), g.slice(22, 25).map((r) => r[0]));
+  check('008 wird direkt unter die letzte Nummer geschrieben (nicht hinter leere Kästchen)', g[25][0] === '008' && g[25][1] === 'Verwaltung' && g[25][2] === true && /hm=/.test(g[25][4]), g.slice(24, 27).map((r) => r[0]));
   g.length = 0; saved.forEach((r) => g.push(r));
 }
 check('QR-Orte vorbelegt (21)', sheets['QR-Orte'].grid.length === 22 && sheets['QR-Orte'].grid.some((r) => r[1] === 'Raum Hebeanlage Lindenberger Str. 8'));
@@ -197,17 +198,18 @@ check('Kein Keller Lind 8', !sheets['QR-Orte'].grid.some((r) => r[0] === 'KE_LIN
 check('Tätigkeiten inkl. Fensterreinigung', sheets['Tätigkeiten'].grid.some((r) => r[0] === 'Fensterreinigung Aufgang'));
 check('Tages-Trigger angelegt (einmal)', triggers.filter((t) => t.getHandlerFunction() === 'checkPlanFulfilment').length === 1);
 
-const hmTok = staff[4][3], admTok = staff[1][3], adm2Tok = staff[2][3], leadTok = staff[3][3];
-check('Vorrats-Nummern gesperrt, 007/008/001 aktiv', staff[1][2] === true && staff[2][2] === true && staff[3][2] === true && staff[4][2] === false && staff[23][2] === false);
+const fitTok = staff[4][3], fit2Tok = staff[5][3];
+const hmTok = staff[6][3], admTok = staff[1][3], adm2Tok = staff[2][3], leadTok = staff[3][3];
+check('Vorrats-Nummern gesperrt, 007/008/001 aktiv', staff[1][2] === true && staff[2][2] === true && staff[3][2] === true && staff[6][2] === false && staff[25][2] === false);
 delete cache.staff;
 check('Gesperrte Vorrats-Nummer kommt nicht rein', post({ action: 'hmLogin', token: hmTok }).code === 'staff');
-staff[4][2] = true; delete cache.staff; // Nr. 100 vergeben
+staff[6][2] = true; delete cache.staff; // Nr. 100 vergeben
 let lg = post({ action: 'hmLogin', token: hmTok });
 check('Login Hausmeister ohne PIN', lg.ok && lg.user.name === 'Nr. 100' && lg.user.role === 'Hausmeister' && lg.areas.length === 21 && lg.activities.length === 10, lg.user);
 check('Login Verwaltung', post({ action: 'hmLogin', token: admTok }).user.role === 'Verwaltung');
 check('Falscher Token abgelehnt', post({ action: 'hmLogin', token: 'abc' }).code === 'staff' && post({ action: 'hmLogin', token: 'f'.repeat(40) }).code === 'staff');
-sheets['Mitarbeiter'].grid[5][2] = false; delete cache.staff;
-check('Deaktivierter Zugang abgelehnt', post({ action: 'hmLogin', token: staff[5][3] }).code === 'staff');
+sheets['Mitarbeiter'].grid[7][2] = false; delete cache.staff;
+check('Deaktivierter Zugang abgelehnt', post({ action: 'hmLogin', token: staff[7][3] }).code === 'staff');
 
 const nowIso = new Date().toISOString();
 let sc = post({ action: 'logCleaning', token: hmTok, areaToken: 'th_lind6', activity: 'Treppenhausreinigung', timestamp: nowIso });
@@ -588,6 +590,55 @@ check('Löschen: Nachweis > 2 Jahre und Fehlerbericht > 90 Tage weg', !sheets['R
 check('Löschen: Fotos der gelöschten Zeilen im Papierkorb, andere nicht', ['p1', 'p4', 'p6'].every((p) => trashed.some((t) => t.startsWith(p))) && !trashed.some((t) => /^p[235]/.test(t)), trashed);
 check('Löschen: Ergebnis gezählt', rem.tickets === 1 && rem.meter === 1 && rem.errors === 1 && rem.plan === 1, rem);
 check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunction() === 'dailyMaintenance'));
+
+// ================= Fitnessraum =================
+{
+  Object.keys(cache).forEach((k) => delete cache[k]); // Anfrage-Zähler der vorigen Tests zurücksetzen
+  const fl = post({ action: 'hmLogin', token: fitTok });
+  check('Fitness: Login 010 ohne Orte/Plan, Mitglied', fl.ok && fl.user.role === 'Fitness' && fl.user.fitness === true && fl.areas.length === 0 && !fl.plan, fl);
+  check('Fitness: Verwaltung ist Mitglied, Hausmeister/Leitung nicht', post({ action: 'hmLogin', token: admTok }).user.fitness === true
+    && post({ action: 'hmLogin', token: hmTok }).user.fitness === false && post({ action: 'hmLogin', token: leadTok }).user.fitness === false);
+  check('Fitness: keine Hausmeister-Funktionen', ['logCleaning', 'getTasks', 'completeTask', 'submitStaffDefect'].every((a) => post({ action: a, token: fitTok, areaToken: 'TG', id: 'x' }).code === 'staff')
+    && ctx.doGet({ parameter: { action: 'getTasks', token: fitTok } }).code === 'staff');
+  check('Fitness: kein Cockpit, keine Hinweise/Umfragen', ['adminOverview', 'adminUpdateTask', 'adminNewsSave', 'adminPollSave'].every((a) => post({ action: a, token: fitTok, id: 'x', title: 'x' }).code === 'staff'));
+  check('Fitness: Hausmeister/Leitung kommen nicht in den Fitnessraum', post({ action: 'fitnessOverview', token: hmTok }).code === 'staff' && post({ action: 'fitnessBook', token: leadTok }).code === 'staff');
+
+  const d = new Date(); d.setDate(d.getDate() + 3);
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const b1 = post({ action: 'fitnessBook', token: fitTok, date: day, time: '18:00', minutes: 90 });
+  const frow = sheets['Fitness-Buchungen'].grid.slice(-1)[0];
+  check('Fitness: Buchung gespeichert (nur Nummer)', b1.ok && /^F-/.test(b1.id) && frow[1] === '010' && frow[2].getHours() === 18 && frow[3].getHours() === 19 && frow[3].getMinutes() === 30 && frow[4] === 90, frow);
+  const clash = post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '19:00', minutes: 60 });
+  check('Fitness: Überschneidung abgelehnt (eine Buchung zur Zeit)', !clash.ok && /belegt/.test(clash.error) && /010/.test(clash.error), clash);
+  check('Fitness: direkt danach geht', post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '19:30', minutes: 30 }).ok);
+  check('Fitness: Regeln (Zeit, Dauer, Schritte, Vorlauf)', ['05:30', '22:30'].every((t) => !post({ action: 'fitnessBook', token: fitTok, date: day, time: t, minutes: 60 }).ok)
+    && [20, 150, 45, 'x'].every((m) => !post({ action: 'fitnessBook', token: fitTok, date: day, time: '08:00', minutes: m }).ok)
+    && !post({ action: 'fitnessBook', token: fitTok, date: day, time: '08:15', minutes: 30 }).ok
+    && !post({ action: 'fitnessBook', token: fitTok, date: '2020-01-01', time: '08:00', minutes: 30 }).ok
+    && !post({ action: 'fitnessBook', token: fitTok, date: '2099-01-01', time: '08:00', minutes: 30 }).ok
+    && !post({ action: 'fitnessBook', token: fitTok, date: 'x', time: '08:00', minutes: 30 }).ok);
+  check('Fitness: 22:00 für 60 Min bis 23 Uhr erlaubt', post({ action: 'fitnessBook', token: fitTok, date: day, time: '22:00', minutes: 60 }).ok);
+
+  // Vergangene Trainings direkt ins Blatt (Statistik)
+  const g = sheets['Fitness-Buchungen'].grid;
+  const ago = (days, h, min) => { const x = new Date(); x.setDate(x.getDate() - days); x.setHours(h, 0, 0, 0); return [x, new Date(x.getTime() + min * 60000)]; };
+  [[1, '011', 60], [8, '011', 60], [15, '011', 90], [2, '007', 30]].forEach(([days, nr, min], i) => { const [s, e] = ago(days, 7, min); g.push([`F-OLD-${i}`, nr, s, e, min, s, '']); });
+  const [cs, ce] = ago(3, 9, 60); g.push(['F-CANC', '011', cs, ce, 60, cs, 'ja']);
+  const ov = post({ action: 'fitnessOverview', token: fit2Tok });
+  const m11 = ov.members.find((m) => m.nr === '011');
+  check('Fitness: Übersicht nur Nummern, eigene markiert', ov.ok && ov.me === '011' && ov.members.map((m) => m.nr).join() === '007,008,010,011'
+    && ov.upcoming.some((b) => b.nr === '010' && !b.mine) && ov.upcoming.some((b) => b.nr === '011' && b.mine) && !JSON.stringify(ov).includes('Nr. 0'), ov.upcoming);
+  check('Fitness: Statistik zählt vergangene, nicht stornierte', (new Date(Date.now() - 15 * 86400000).getFullYear() < new Date().getFullYear() || (m11.year.count === 3 && m11.year.minutes === 210)) && m11.streak >= 3 && ov.members.find((m) => m.nr === '008').year.count === 0, m11);
+  check('Fitness: eigene vergangene Buchung zum Austragen', ov.mine.some((b) => b.id === 'F-OLD-0' && b.past) && !ov.mine.some((b) => b.id === 'F-OLD-2'));
+
+  check('Fitness: fremde Buchung nicht stornierbar', !post({ action: 'fitnessCancel', token: fit2Tok, id: b1.id }).ok);
+  check('Fitness: zu alte Buchung nicht stornierbar', !post({ action: 'fitnessCancel', token: fit2Tok, id: 'F-OLD-2' }).ok);
+  check('Fitness: eigene stornieren', post({ action: 'fitnessCancel', token: fitTok, id: b1.id }).ok && g.find((r) => r[0] === b1.id)[6] === 'ja');
+  check('Fitness: danach wieder frei', post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '18:00', minutes: 60 }).ok);
+  const own = post({ action: 'fitnessOverview', token: fit2Tok }).mine.find((b) => !b.past);
+  check('Fitness: Verwaltung darf jede stornieren', post({ action: 'fitnessCancel', token: admTok, id: own.id }).ok);
+  check('Fitness: Konstruktor-/Unsinns-IDs abgelehnt', !post({ action: 'fitnessCancel', token: fitTok, id: 'constructor' }).ok && !post({ action: 'fitnessCancel', token: fitTok }).ok);
+}
 
 // ================= Fehlerüberwachung =================
 Object.keys(cache).forEach((k) => delete cache[k]); mails.length = 0;
