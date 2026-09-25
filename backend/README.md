@@ -173,11 +173,13 @@ offen, Vergleich Vormonat), Service-Ziele je Art, Ø Reaktions-/Erledigungszeit,
 Plan (am Plantag / nachgeholt / nicht nachgewiesen), 6-Monats-Trend, derzeit überfällige Aufträge (nur Art, Aufgang,
 Datum). **Nur Zahlen – keine Namen, Wohnungen, Beschreibungen oder Mitarbeiterdaten.**
 
-1. Das PDF wird im Drive-Ordner „Beiratsberichte Mieter-App“ abgelegt und **an `NOTIFY_EMAIL` mit Freigabe-Link** geschickt.
-2. Klick auf den Link → Bestätigungsseite → „Ja, an den Beirat senden“ → Versand an die Adressen in der
-   Script-Eigenschaft **`BEIRAT_EMAILS`** (mit Komma getrennt), Kopie an `NOTIFY_EMAIL`.
-   Der Link funktioniert einmal und ist 14 Tage gültig.
-3. Menü **Mieter-App → Monatsbericht: Vorschau an mich** zeigt den Bericht jederzeit vorab (wird nicht abgelegt/versendet).
+1. **8 Uhr:** Sie (`NOTIFY_EMAIL`) bekommen den Entwurf als PDF und einen Link.
+2. Der Link öffnet eine Seite mit **Anmerkungsfeld** (erscheint in der Mail und oben im PDF) und drei Knöpfen:
+   **Jetzt an den Beirat senden** · **Speichern – um 12 Uhr senden** · **Diesen Monat nicht automatisch senden**.
+3. **12 Uhr** (`CONFIG.REPORT_SEND_HOUR`): Versand an **`BEIRAT_EMAILS`** (Komma-getrennt), Kopie an Sie, Antworten gehen an
+   `CONFIG.REPORT_REPLY_TO` – sofern nicht schon gesendet oder angehalten. Die versendete Fassung wird im Drive-Ordner
+   „Beiratsberichte Mieter-App“ abgelegt. Anschreiben und Signatur: `reportMail()` bzw. `CONFIG.REPORT_SIGNATURE`.
+4. Menü **Mieter-App → Monatsbericht: Vorschau an mich** zeigt Bericht und Mail jederzeit vorab (nur an Sie).
 
 ## Statistik mit Looker Studio (kostenlos) 💻 am Computer
 
