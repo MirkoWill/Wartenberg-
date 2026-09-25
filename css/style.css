@@ -1040,7 +1040,9 @@ html.text-large body { zoom: 1.18; }
 /* Cockpit: erledigte Arbeiten je Tag */
 .work-day summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .work-list { list-style: none; margin: 8px 0 0; padding: 0; }
-.work-list li { padding: 5px 0; border-bottom: 1px solid var(--c-border); }
+.work-list li { display: grid; grid-template-columns: 44px 18px 1fr; gap: 4px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--c-border); font-size: 15px; line-height: 1.35; }
+.work-list__time { color: var(--c-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.work-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 0 6px; border-radius: 999px; background: var(--c-primary-soft); color: var(--c-muted); white-space: nowrap; }
 .work-list li:last-child { border-bottom: 0; }
 .work-missed { color: var(--c-danger); }
 .work-late { color: #9a5b00; }

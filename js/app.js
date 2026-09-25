@@ -1792,7 +1792,8 @@
         const cur = staff();
         if (!cur || cur.token !== s.token) return;
         writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities, plan: data.plan || null });
-        loadTasks(); // Aufträge schon im Hintergrund holen
+        // Aufträge nur vorladen, wenn sie gebraucht werden (Hausmeister-Bereich) – im Cockpit spart das eine Anfrage
+        if (!isAdmin() || currentView === "hausmeister") loadTasks();
         if (isAdmin() && currentView === "cockpit") loadCockpit();
         fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
         break;
@@ -2500,23 +2501,35 @@
     }
   }
 
-  /** Erledigte Arbeiten je Tag mit Plan-Abgleich – ohne Mitarbeiternummern. */
+  /** Erledigte Arbeiten je Tag mit Plan-Abgleich – ohne Mitarbeiternummern, kompakt. */
   function renderWork(work) {
     const box = $("#cockpitTeam");
     const days = work && Array.isArray(work.days) ? work.days : [];
     const arr = (x) => (Array.isArray(x) ? x : []);
     const dayName = (iso) => { const d = parseIsoDate(String(iso)); return d ? d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) : ""; };
+    // „Treppenhaus Lindenberger Str. 6“ → „Lindenberger Str. 6“, wenn die Tätigkeit schon „Treppenhaus…“ heißt
+    const place = (activity, ort) => { const a = String(activity || "").split(/reinigung|\s/i)[0]; return a && String(ort).startsWith(a + " ") ? String(ort).slice(a.length + 1) : ort; };
     if (!days.length) { box.innerHTML = '<p class="muted">Keine Nachweise und keine geplanten Arbeiten in den letzten 14 Tagen.</p>'; return; }
     box.innerHTML = days.map((d, i) => {
-      const done = arr(d.done), missed = arr(d.missed), open = arr(d.open);
       const planned = Number(d.planned) || 0, plannedDone = Number(d.plannedDone) || 0;
+      // gleiche Tätigkeit am gleichen Ort kurz hintereinander (Doppel-Scan) zusammenfassen
+      const done = [];
+      arr(d.done).forEach((x) => {
+        const prev = done[done.length - 1];
+        if (prev && prev.activity === x.activity && prev.ort === x.ort) { prev.n++; return; }
+        done.push({ ...x, n: 1 });
+      });
+      const missed = arr(d.missed), open = arr(d.open);
       const badge = planned ? `<span class="badge ${plannedDone >= planned ? "badge--erledigt" : i === 0 ? "badge--offen" : "badge--unbekannt"}">Plan ${plannedDone}/${planned}</span>` : "";
-      return `<details class="rule work-day"${i < 2 || missed.some((m) => !m.lateOn) ? " open" : ""}>
-        <summary><strong>${esc(dayName(d.date))}</strong> ${badge} <span class="muted small">${done.length} erledigt</span></summary>
+      const row = (icon, cls, time, x, extra) => `<li class="${cls}"><span class="work-list__time">${esc(time)}</span><span class="work-list__icon" aria-hidden="true">${icon}</span>
+        <span><strong>${esc(x.activity)}</strong> · ${esc(place(x.activity, x.ort))}${extra}</span></li>`;
+      return `<details class="rule work-day"${i === 0 || missed.some((m) => !m.lateOn) ? " open" : ""}>
+        <summary><strong>${esc(dayName(d.date))}</strong> ${badge} <span class="muted small">${done.length ? `${arr(d.done).length} erledigt` : "nichts erfasst"}</span></summary>
         <ul class="work-list">
-          ${done.map((x) => `<li>✓ <span class="muted small">${esc(x.time)}</span> ${esc(x.activity)} – ${esc(x.ort)}${x.planned ? "" : ' <span class="badge">zusätzlich</span>'}${x.manual ? ' <span class="badge">ohne QR</span>' : ""}</li>`).join("")}
-          ${missed.map((x) => `<li class="${x.lateOn ? "work-late" : "work-missed"}">${x.lateOn ? "↻" : "✗"} ${esc(x.activity)} – ${esc(x.ort)} <span class="small">${x.lateOn ? `nachgeholt am ${esc(dayName(x.lateOn))}` : "nicht nachgewiesen"}</span></li>`).join("")}
-          ${open.map((x) => `<li class="muted">○ ${esc(x.activity)} – ${esc(x.ort)} <span class="small">heute geplant, noch offen</span></li>`).join("")}
+          ${missed.map((x) => row(x.lateOn ? "↻" : "✗", x.lateOn ? "work-late" : "work-missed", "", x,
+            ` <span class="small">– ${x.lateOn ? `nachgeholt ${esc(dayName(x.lateOn))}` : "nicht nachgewiesen"}</span>`)).join("")}
+          ${open.map((x) => row("○", "muted", "", x, ' <span class="small">– heute geplant</span>')).join("")}
+          ${done.map((x) => row("✓", "", x.time, x, `${x.n > 1 ? ` <span class="muted small">(${x.n}×)</span>` : ""}${planned && !x.planned ? ' <span class="work-tag">außerplanmäßig</span>' : ""}${x.manual ? ' <span class="work-tag" title="Ort von Hand gewählt statt QR-Code">ohne QR</span>' : ""}`)).join("")}
           ${!done.length && !missed.length && !open.length ? '<li class="muted">Nichts erfasst.</li>' : ""}
         </ul></details>`;
     }).join("");
