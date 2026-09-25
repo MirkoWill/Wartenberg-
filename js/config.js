@@ -208,7 +208,6 @@ window.APP_CONFIG = {
 
     // Dokumente zum Herunterladen
     documents: [
-      { label: "Abfuhrkalender 2026", sub: "PDF der BSR", url: "assets/abfuhrkalender-2026.pdf", icon: "🗓️" },
       { label: "Visitenkarte Willbrandt und Kompagnon", sub: "Kontakt speichern (.vcf)", url: "assets/hausverwaltung.vcf", icon: "👤" },
     ],
 

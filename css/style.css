@@ -1100,3 +1100,4 @@ html.text-large body { zoom: 1.18; }
 .transit-card { margin-bottom: 14px; }
 .transit-lines { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .transit-line { padding: 3px 10px; border-radius: 999px; background: #8b1e5a; color: #fff; font-weight: 700; font-size: 14px; }
+.cal-label { margin: 12px 0 0; }
