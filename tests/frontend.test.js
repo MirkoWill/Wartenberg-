@@ -18,24 +18,25 @@ const ACTIVITIES = ["Treppenhausreinigung", "Fensterreinigung Aufgang", "Müllpl
 function fakeBackend(state = {}) {
   return (d) => {
     const staff = { [STAFF]: { name: "Nr. 100", role: "Hausmeister" }, [ADMIN]: { name: "Nr. 007", role: "Verwaltung" }, [LEAD]: { name: "Nr. 001", role: "Leitung" } }[d.token];
-    if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd"].includes(d.action)) {
+    if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd", "adminPollSave", "adminPollEnd"].includes(d.action)) {
       if (!staff) return { ok: false, error: "Kein gültiger Zugang", code: "staff" };
       if (state.offline && d.action === "logCleaning") return "abort";
       if (d.action === "hmLogin") return { ok: true, user: staff, areas: AREAS, activities: ACTIVITIES, plan: state.plan || null };
       if (d.action === "getTasks") return state.hangTasks ? null : { ok: true, tasks: state.tasks || [] };
       if (d.action === "completeTask") { state.tasks = (state.tasks || []).filter((t) => t.id !== d.id); return { ok: true }; }
       if (d.action === "submitStaffDefect") return { ok: true, id: "M-260924-ABCD" };
-      if (["adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd"].includes(d.action)) {
+      if (["adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd", "adminPollSave", "adminPollEnd"].includes(d.action)) {
         if (staff.role === "Hausmeister") return { ok: false, error: "Nur für Verwaltung und Leitung.", code: "staff" };
         if (staff.role === "Leitung" && state.leadOverview && d.action === "adminOverview") return state.leadOverview;
-        if (["adminUpdateTask", "adminNewsSave", "adminNewsEnd"].includes(d.action)) { (state.updates = state.updates || []).push(d); return { ok: true }; }
+        if (["adminUpdateTask", "adminNewsSave", "adminNewsEnd", "adminPollSave", "adminPollEnd"].includes(d.action)) { (state.updates = state.updates || []).push(d); return { ok: true }; }
         return state.overview || { ok: true, kpi: { open: 0, overdue: 0, dueSoon: 0, avgReactHours: null, avgLeadDays: null, slaQuote: null, closed90: 0, cleaningQuote: null, errors24: 0 }, months: [], perEntrance: {}, tasks: [], lookerUrl: "" };
       }
       return { ok: true };
     }
     const pin = state.pin || PIN;
     if (d.pin !== pin && !staff) return { ok: false, error: "PIN ungültig", code: "pin" };
-    if (d.action === "news") return { ok: true, items: state.news || [], care: state.care || null, weather: state.weather || null };
+    if (d.action === "news") return { ok: true, items: state.news || [], care: state.care || null, weather: state.weather || null, polls: state.polls || [] };
+    if (d.action === "vote") { const p = (state.polls || []).find((x) => x.id === d.pollId); return { ok: true, results: p ? p.options.map((_, i) => (i === d.option ? 1 : 0)) : null }; }
     if (d.action === "status") return { ok: true, items: [] };
     return { ok: true, id: d.action === "submitMeterReadings" ? "E-260924-ABCD" : "T-260924-ABCD", count: 1 };
   };
@@ -358,6 +359,42 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Stimmungsbild");
+    {
+      const state = { polls: [{ id: "U-1", question: "Fahrradbügel im Hof?", options: ["Ja", "Nein"], to: "2026-10-31", results: null }] };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForSelector("#pollBox .poll");
+      check("Umfrage auf der Startseite mit Antwort-Knöpfen", /Fahrradbügel/.test(await p.textContent("#pollBox")) && (await p.$$("#pollBox [data-vote]")).length === 2);
+      await p.click('#pollBox [data-vote="0"]'); await p.waitForSelector("#pollBox .poll__thanks");
+      const v = ctx.requests.find((r) => r.action === "vote");
+      check("Stimme: Umfrage, Antwort, Aufgang, zufällige Gerätekennung, PIN", v && v.pollId === "U-1" && v.option === 0 && v.obj === "lind6" && /^[a-f0-9]{32}$/.test(v.voter) && v.pin === "13059", v);
+      check("Nach der Stimme: Dank + Ergebnisbalken", /Danke/.test(await p.textContent("#pollBox")) && /100 %/.test(await p.textContent("#pollBox")));
+      await p.reload(); await p.waitForSelector("#pollBox .poll");
+      check("Nach Neuladen: bereits abgestimmt, keine Knöpfe mehr", !(await p.$("#pollBox [data-vote]")));
+      await ctx.close();
+    }
+    {
+      const state = { overview: { ok: true, role: "Verwaltung", kpi: {}, months: [], perEntrance: {}, tasks: [], work: { days: [] }, news: [],
+        polls: [{ id: "U-1", question: "Fahrradbügel im Hof?", options: ["Ja", "Nein"], open: true, to: "", only: "", showResults: true, counts: [7, 3], total: 10, perEntrance: {} }] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
+      await p.click("#staffTab"); await p.waitForSelector("#pollAdminList .poll");
+      check("Cockpit: Ergebnis 70/30 % mit Stimmenzahl", /70 %/.test(await p.textContent("#pollAdminList")) && /10 Stimmen/.test(await p.textContent("#pollAdminList")));
+      await p.click("#pollAdminNew summary");
+      await p.fill('#formPollAdmin [name="question"]', "Grillplatz im Hof?");
+      await p.fill('#formPollAdmin [name="options"]', "Ja\nNein\n\nEgal");
+      await p.$eval('#formPollAdmin [type="submit"]', (el) => el.scrollIntoView({ block: "center" }));
+      await p.click('#formPollAdmin [type="submit"]'); await p.waitForTimeout(400);
+      const up = (state.updates || []).find((u) => u.action === "adminPollSave");
+      check("Umfrage starten sendet Frage + 3 Antworten (Leerzeile ignoriert)", up && up.question === "Grillplatz im Hof?" && up.options.join("|") === "Ja|Nein|Egal" && up.showResults === true, up);
+      p.once("dialog", (dlg) => dlg.accept()); await p.click('[data-poll-end="U-1"]'); await p.waitForTimeout(300);
+      check("Umfrage beenden", (state.updates || []).some((u) => u.action === "adminPollEnd" && u.id === "U-1"));
+      check("Keine Fehler (Stimmungsbild)", p.errors.length === 0, p.errors);
+      await ctx.close();
+    }
+
     console.log("--- Anmeldung über Link (langsamer Server)");
     {
       const state = { failLogin: 0 };
@@ -509,9 +546,9 @@ function makeQrVideo(text) {
       const X = `<img src=x class=pwn onerror="window.__xss=1"><svg class=pwn onload="window.__xss=1"></svg>"'><script class=pwn>window.__xss=1</script>`;
       const evil = (d) => {
         if (d.action === "hmLogin") return { ok: true, user: { name: X, role: "Verwaltung" }, areas: [{ code: "TG", ort: X, activity: X }], activities: [X] };
-        if (d.action === "adminOverview") return { ok: true, role: X, work: { days: [{ date: X, planned: X, plannedDone: X, done: [{ time: X, activity: X, ort: X, planned: false, manual: true }, X], missed: [{ activity: X, ort: X, lateOn: X }], open: [{ activity: X, ort: X }] }, X] }, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, photo: "javascript:window.__xss=1", photoDone: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
+        if (d.action === "adminOverview") return { ok: true, role: X, polls: [{ id: X, question: X, options: [X], open: true, to: X, only: X, counts: [X], total: X }], news: [{ row: X, title: X, text: X, only: X, from: X, to: X }], work: { days: [{ date: X, planned: X, plannedDone: X, done: [{ time: X, activity: X, ort: X, planned: false, manual: true }, X], missed: [{ activity: X, ort: X, lateOn: X }], open: [{ activity: X, ort: X }] }, X] }, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, photo: "javascript:window.__xss=1", photoDone: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
         if (d.action === "getTasks") return { ok: true, tasks: [{ id: X, source: X, type: X, status: "offen", entrance: X, wohnung: X, name: X, contact: "javascript:window.__xss=1", details: X, ort: X, created: X, owner: X }] };
-        if (d.action === "news") return { ok: true, weather: { at: new Date().toISOString(), days: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()), icon: X, min: X, max: 40 }, { date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + 86400000)), icon: "__proto__", min: 1, max: 2 }, { date: X }], alerts: [{ event: X, headline: X, headlineEn: X, severity: X, expires: X }, X] }, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
+        if (d.action === "news") return { ok: true, polls: [{ id: X, question: X, options: [X, X], to: X, results: [X, 1] }, X], weather: { at: new Date().toISOString(), days: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()), icon: X, min: X, max: 40 }, { date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + 86400000)), icon: "__proto__", min: 1, max: 2 }, { date: X }], alerts: [{ event: X, headline: X, headlineEn: X, severity: X, expires: X }, X] }, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
         if (d.action === "status") return { ok: true, items: [{ id: "T-260924-ABCD", type: X, status: X, created: X }] };
         return { ok: false, error: X };
       };

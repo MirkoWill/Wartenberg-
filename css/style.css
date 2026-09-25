@@ -1072,3 +1072,17 @@ html.text-large body { zoom: 1.18; }
 .task__complete { margin-top: 8px; padding: 10px 12px; background: var(--c-primary-soft); border-radius: var(--radius); }
 .task__complete-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .task__photos { margin: 6px 0; font-size: 15px; }
+
+/* Stimmungsbild */
+.polls { margin: 0 0 18px; }
+.poll { padding: 14px 16px; margin-top: 10px; background: var(--c-surface); border: 1px solid var(--c-border); border-left: 5px solid #3a6ea5; border-radius: var(--radius); list-style: none; }
+.poll__flag { font-size: 13px; font-weight: 700; color: #3a6ea5; text-transform: uppercase; letter-spacing: .04em; }
+.poll__q { margin: 4px 0 10px; font-size: 19px; }
+.poll__options { display: grid; gap: 8px; }
+.poll__thanks { font-weight: 700; color: var(--c-ok); margin: 0 0 8px; }
+.poll__results { list-style: none; margin: 0; padding: 0; }
+.poll__results li { display: grid; grid-template-columns: minmax(0, 1.3fr) 2fr 48px; gap: 8px; align-items: center; margin: 6px 0; }
+.poll__bar { height: 12px; background: var(--c-primary-soft); border-radius: 6px; overflow: hidden; }
+.poll__bar i { display: block; height: 100%; background: #3a6ea5; }
+.poll__pct { text-align: right; font-weight: 700; }
+.poll-admin { list-style: none; margin: 0 0 10px; padding: 0; }

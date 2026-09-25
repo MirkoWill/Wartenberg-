@@ -158,6 +158,22 @@ Wird ein erledigter Auftrag wieder geöffnet, wird „Erledigt am“ geleert.
 
 **Morgen-Mail um 7 Uhr** an `NOTIFY_EMAIL` – **nur**, wenn Aufträge überfällig oder bald fällig sind.
 
+## Hinweise und Stimmungsbild aus dem Cockpit
+
+- **Hinweise für Bewohner:** Cockpit → „Hinweise für Bewohner“ → Titel, Text, ab/bis, Aufgänge, „wichtig“ →
+  erscheint auf der Startseite der App (Blatt „Aktuelles“). „Beenden“ nimmt ihn sofort heraus.
+- **Stimmungsbild:** Cockpit → „Neue Umfrage starten“ (Frage, 2–6 Antworten, Enddatum, Aufgänge, Ergebnis für
+  Bewohner sichtbar ja/nein). Bewohner stimmen auf der Startseite ab – **anonym**, eine Stimme je Gerät. Ergebnis je
+  Antwort und je Aufgang im Cockpit. Blätter „Umfragen“ und „Umfrage-Stimmen“ (Stimmen werden nach 2 Jahren gelöscht).
+
+## Tabelle übersichtlich (Menü „Tabelle übersichtlich formatieren“)
+
+Läuft auch bei `setup`: Blatt **„Start“** mit Anleitung und Sprungmarken, Reiter nach Farbe geordnet
+(grün = tägliche Arbeit, blau = Auswertung, grau = automatisch erfasst, orange = Einstellungen), Kopfzeilen, Spaltenbreiten,
+Datumsformate, Zeilen je Status eingefärbt (offen gelb, in Arbeit blau, erledigt grün), technische Spalten
+(Erledigt-Code, Token, Stimm-Kennung) ausgeblendet. **Daten werden nicht verändert.** Hinweis: eigene bedingte
+Formatierungen in Blättern mit Status-Spalte werden dabei ersetzt.
+
 ## Kalender-Abo für Bewohner
 
 - **Müllabfuhr:** Infos → Müllabfuhr: iPhone/Outlook, Google Kalender oder Adresse kopieren (BSR-Termine aus `assets/*.ics`).

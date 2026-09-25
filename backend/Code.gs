@@ -75,6 +75,14 @@ const CONFIG = {
       headers: ["Datum", "Tätigkeit", "Ort", "Soll", "Ist", "Erfüllt", "Monat"],
     },
     // Fehlerüberwachung: Serverfehler und von der App gemeldete Fehler (90 Tage)
+    polls: {
+      name: "Umfragen",
+      headers: ["ID", "Aktiv", "Frage", "Antworten", "Von", "Bis", "Nur für Aufgang-IDs", "Ergebnis für Bewohner sichtbar", "Erstellt"],
+    },
+    votes: {
+      name: "Umfrage-Stimmen",
+      headers: ["Zeit", "Umfrage-ID", "Antwort", "Aufgang-ID", "Stimm-Kennung"],
+    },
     errors: {
       name: "Fehlerprotokoll",
       headers: ["Zeit", "Quelle", "Meldung", "Details", "Ansicht", "Browser"],
@@ -155,6 +163,7 @@ const CONFIG = {
     cleaningYears: 2,         // Tätigkeitsnachweise inkl. Fotos
     planYears: 2,             // vergangene Einträge im Reinigungsplan
     errorLogDays: 90,         // Fehlerprotokoll
+    votesYears: 2,            // anonyme Umfrage-Stimmen
   },
   // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
@@ -210,8 +219,10 @@ function setup() {
   if (leer && leer.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(leer);
 
   setupNewsSheet();
+  setupPollSheet();
   setupPortalSheets();
   rebuildMeterOverview();
+  try { formatSpreadsheet(); } catch (err) { console.warn("Formatieren:", err); }
   Logger.log("Einrichtung abgeschlossen. Foto-Ordner: %s", props.getProperty("PHOTO_FOLDER_ID"));
 }
 
@@ -219,6 +230,7 @@ function setup() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Mieter-App")
+    .addItem("Tabelle übersichtlich formatieren", "formatSpreadsheetNow")
     .addItem("Zähler-Übersicht aktualisieren", "rebuildMeterOverview")
     .addSeparator()
     .addItem("Reinigungsplan → Kalender übertragen", "syncPlanToCalendar")
@@ -263,6 +275,7 @@ function doPost(e) {
         rateLimit("submit", CONFIG.LIMITS.submitsPerHour, 3600);
         return json(submitMeterReadings(Object.assign({}, p, { meters: [p] })));
       case "reportError": return json(reportClientError(p));
+      case "vote": rateLimit("vote", 300, 3600); return json(submitVote(p));
       default: return json({ ok: false, error: "Unbekannte Aktion" });
     }
   } catch (err) {
@@ -576,7 +589,9 @@ function getNews(obj) {
   // Kalender-Abo „Reinigung“: öffentliche iCal-Adresse des Google-Kalenders (Script-Eigenschaft CLEANING_ICS_URL)
   const ics = String(PropertiesService.getScriptProperties().getProperty("CLEANING_ICS_URL") || "").trim();
   const cleaningIcs = /^https:\/\/calendar\.google\.com\/calendar\/ical\/[^\s"'<>]+\.ics$/.test(ics) ? ics : "";
-  return { ok: true, items: items.slice(0, 10), care, weather, cleaningIcs };
+  let polls = [];
+  try { polls = residentPolls(object); } catch (err) { console.error("Umfragen:", err); }
+  return { ok: true, items: items.slice(0, 10), care, weather, cleaningIcs, polls };
 }
 
 /**
@@ -1001,6 +1016,8 @@ const STAFF_ACTIONS = {
   adminOverview: (p, user) => adminOverview(p, user),
   adminUpdateTask: (p, user) => adminUpdateTask(p, user),
   adminNewsSave: (p, user) => adminNewsSave(p, user),
+  adminPollSave: (p, user) => adminPollSave(p, user),
+  adminPollEnd: (p, user) => adminPollEnd(p, user),
   adminNewsEnd: (p, user) => adminNewsEnd(p, user),
   hmLogin: (p, user) => staffLogin(user),
   logCleaning: (p, user) => logCleaning(p, user),
@@ -1617,6 +1634,7 @@ function cleanupOldData() {
     meter: deleteRowsWhere(CONFIG.SHEETS.meter, (r) => older(date(r.Ablesedatum) || date(r.Eingang), before(R.meterYears))),
     cleaning: deleteRowsWhere(CONFIG.SHEETS.cleaning, (r) => older(date(r["Zeitpunkt (Scan)"]), before(R.cleaningYears))),
     plan: deleteRowsWhere(CONFIG.SHEETS.plan, (r) => older(date(r.Bis) || date(r.Datum), before(R.planYears))),
+    votes: deleteRowsWhere(CONFIG.SHEETS.votes, (r) => older(date(r.Zeit), before(R.votesYears))),
     errors: deleteRowsWhere(CONFIG.SHEETS.errors, (r) => older(date(r.Zeit), new Date(now.getTime() - R.errorLogDays * 86400000))),
   };
   if (result.meter) { try { rebuildMeterOverview(); } catch (e) { console.error(e); } }
@@ -1887,6 +1905,7 @@ function adminOverview(p, user) {
     role: user.role,
     work: workLog(scans, areas, plan, now),
     news: lead ? [] : adminNewsList(),
+    polls: lead ? [] : adminPollList(),
     time: now.toISOString(),
   };
 }
@@ -2527,3 +2546,293 @@ function adminNewsEnd(p, user) {
   return { ok: true };
 }
 
+/* ==========================================================================
+   Stimmungsbild (anonyme Umfrage) – Verwaltung legt an, Bewohner stimmen in der App ab.
+   Gespeichert wird je Stimme nur: Zeit, Umfrage, Antwort, Aufgang und eine Einweg-Kennung
+   (SHA-256 aus Umfrage + Zufallswert des Geräts) gegen doppelte Stimmen – kein Name, keine Wohnung.
+   ========================================================================== */
+
+function setupPollSheet() {
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.polls.name);
+  if (!sheet) return;
+  const box = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  sheet.getRange(2, 2, 200, 1).setDataValidation(box);
+  sheet.getRange(2, 8, 200, 1).setDataValidation(box);
+  sheet.getRange(2, 5, 200, 2).setNumberFormat("dd.MM.yyyy");
+}
+
+function pollOptions(v) {
+  return String(v || "").split(/\n|\s\|\s/).map((x) => x.trim()).filter(Boolean).slice(0, 6);
+}
+
+function pollRows() {
+  return sheetObjects(CONFIG.SHEETS.polls).filter((r) => String(r.ID || "").trim() && String(r.Frage || "").trim());
+}
+
+function pollCounts(id, n) {
+  const counts = Array.from({ length: n }, () => 0);
+  const perEntrance = {};
+  sheetObjects(CONFIG.SHEETS.votes).forEach((v) => {
+    if (String(v["Umfrage-ID"]) !== id) return;
+    const i = Number(v.Antwort);
+    if (i >= 0 && i < n) {
+      counts[i]++;
+      const e = entranceName(v["Aufgang-ID"]) || "ohne Aufgang";
+      (perEntrance[e] = perEntrance[e] || Array.from({ length: n }, () => 0))[i]++;
+    }
+  });
+  return { counts, total: counts.reduce((a, b) => a + b, 0), perEntrance };
+}
+
+function pollIsOpen(r, obj) {
+  const ymd = (d) => (d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd") : "");
+  const today = ymd(new Date());
+  const only = String(r["Nur für Aufgang-IDs"] || "").split(/[,;\s]+/).filter(Boolean);
+  return r.Aktiv === true && (!(r.Von instanceof Date) || ymd(r.Von) <= today) && (!(r.Bis instanceof Date) || ymd(r.Bis) >= today)
+    && (!only.length || only.indexOf(String(obj || "")) !== -1);
+}
+
+/** Für die App (mit „Aktuelles“): offene Umfragen für diesen Aufgang, Ergebnis nur falls freigegeben. */
+function residentPolls(obj) {
+  return pollRows().filter((r) => pollIsOpen(r, obj)).slice(0, 3).map((r) => {
+    const options = pollOptions(r.Antworten);
+    const show = r["Ergebnis für Bewohner sichtbar"] === true;
+    return { id: String(r.ID), question: plain(r.Frage, 200), options: options.map((o) => plain(o, 80)),
+      to: r.Bis instanceof Date ? Utilities.formatDate(r.Bis, CONFIG.TIMEZONE, "yyyy-MM-dd") : "",
+      results: show ? pollCounts(String(r.ID), options.length).counts : null };
+  });
+}
+
+function voterHash(pollId, voter) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, `${pollId}:${voter}:${CONFIG.APP_URL}`);
+  return bytes.map((b) => ((b + 256) % 256).toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
+/** Abstimmen (App, mit PIN). Eine Stimme je Gerät und Umfrage. */
+function submitVote(p) {
+  const id = String(p.pollId || "").trim();
+  const voter = String(p.voter || "");
+  if (!/^[a-f0-9]{32,64}$/i.test(voter)) throw userError("Abstimmung nicht möglich – bitte App neu laden.");
+  const obj = objectId(p.obj);
+  const poll = pollRows().find((r) => String(r.ID) === id);
+  if (!poll || !pollIsOpen(poll, obj)) throw userError("Diese Umfrage ist beendet.");
+  const options = pollOptions(poll.Antworten);
+  const choice = Number(p.option);
+  if (!Number.isInteger(choice) || choice < 0 || choice >= options.length) throw userError("Bitte eine Antwort wählen.");
+  const hash = voterHash(id, voter);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    if (sheetObjects(CONFIG.SHEETS.votes).some((v) => String(v["Umfrage-ID"]) === id && v["Stimm-Kennung"] === hash)) {
+      throw userError("Von diesem Gerät wurde bereits abgestimmt.", "voted");
+    }
+    const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.votes.name);
+    sheet.appendRow([new Date(), id, choice, obj, hash]);
+  } finally {
+    lock.releaseLock();
+  }
+  const show = poll["Ergebnis für Bewohner sichtbar"] === true;
+  return { ok: true, results: show ? pollCounts(id, options.length).counts : null };
+}
+
+/** Cockpit: Umfragen der letzten Zeit mit Ergebnis. */
+function adminPollList() {
+  const ymd = (d) => (d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd") : "");
+  return pollRows().slice(-10).reverse().map((r) => {
+    const options = pollOptions(r.Antworten);
+    const c = pollCounts(String(r.ID), options.length);
+    return { id: String(r.ID), question: plain(r.Frage, 200), options: options.map((o) => plain(o, 80)), open: pollIsOpen(r, "")
+      || (r.Aktiv === true && (!(r.Bis instanceof Date) || ymd(r.Bis) >= ymd(new Date()))),
+      to: ymd(r.Bis), only: String(r["Nur für Aufgang-IDs"] || ""), showResults: r["Ergebnis für Bewohner sichtbar"] === true,
+      counts: c.counts, total: c.total, perEntrance: c.perEntrance };
+  });
+}
+
+function adminPollSave(p, user) {
+  requireVerwaltung(user);
+  const question = str(p.question, 200);
+  const options = (Array.isArray(p.options) ? p.options : []).map((o) => str(o, 80)).filter(Boolean).slice(0, 6);
+  if (!question) throw userError("Bitte eine Frage eingeben");
+  if (options.length < 2) throw userError("Bitte mindestens zwei Antworten eingeben");
+  const to = parseIsoDate(String(p.to || ""));
+  if (to && to < berlinToday()) throw userError("Das Enddatum liegt in der Vergangenheit");
+  const only = (Array.isArray(p.only) ? p.only : []).map(objectId).filter(Boolean).slice(0, 20).join(", ");
+  const id = newId("U");
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.polls.name);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const row = lastContentRow(sheet, [1, 3]) + 1;
+    sheet.getRange(row, 1, 1, CONFIG.SHEETS.polls.headers.length).setValues([[id, true, protectCell(question),
+      options.map(protectCell).join("\n"), new Date(), to || "", only, p.showResults === true, new Date()]]);
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true, id };
+}
+
+function adminPollEnd(p, user) {
+  requireVerwaltung(user);
+  const hit = pollRows().find((r) => String(r.ID) === String(p.id || ""));
+  if (!hit) throw userError("Umfrage nicht gefunden");
+  getSpreadsheet().getSheetByName(CONFIG.SHEETS.polls.name).getRange(hit._row, 2).setValue(false);
+  return { ok: true };
+}
+
+/* ==========================================================================
+   Tabelle übersichtlich formatieren (Menü + setup) – verändert keine Daten, nur Aussehen,
+   Reihenfolge der Blätter, Spaltenbreiten, Farben je Status und ein Startblatt mit Anleitung.
+   ========================================================================== */
+
+const SHEET_GROUPS = [
+  // [Blattname, Gruppe] – Reihenfolge = Reihenfolge der Reiter
+  ["Tickets", "arbeit"], ["Mängel Hausmeister", "arbeit"], ["Aktuelles", "arbeit"], ["Umfragen", "arbeit"],
+  ["Reinigungsplan", "arbeit"], ["Übersicht Zähler", "auswertung"], ["Zählerstände", "daten"], ["Reinigung", "daten"],
+  ["Mitarbeiter", "einstellung"], ["QR-Orte", "einstellung"], ["Tätigkeiten", "einstellung"],
+  ["Auswertung Aufträge", "auswertung"], ["Auswertung Reinigung", "auswertung"], ["Umfrage-Stimmen", "daten"], ["Fehlerprotokoll", "daten"],
+];
+const GROUP_COLORS = { start: "#151515", arbeit: "#6d7454", auswertung: "#3a6ea5", daten: "#9aa0a6", einstellung: "#b36b00" };
+const GROUP_TEXT = {
+  arbeit: "Tägliche Arbeit – hier dürfen Sie Einträge ändern (Status, Zuständig, Notizen, Plan, Hinweise).",
+  auswertung: "Wird automatisch erstellt – bitte nicht bearbeiten.",
+  daten: "Automatisch erfasste Daten (Nachweise, Zählerstände, Stimmen, Fehler) – nur lesen.",
+  einstellung: "Einstellungen: Mitarbeiter-Links, QR-Orte, Tätigkeiten.",
+};
+
+function columnLetter(n) {
+  let s = "";
+  for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+}
+
+function formatSpreadsheet() {
+  const ss = getSpreadsheet();
+  const defs = Object.keys(CONFIG.SHEETS).map((k) => CONFIG.SHEETS[k]);
+  const WIDE = /Details|Beschreibung|Text|Notiz|Frage|Antworten|Meldung|Persönlicher Link|Ort$|^Ort|Tätigkeit|Anmerkung/;
+  const DATETIME = /^(Eingang|Zeit|Zeitpunkt \(Scan\)|Eingang Server|Erledigt am|In Arbeit seit|Erstellt|Reaktion fällig|Erledigung fällig)$/;
+  const DATE = /^(Von|Bis|Termin|Ablesedatum|Datum)$/;
+  const HIDE = { "Tickets": ["Erledigt-Code"], "Mitarbeiter": ["Token"], "Umfrage-Stimmen": ["Stimm-Kennung"] };
+  const REBUILT = ["Übersicht Zähler", "Auswertung Aufträge", "Auswertung Reinigung"]; // werden neu aufgebaut – nur Reiter/Breiten
+  const done = [];
+  defs.forEach((def) => {
+    const sheet = ss.getSheetByName(def.name);
+    if (!sheet) return;
+    try {
+      const n = def.headers.length;
+      sheet.setFrozenRows(1);
+      if (REBUILT.indexOf(def.name) === -1) {
+        sheet.getRange(1, 1, 1, n).setFontWeight("bold").setBackground("#6d7454").setFontColor("#ffffff")
+          .setVerticalAlignment("middle").setWrap(true);
+        sheet.setRowHeight(1, 36);
+      }
+      def.headers.forEach((h, i) => {
+        const col = i + 1;
+        sheet.setColumnWidth(col, WIDE.test(h) ? 260 : /^(ID|Nr|Status|Aktiv|Wichtig|Dringend|Geprüft|Rolle)$/.test(h) ? 100 : 140);
+        if (REBUILT.indexOf(def.name) !== -1) return;
+        const body = sheet.getRange(2, col, Math.max(sheet.getMaxRows() - 1, 1), 1);
+        if (DATETIME.test(h)) body.setNumberFormat("dd.MM.yyyy HH:mm");
+        else if (DATE.test(h)) body.setNumberFormat("dd.MM.yyyy");
+        if (WIDE.test(h)) body.setWrap(true);
+        body.setVerticalAlignment("top");
+      });
+      (HIDE[def.name] || []).forEach((h) => { const c = def.headers.indexOf(h) + 1; if (c) sheet.hideColumns(c); });
+      // Zeilen je Status einfärben (offen gelb, in Arbeit blau, erledigt grün)
+      const st = def.headers.indexOf("Status") + 1;
+      if (st && REBUILT.indexOf(def.name) === -1) {
+        const L = columnLetter(st);
+        const range = sheet.getRange(2, 1, Math.max(sheet.getMaxRows() - 1, 1), n);
+        const rule = (value, color) => SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=$${L}2="${value}"`)
+          .setBackground(color).setRanges([range]).build();
+        sheet.setConditionalFormatRules([rule("offen", "#fff4d6"), rule("in Arbeit", "#e3eefa"), rule("erledigt", "#e8f3e0")]);
+      }
+      const group = (SHEET_GROUPS.find((g) => g[0] === def.name) || [])[1];
+      if (group) sheet.setTabColor(GROUP_COLORS[group]);
+      done.push(def.name);
+    } catch (err) {
+      console.warn(`Formatieren ${def.name}:`, err);
+    }
+  });
+  buildStartSheet(ss);
+  // Reiter-Reihenfolge: Start, dann Arbeit, Auswertung, Daten, Einstellungen
+  try {
+    let pos = 1;
+    ["Start"].concat(SHEET_GROUPS.map((g) => g[0])).forEach((name) => {
+      const sh = ss.getSheetByName(name);
+      if (!sh) return;
+      ss.setActiveSheet(sh);
+      ss.moveActiveSheet(pos++);
+    });
+    ss.setActiveSheet(ss.getSheetByName("Start"));
+  } catch (err) {
+    console.warn("Reihenfolge:", err);
+  }
+  return { formatted: done.length };
+}
+
+/** Startblatt: kurze Anleitung und Sprungmarken zu allen Blättern. */
+function buildStartSheet(ss) {
+  const sheet = ss.getSheetByName("Start") || ss.insertSheet("Start", 0);
+  sheet.clear();
+  sheet.setTabColor(GROUP_COLORS.start);
+  sheet.setHiddenGridlines(true);
+  sheet.setColumnWidth(1, 30);
+  sheet.setColumnWidth(2, 220);
+  sheet.setColumnWidth(3, 560);
+  const rows = [
+    ["", "Mieter-App WEG Wartenberger Dorfkrug", ""],
+    ["", "Willbrandt und Kompagnon · Tagesgeschäft", ""],
+    ["", "", ""],
+    ["", "So arbeiten Sie mit der Tabelle", ""],
+    ["", "Menü „Mieter-App“", "Oben in der Menüleiste: Auswertung, Monatsbericht-Vorschau, Kalender, Mitarbeiter-Links, Systemprüfung."],
+    ["", "Am Handy", "Im Cockpit der App (Links 007/008) lassen sich Aufträge, Hinweise und Umfragen bequemer bearbeiten."],
+    ["", "Bitte nicht", "Spalten löschen, umbenennen oder verschieben – die App liest die Spalten über ihre Überschrift."],
+    ["", "", ""],
+    ["", "Blätter", ""],
+  ];
+  const groups = ["arbeit", "auswertung", "daten", "einstellung"];
+  const linkRows = [];
+  groups.forEach((g) => {
+    rows.push(["", GROUP_TEXT[g], ""]);
+    SHEET_GROUPS.filter((x) => x[1] === g).forEach(([name]) => {
+      const sh = ss.getSheetByName(name);
+      if (!sh) return;
+      rows.push(["", name, sheetPurpose(name)]);
+      linkRows.push({ row: rows.length, gid: sh.getSheetId(), name });
+    });
+    rows.push(["", "", ""]);
+  });
+  sheet.getRange(1, 1, rows.length, 3).setValues(rows).setVerticalAlignment("middle").setWrap(true);
+  sheet.getRange(1, 2).setFontSize(18).setFontWeight("bold").setFontColor("#6d7454");
+  sheet.getRange(2, 2).setFontColor("#5f625a");
+  [4, 9].forEach((r) => sheet.getRange(r, 2).setFontSize(13).setFontWeight("bold"));
+  sheet.getRange(5, 2, 3, 1).setFontWeight("bold");
+  rows.forEach((r, i) => { if (groups.some((g) => GROUP_TEXT[g] === r[1])) sheet.getRange(i + 1, 2, 1, 2).merge().setFontWeight("bold").setBackground("#eef0e6"); });
+  linkRows.forEach((l) => {
+    sheet.getRange(l.row, 2).setRichTextValue(SpreadsheetApp.newRichTextValue().setText(l.name).setLinkUrl(`#gid=${l.gid}`).build());
+  });
+}
+
+function sheetPurpose(name) {
+  return {
+    "Tickets": "Meldungen der Bewohner (Mangel, Klingelschild, Elektroraum) – Status, Zuständig, Notiz.",
+    "Mängel Hausmeister": "Vom Hausmeisterdienst gemeldete Mängel.",
+    "Aktuelles": "Hinweise auf der Startseite der App (auch im Cockpit anlegbar).",
+    "Umfragen": "Stimmungsbilder (auch im Cockpit anlegbar).",
+    "Reinigungsplan": "Geplante Reinigungen – werden in den Google-Kalender übertragen.",
+    "Übersicht Zähler": "Zählerstände je Wohnung, übersichtlich (wird neu aufgebaut).",
+    "Zählerstände": "Alle gemeldeten Zählerstände mit Foto.",
+    "Reinigung": "Tätigkeitsnachweise per QR-Scan.",
+    "Mitarbeiter": "Persönliche Links (007/008 Verwaltung, 001 Leitung, 100+ Hausmeister). „Aktiv“ = freigeschaltet.",
+    "QR-Orte": "Orte mit QR-Code für die Nachweise.",
+    "Tätigkeiten": "Auswahl der Tätigkeiten beim Scannen.",
+    "Auswertung Aufträge": "Für Looker Studio – nachts neu berechnet.",
+    "Auswertung Reinigung": "Für Looker Studio – nachts neu berechnet.",
+    "Umfrage-Stimmen": "Anonyme Stimmen (nur Antwort, Aufgang, Zeit).",
+    "Fehlerprotokoll": "Technische Fehler (90 Tage).",
+  }[name] || "";
+}
+
+function formatSpreadsheetNow() {
+  const r = formatSpreadsheet();
+  showResult("Tabelle", `${r.formatted} Blätter übersichtlich formatiert. Das Blatt „Start“ erklärt alle Blätter.`);
+}

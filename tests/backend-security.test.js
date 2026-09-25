@@ -6,25 +6,26 @@ let calName = 'WEG Wartenberger Dorfkrug'; const alerts = []; const cache = {}; 
 const events = {}; let evSeq = 0;
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = {}, mails = [], files = [];
+const chain = (o) => { const p = new Proxy(o, { get: (t, k) => (k in t || typeof k !== 'string' || k === 'toJSON' || k === 'then' ? t[k] : () => p) }); return p; };
 function mkSheet(name) {
   const sh = { name, grid: [], filter: null, bgs: {}, getName: () => name,
     ensure(r) { while (sh.grid.length < r) sh.grid.push([]); },
-    getRange(r, c, nr = 1, nc = 1) { if (typeof r === 'string') return {}; const api = {
-      setValues(v) { sh.ensure(r + nr - 1); v.forEach((row, i) => row.forEach((x, j) => { sh.grid[r - 1 + i][c - 1 + j] = x; })); return api; },
+    getRange(r, c, nr = 1, nc = 1) { if (typeof r === 'string') return {}; let P; const api = {
+      setValues(v) { sh.ensure(r + nr - 1); v.forEach((row, i) => row.forEach((x, j) => { sh.grid[r - 1 + i][c - 1 + j] = x; })); return P; },
       getValues() { const out = []; for (let i = 0; i < nr; i++) { const row = sh.grid[r - 1 + i] || []; out.push(Array.from({ length: nc }, (_, j) => row[c - 1 + j] === undefined ? '' : row[c - 1 + j])); } return out; },
-      setValue(x) { sh.ensure(r); sh.grid[r - 1][c - 1] = x; return api; },
-      setBackgrounds(b) { sh.bgs = b; return api; }, setRichTextValues(v) { sh.ensure(r + nr - 1); v.forEach((row, i) => { sh.grid[r - 1 + i][c - 1] = row[0]; }); return api; }, setFontWeight() { return api; }, setBackground() { return api; }, setFontColor() { return api; },
-      setNumberFormat() { return api; }, setDataValidation() { return api; },
-      createFilter() { sh.filter = { remove() { sh.filter = null; } }; return sh.filter; } }; return api; },
+      setValue(x) { sh.ensure(r); sh.grid[r - 1][c - 1] = x; return P; },
+      setBackgrounds(b) { sh.bgs = b; return P; }, setRichTextValues(v) { sh.ensure(r + nr - 1); v.forEach((row, i) => { sh.grid[r - 1 + i][c - 1] = row[0]; }); return P; }, setFontWeight() { return P; }, setBackground() { return P; }, setFontColor() { return P; },
+      setNumberFormat() { return P; }, setDataValidation() { return P; },
+      createFilter() { sh.filter = { remove() { sh.filter = null; } }; return sh.filter; } }; P = chain(api); return P; },
     getDataRange() { return { getValues: () => sh.grid.map((r) => r.slice()) }; },
     getLastRow() { return sh.grid.length; }, getMaxRows() { return 1000; }, setFrozenRows() {},
     appendRow(row) { sh.grid.push(row); }, clear() { sh.grid = []; }, getFilter() { return sh.filter; }, autoResizeColumns() {} };
-  return (sheets[name] = sh);
+  return (sheets[name] = chain(sh));
 }
-const ss = { getSheetByName: (n) => sheets[n] || null, insertSheet: mkSheet, getSheets: () => Object.values(sheets), deleteSheet() {}, getUrl: () => 'https://sheet' };
+const ss = chain({ getSheetByName: (n) => sheets[n] || null, insertSheet: mkSheet, getSheets: () => Object.values(sheets), deleteSheet() {}, getUrl: () => 'https://sheet' });
 const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, encodeURIComponent,
   Logger: { log() {} },
-  SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
+  SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1 }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
   DriveApp: { getFileById: (id) => ({ setTrashed() {}, getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 10),
