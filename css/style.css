@@ -1101,3 +1101,29 @@ html.text-large body { zoom: 1.18; }
 .transit-lines { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .transit-line { padding: 3px 10px; border-radius: 999px; background: #8b1e5a; color: #fff; font-weight: 700; font-size: 14px; }
 .cal-label { margin: 12px 0 0; }
+
+/* ---------- Fitnessraum ---------- */
+.fit-me { padding: 12px 14px; margin-bottom: 8px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); }
+.fit-me:empty { display: none; }
+.fit-me__head { margin-bottom: 8px; }
+.fit-me p { margin: 6px 0 0; }
+.fit-bar { display: block; height: 10px; border-radius: 999px; background: var(--c-border); overflow: hidden; }
+.fit-bar i { display: block; height: 100%; background: var(--c-ok); border-radius: 999px; }
+.fit-bar--small { height: 6px; }
+.fit-form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fit-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.fit-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--c-border); font-size: 15px; }
+.fit-list li:last-child { border-bottom: 0; }
+.fit-list .fit-list__day { padding-top: 12px; font-weight: 700; font-size: 14px; color: var(--c-muted); border-bottom: 0; }
+.fit-list .fit-list__mine { font-weight: 600; }
+.fit-list .fit-list__mine span::before { content: "● "; color: var(--c-ok); }
+.fit-list .fit-list__past { color: var(--c-muted); }
+.fit-board { list-style: none; margin: 8px 0; padding: 0; }
+.fit-board li { display: grid; grid-template-columns: 30px 1fr auto 44px; grid-template-areas: "medal nr val streak" "medal bar bar bar"; gap: 4px 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--c-border); }
+.fit-board li:last-child { border-bottom: 0; }
+.fit-board__medal { grid-area: medal; font-size: 22px; text-align: center; }
+.fit-board__nr { grid-area: nr; font-weight: 700; }
+.fit-board__val { grid-area: val; font-variant-numeric: tabular-nums; }
+.fit-board__streak { grid-area: streak; text-align: right; }
+.fit-board .fit-bar { grid-area: bar; }
+.fit-board li.fit-board__me .fit-board__nr::after { content: " (ich)"; font-weight: 400; color: var(--c-muted); }

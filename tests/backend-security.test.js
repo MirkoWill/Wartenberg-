@@ -165,8 +165,9 @@ quiet = false; fails = 0;
 console.log('================ PEN-TEST BACKEND ================');
 ctx.setup();
 const stf = sheets['Mitarbeiter'].grid;
-const ADM = stf[1][3], ADM2 = stf[2][3], LEAD = stf[3][3], HM = stf[4][3], SPARE = stf[5][3];
-stf[4][2] = true; delete cache.staff;           // Nr. 100 vergeben, 101 bleibt Vorrat
+const row = (nr) => stf.find((r) => r[0] === nr);
+const ADM = row('007')[3], ADM2 = row('008')[3], LEAD = row('001')[3], HM = row('100')[3], SPARE = row('101')[3], FIT = row('010')[3];
+row('100')[2] = true; delete cache.staff;           // Nr. 100 vergeben, 101 bleibt Vorrat
 const reset = () => Object.keys(cache).forEach((k) => delete cache[k]);
 const P = (x) => post(x); const G = (q) => ctx.doGet({ parameter: q });
 const photo2 = photo;
@@ -191,6 +192,12 @@ check('A7 Bewohner-Aktion mit falschem Token statt PIN', P({ ...base, pin: '', t
 check('A8 Status/News ohne PIN', G({ action: 'status', ids: 'T-260924-ABCD' }).code === 'pin' && G({ action: 'news', obj: 'lind6' }).code === 'pin');
 check('A9 getTasks per GET ohne/mit falschem Token', G({ action: 'getTasks' }).ok === false && G({ action: 'getTasks', token: 'a'.repeat(40) }).ok === false);
 check('A10 PIN mit Leerzeichen/Typ-Tricks', [' 13059 ', 13059, ['13059'], { toString: () => '13059' }].map((pin) => P({ ...base, pin, action: 'submitTicket', type: 'Mangel', details: 'x' }).ok).join() === 'true,true,true,false');
+check('A11 Fitness-Zugang (010): nur Fitnessraum – keine Aufträge, Nachweise, Mängel, Cockpit', ['getTasks', 'logCleaning', 'completeTask', 'submitStaffDefect', 'adminOverview', 'adminUpdateTask', 'adminNewsSave', 'adminPollSave', 'adminPollEnd', 'adminNewsEnd']
+  .every((action) => P({ action, token: FIT, id: 'x', areaToken: 'TG', ort: 'x', beschreibung: 'x' }).code === 'staff') && G({ action: 'getTasks', token: FIT }).code === 'staff' && P({ action: 'fitnessOverview', token: FIT }).ok);
+check('A12 Fitnessraum nicht für Hausmeister, Leitung, ohne Token, per PIN', [HM, LEAD, '', 'f'.repeat(40)].every((token) => P({ action: 'fitnessOverview', token }).code === 'staff')
+  && P({ action: 'fitnessBook', pin: '13059', date: '2030-01-01', time: '08:00', minutes: 30 }).code === 'staff');
+check('A13 Fitness-Buchung: Typ-Tricks bei Datum/Zeit/Dauer', [{ date: ['2030-01-01'], time: '08:00', minutes: 30 }, { date: '2030-01-01', time: '8:00', minutes: 30 }, { date: '2030-01-01', time: '08:00', minutes: '30' + 'x' }, { date: '2030-02-31', time: '08:00', minutes: 30 }, { date: '2030-01-01', time: '08:00', minutes: 1e9 }]
+  .every((b) => !P({ action: 'fitnessBook', token: FIT, ...b }).ok));
 
 console.log('--- B. Rechte / Datenabfluss');
 reset();

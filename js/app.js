@@ -1486,7 +1486,8 @@
       params.delete("hm");
       params.delete("scan");
       const q = params.toString();
-      history.replaceState(null, "", location.pathname + (q ? `?${q}` : "") + (token || scan ? "#hausmeister" : location.hash));
+      const target = token && !scan && location.hash === "#fitness" ? "#fitness" : "#hausmeister";
+      history.replaceState(null, "", location.pathname + (q ? `?${q}` : "") + target);
     }
   }
 
@@ -1556,7 +1557,8 @@
         if (!cur || cur.token !== s.token) return;
         writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities, plan: data.plan || null });
         // Aufträge nur vorladen, wenn sie gebraucht werden (Hausmeister-Bereich) – im Cockpit spart das eine Anfrage
-        if (!isAdmin() || currentView === "hausmeister") loadTasks();
+        const fitOnly = data.user && data.user.role === "Fitness";
+        if (!fitOnly && (!isAdmin() || currentView === "hausmeister")) loadTasks();
         if (isAdmin() && currentView === "cockpit") loadCockpit();
         fetch("vendor/html5-qrcode.min.js").catch(() => {}); // für Scans ohne Netz vorab in den Cache
         break;
@@ -1587,13 +1589,20 @@
     $("#staffTab").hidden = !loggedIn;
     // Cockpit: Verwaltung (alles) und Leitung des Hausmeisterdienstes (Hausmeister-Aufträge + Team)
     const admin = !!(loggedIn && s.user && (s.user.role === "Verwaltung" || s.user.role === "Leitung"));
+    // Nur Fitnessraum (010/011): eigener Reiter, keine Hausmeister-Werkzeuge
+    const fitOnly = !!(loggedIn && s.user && s.user.role === "Fitness");
     const tab = $("#staffTab");
-    if (tab.dataset.role !== String(admin)) {
-      tab.dataset.role = String(admin);
-      tab.setAttribute("href", admin ? "#cockpit" : "#hausmeister");
-      tab.dataset.tab = admin ? "cockpit hausmeister" : "hausmeister";
-      tab.innerHTML = admin ? '<span aria-hidden="true">📊</span>Cockpit' : '<span aria-hidden="true">🧹</span>Hausmeister';
+    const kind = admin ? "admin" : fitOnly ? "fitness" : "staff";
+    if (tab.dataset.role !== kind) {
+      tab.dataset.role = kind;
+      tab.setAttribute("href", admin ? "#cockpit" : fitOnly ? "#fitness" : "#hausmeister");
+      tab.dataset.tab = admin ? "cockpit hausmeister fitness" : fitOnly ? "fitness" : "hausmeister";
+      tab.innerHTML = admin ? '<span aria-hidden="true">📊</span>Cockpit'
+        : fitOnly ? '<span aria-hidden="true">💪</span>Fitness' : '<span aria-hidden="true">🧹</span>Hausmeister';
+      if (tab.dataset.tab.split(" ").includes(currentView)) tab.setAttribute("aria-current", "page");
     }
+    renderFitnessAccess();
+    if (fitOnly && currentView === "hausmeister") { location.hash = "fitness"; return; }
     $("#cockpitNone").hidden = admin || !!(loggedIn && !s.user);
     $("#cockpitArea").hidden = !admin;
     $(".tabbar").classList.toggle("tabbar--5", loggedIn);
@@ -2357,6 +2366,24 @@
     if (name === "tasks") loadTasks();
   }
 
+  function logoutStaff() {
+    const pending = (readJson(STAFF_QUEUE_KEY) || []).length;
+    const msg = "Auf diesem Gerät abmelden? Zum erneuten Anmelden brauchen Sie Ihren persönlichen Link."
+      + (pending ? ` ${pending} Nachweis(e) werden noch gesendet, sobald Netz da ist.` : "");
+    if (!window.confirm(msg)) return;
+    stopScan();
+    resetScanForm();
+    pendingScan = null;
+    localRemove(STAFF_KEY);
+    localRemove(STAFF_TODAY_KEY);
+    localRemove(TASKS_KEY);
+    localRemove(COCKPIT_KEY);
+    localRemove(FIT_KEY);
+    renderStaff();
+    location.hash = "notfall";
+    toast("Abgemeldet.", "ok");
+  }
+
   function initStaff() {
     captureStaffParams();
     renderStaff();
@@ -2415,22 +2442,7 @@
       staffLogin();
     });
     $("#qrPrint").addEventListener("click", () => window.print());
-    $("#staffLogout").addEventListener("click", () => {
-      const pending = (readJson(STAFF_QUEUE_KEY) || []).length;
-      const msg = "Auf diesem Gerät abmelden? Zum erneuten Anmelden brauchen Sie Ihren persönlichen Link."
-        + (pending ? ` ${pending} Nachweis(e) werden noch gesendet, sobald Netz da ist.` : "");
-      if (!window.confirm(msg)) return;
-      stopScan();
-      resetScanForm();
-      pendingScan = null;
-      localRemove(STAFF_KEY);
-      localRemove(STAFF_TODAY_KEY);
-      localRemove(TASKS_KEY);
-      localRemove(COCKPIT_KEY);
-      renderStaff();
-      location.hash = "notfall";
-      toast("Abgemeldet.", "ok");
-    });
+    $("#staffLogout").addEventListener("click", logoutStaff);
     window.addEventListener("online", flushStaffQueue);
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") flushStaffQueue(); });
     viewEnterHooks.hausmeister = staffLogin;
@@ -2455,6 +2467,207 @@
     $("#formPollAdmin").addEventListener("submit", savePollAdmin);
     $("#pollAdminList").addEventListener("click", (e) => { const b = e.target.closest("[data-poll-end]"); if (b) endPollAdmin(b); });
     $("#newsAdminList").addEventListener("click", (e) => { const b = e.target.closest("[data-news-end]"); if (b) endNewsAdmin(b); });
+  }
+
+  /* ======================================================================
+     Fitnessraum (privat: 007/008 Verwaltung, 010/011 Rolle „Fitness“)
+     Buchen (eine Buchung zur Zeit), Belegung, kleine Statistik zum Anfeuern – nur Nummern.
+     ====================================================================== */
+
+  const FIT_KEY = "mieterapp.fitness";
+  const FIT_RULES = { fromHour: 6, toHour: 23, minMinutes: 30, maxMinutes: 120, stepMinutes: 30, daysAhead: 28 };
+  let fitLoading = null;
+  let fitPeriod = "week";
+
+  function isFitness() { const u = (staff() || {}).user; return !!(u && (u.fitness || u.role === "Fitness")); }
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const isoDay = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const fitDayLabel = (d) => d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+  const fitHm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const fitDuration = (min) => (min < 60 ? `${min} Min` : `${String(min / 60).replace(".", ",")} Std`);
+
+  function renderFitnessAccess() {
+    const s = staff();
+    const loggedIn = !!(s && s.token);
+    const ok = isFitness();
+    $("#fitPending").hidden = !(loggedIn && !s.user);
+    $("#fitNone").hidden = ok || !!(loggedIn && !s.user);
+    $("#fitArea").hidden = !ok;
+    $$("[data-fit-link]").forEach((a) => { a.hidden = !ok; });
+  }
+
+  function fillFitnessForm() {
+    const R = FIT_RULES;
+    const date = $("#fitDate");
+    if (!date.options.length || date.dataset.day !== isoDay(new Date())) {
+      const keep = date.value;
+      const today = new Date();
+      let html = "";
+      for (let i = 0; i <= R.daysAhead; i++) {
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+        html += `<option value="${isoDay(d)}">${i === 0 ? "Heute, " : i === 1 ? "Morgen, " : ""}${esc(fitDayLabel(d))}</option>`;
+      }
+      date.innerHTML = html;
+      date.dataset.day = isoDay(today);
+      if (keep && [...date.options].some((o) => o.value === keep)) date.value = keep;
+    }
+    const time = $("#fitTime");
+    if (!time.options.length) {
+      let html = "";
+      for (let m = R.fromHour * 60; m <= R.toHour * 60 - R.minMinutes; m += R.stepMinutes) {
+        const v = `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+        html += `<option value="${v}"${v === "18:00" ? " selected" : ""}>${v} Uhr</option>`;
+      }
+      time.innerHTML = html;
+    }
+    const dur = $("#fitMinutes");
+    if (!dur.options.length) {
+      let html = "";
+      for (let m = R.minMinutes; m <= R.maxMinutes; m += R.stepMinutes) html += `<option value="${m}"${m === 60 ? " selected" : ""}>${fitDuration(m)}</option>`;
+      dur.innerHTML = html;
+    }
+    renderFitnessDayInfo();
+  }
+
+  /** Unter dem Formular: schon belegte Zeiten am gewählten Tag. */
+  function renderFitnessDayInfo() {
+    const c = readJson(FIT_KEY);
+    const day = $("#fitDate").value;
+    const list = ((c && c.data && c.data.upcoming) || []).filter((b) => isoDay(new Date(b.start)) === day);
+    $("#fitDayInfo").textContent = list.length
+      ? `Schon belegt: ${list.map((b) => `${fitHm(new Date(b.start))}–${fitHm(new Date(b.end))} (Nr. ${b.nr})`).join(", ")}`
+      : "An diesem Tag ist noch nichts gebucht.";
+  }
+
+  function loadFitness() {
+    renderFitnessAccess();
+    if (!isFitness()) return Promise.resolve();
+    fillFitnessForm();
+    if (fitLoading) return fitLoading;
+    const token = staff().token;
+    const status = $("#fitStatus");
+    const cached = readJson(FIT_KEY);
+    const stand = (at) => `Stand ${formatTime(new Date(at))}`;
+    if (cached && cached.token === token) renderFitness(cached.data);
+    status.textContent = cached && cached.token === token ? `${stand(cached.at)} · wird aktualisiert …` : "Lade Belegung …";
+    fitLoading = staffPost({ action: "fitnessOverview" }, 30000).then((data) => {
+      if ((staff() || {}).token !== token) return;
+      writeJson(FIT_KEY, { token, at: Date.now(), data });
+      renderFitness(data);
+      status.textContent = stand(Date.now());
+    }).catch((err) => {
+      const why = err.userMessage || (err.name === "AbortError" ? "Google hat nicht rechtzeitig geantwortet" : "keine Verbindung");
+      status.textContent = `Aktualisieren fehlgeschlagen (${why}).`;
+    }).finally(() => { fitLoading = null; });
+    return fitLoading;
+  }
+
+  function renderFitness(d) {
+    if (!d) return;
+    const me = String(d.me || "");
+    const admin = ((staff() || {}).user || {}).role === "Verwaltung";
+    const goal = Number(d.weeklyGoal) || 2;
+    const members = Array.isArray(d.members) ? d.members : [];
+    const mine = members.find((m) => m.nr === me);
+    const slot = (b) => `${fitHm(new Date(b.start))}–${fitHm(new Date(b.end))} Uhr`;
+
+    // Eigener Stand: Wochenziel + Serie
+    if (mine) {
+      const w = mine.week.count;
+      const pct = Math.min(100, Math.round((w / goal) * 100));
+      const cheer = w >= goal ? "Wochenziel geschafft – stark! 🎉" : w ? `Noch ${goal - w}× bis zum Wochenziel.` : "Diese Woche noch kein Training – los geht's!";
+      $("#fitMe").innerHTML = `<div class="fit-me__head"><strong>Nr. ${esc(me)}</strong> · diese Woche ${w}× von ${goal}`
+        + `${mine.streak ? ` · 🔥 ${mine.streak} ${mine.streak === 1 ? "Woche" : "Wochen"} in Folge` : ""}</div>`
+        + `<div class="fit-bar"><i style="width:${pct}%"></i></div><p class="muted small">${esc(cheer)}</p>`;
+    } else $("#fitMe").innerHTML = "";
+
+    // Meine Buchungen (kommende + die letzten 7 Tage zum Austragen)
+    const my = Array.isArray(d.mine) ? d.mine : [];
+    $("#fitMine").innerHTML = my.length ? my.map((b) => `<li class="${b.past ? "fit-list__past" : "fit-list__mine"}">
+        <span><strong>${esc(fitDayLabel(new Date(b.start)))}</strong> · ${esc(slot(b))}</span>
+        <button class="btn btn--ghost btn--small" type="button" data-fit-cancel="${esc(b.id)}">${b.past ? "Nicht trainiert" : "Stornieren"}</button></li>`).join("")
+      : `<li class="muted">Keine Buchung. Oben einfach Tag und Uhrzeit wählen.</li>`;
+
+    // Belegung der nächsten 7 Tage, nach Tag gruppiert
+    const now = new Date();
+    const end7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+    const up = (Array.isArray(d.upcoming) ? d.upcoming : []).filter((b) => new Date(b.start) < end7);
+    let lastDay = "";
+    $("#fitUpcoming").innerHTML = up.length ? up.map((b) => {
+      const day = fitDayLabel(new Date(b.start));
+      const head = day !== lastDay ? `<li class="fit-list__day">${esc(day)}</li>` : "";
+      lastDay = day;
+      return `${head}<li class="${b.mine ? "fit-list__mine" : ""}"><span>${esc(slot(b))} · Nr. ${esc(b.nr)}${b.mine ? " (ich)" : ""}</span>`
+        + (admin && !b.mine ? `<button class="btn btn--ghost btn--small" type="button" data-fit-cancel="${esc(b.id)}">Stornieren</button>` : "")
+        + `</li>`;
+    }).join("") : `<li class="muted">In den nächsten 7 Tagen ist der Raum frei.</li>`;
+
+    // Rangliste
+    const medals = ["🥇", "🥈", "🥉"];
+    const ranked = members.slice().sort((a, b) => (b[fitPeriod].count - a[fitPeriod].count) || (b[fitPeriod].minutes - a[fitPeriod].minutes) || a.nr.localeCompare(b.nr));
+    $("#fitBoard").innerHTML = ranked.map((m, i) => {
+      const s = m[fitPeriod];
+      const medal = s.count ? medals[i] || "💪" : "·";
+      const pct = Math.min(100, Math.round((m.week.count / goal) * 100));
+      return `<li class="${m.nr === me ? "fit-board__me" : ""}"><span class="fit-board__medal" aria-hidden="true">${medal}</span>
+        <span class="fit-board__nr">Nr. ${esc(m.nr)}</span>
+        <span class="fit-board__val">${s.count}× · ${esc(s.minutes ? fitDuration(Math.round(s.minutes / 30) * 30) : "0 Min")}</span>
+        <span class="fit-board__streak">${m.streak ? `🔥 ${m.streak}` : ""}</span>
+        <span class="fit-bar fit-bar--small" title="Wochenziel ${m.week.count}/${goal}"><i style="width:${pct}%"></i></span></li>`;
+    }).join("");
+    renderFitnessDayInfo();
+  }
+
+  async function submitFitness(e) {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector("button[type=submit]");
+    const body = { action: "fitnessBook", date: $("#fitDate").value, time: $("#fitTime").value, minutes: Number($("#fitMinutes").value) };
+    btn.disabled = true;
+    try {
+      await staffPost(body, 30000);
+      toast(`Gebucht: ${fitDayLabel(new Date(`${body.date}T00:00`))}, ${body.time} Uhr, ${fitDuration(body.minutes)}. Viel Spaß! 💪`, "ok", 6000);
+      await loadFitness();
+    } catch (err) {
+      toast(err.userMessage || "Buchen nicht möglich – bitte Internetverbindung prüfen.", "error", 8000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function cancelFitness(btn) {
+    const past = btn.textContent.trim() === "Nicht trainiert";
+    if (!window.confirm(past ? "Diese Buchung austragen (nicht trainiert)?" : "Diese Buchung stornieren?")) return;
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "fitnessCancel", id: btn.dataset.fitCancel }, 30000);
+      toast(past ? "Ausgetragen." : "Storniert.", "ok");
+      await loadFitness();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.userMessage || "Stornieren nicht möglich – bitte Internetverbindung prüfen.", "error");
+    }
+  }
+
+  function initFitness() {
+    viewEnterHooks.fitness = () => {
+      loadFitness();
+      staffLogin().then(() => { if (currentView === "fitness") loadFitness(); });
+    };
+    $("#formFit").addEventListener("submit", submitFitness);
+    $("#fitDate").addEventListener("change", renderFitnessDayInfo);
+    $("#fitRefresh").addEventListener("click", loadFitness);
+    $("#fitLogout").addEventListener("click", logoutStaff);
+    $("#fitArea").addEventListener("click", (e) => { const b = e.target.closest("[data-fit-cancel]"); if (b) cancelFitness(b); });
+    $("#fitPeriod").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-period]");
+      if (!b) return;
+      fitPeriod = b.dataset.period;
+      $$("#fitPeriod [data-period]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      const c = readJson(FIT_KEY);
+      if (c && c.data) renderFitness(c.data);
+    });
   }
 
   /* ---------- Bewohner: Hausreinigung (zuletzt erledigt / geplant) ---------- */
@@ -2589,7 +2802,7 @@
     [
       renderEntrancePicker, renderEmergency, renderWaste, renderInfos, initTransit,
       initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
-      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff, initIntro, initTextSize,
+      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff, initFitness, initIntro, initTextSize,
     ].forEach((step) => {
       try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); setTimeout(() => reportError(`${step.name}: ${err.message}`, "init"), 3000); }
     });

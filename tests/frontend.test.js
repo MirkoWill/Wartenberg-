@@ -8,6 +8,7 @@ const { PIN, PIN_HASH, check, summary, startServer, launch, newContext, newPage,
 const STAFF = "a".repeat(40);
 const ADMIN = "b".repeat(40);
 const LEAD = "c".repeat(40);
+const FIT = "d".repeat(40);
 const AREAS = [
   { code: "TH_LIND6", ort: "Treppenhaus Lindenberger Str. 6", bereich: "Aufgang", aufgang: "lind6", activity: "Treppenhausreinigung" },
   { code: "MUELL", ort: "Müllplatz (außen)", bereich: "Außen", aufgang: "", activity: "Müllplatzreinigung" },
@@ -17,11 +18,21 @@ const ACTIVITIES = ["Treppenhausreinigung", "Fensterreinigung Aufgang", "Müllpl
 /** Standard-Backend: prüft PIN/Token wie das echte Backend und antwortet plausibel. */
 function fakeBackend(state = {}) {
   return (d) => {
-    const staff = { [STAFF]: { name: "Nr. 100", role: "Hausmeister" }, [ADMIN]: { name: "Nr. 007", role: "Verwaltung" }, [LEAD]: { name: "Nr. 001", role: "Leitung" } }[d.token];
+    const staff = { [STAFF]: { name: "Nr. 100", role: "Hausmeister" }, [ADMIN]: { name: "Nr. 007", role: "Verwaltung", fitness: true }, [LEAD]: { name: "Nr. 001", role: "Leitung" },
+      [FIT]: { name: "Nr. 010", role: "Fitness", fitness: true } }[d.token];
+    if (["fitnessOverview", "fitnessBook", "fitnessCancel"].includes(d.action)) {
+      if (!staff || !staff.fitness) return { ok: false, error: "Kein Zugang zum Fitnessraum.", code: "staff" };
+      (state.fitCalls = state.fitCalls || []).push(d);
+      const f = state.fitness || { ok: true, me: "010", weeklyGoal: 2, upcoming: [], mine: [], members: [] };
+      if (d.action === "fitnessBook") { const s = new Date(`${d.date}T${d.time}`); f.mine = [{ id: "F-NEW", start: s.toISOString(), end: new Date(s.getTime() + d.minutes * 60000).toISOString(), past: false }]; state.fitness = f; return { ok: true, id: "F-NEW" }; }
+      if (d.action === "fitnessCancel") { f.mine = f.mine.filter((b) => b.id !== d.id); return { ok: true }; }
+      return f;
+    }
     if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd", "adminPollSave", "adminPollEnd"].includes(d.action)) {
       if (!staff) return { ok: false, error: "Kein gültiger Zugang", code: "staff" };
       if (state.offline && d.action === "logCleaning") return "abort";
       if (d.action === "hmLogin") return { ok: true, user: staff, areas: AREAS, activities: ACTIVITIES, plan: state.plan || null };
+      if (d.action === "getTasks" && staff.role === "Fitness") state.tasksAsked = true;
       if (d.action === "getTasks") return state.hangTasks ? null : { ok: true, tasks: state.tasks || [] };
       if (d.action === "completeTask") { state.tasks = (state.tasks || []).filter((t) => t.id !== d.id); return { ok: true }; }
       if (d.action === "submitStaffDefect") return { ok: true, id: "M-260924-ABCD" };
@@ -433,6 +444,67 @@ function makeQrVideo(text) {
       check("Zweimal gescheitert: „Erneut versuchen“ sichtbar", await p.isVisible("#staffRetry") && !(await p.isVisible("#staffPendingWait")));
       await p.click("#staffRetry"); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
       check("Erneut versuchen meldet an", /007/.test(await p.textContent("#staffName")));
+      await ctx.close();
+    }
+
+    console.log("--- Fitnessraum");
+    {
+      const soon = new Date(); soon.setDate(soon.getDate() + 1); soon.setHours(18, 0, 0, 0);
+      const state = { fitness: {
+        ok: true, me: "010", weeklyGoal: 2,
+        upcoming: [{ id: "F-1", nr: "011", start: soon.toISOString(), end: new Date(soon.getTime() + 3600000).toISOString(), mine: false }],
+        mine: [],
+        members: ["007", "008", "010", "011"].map((nr, i) => ({ nr, week: { count: i === 3 ? 2 : 0, minutes: i === 3 ? 120 : 0 }, month: { count: 3 - i, minutes: 60 * (3 - i) }, year: { count: 5, minutes: 300 }, streak: i === 3 ? 4 : 0 })),
+      } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state) });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${FIT}#fitness`); await p.waitForTimeout(300);
+      await acceptConsent(p);
+      await p.waitForSelector("#fitArea:not([hidden])", { timeout: 10000 });
+      await p.waitForTimeout(400);
+      check("Fitness (010): Link öffnet den Fitnessraum, Reiter „Fitness“", /Fitness/.test(await p.textContent("#staffTab")) && (await tabs(p)).includes("Fitness*"), await tabs(p));
+      check("Fitness: Belegung zeigt nur Nummern", /Nr\. 011/.test(await p.textContent("#fitUpcoming")) && /18:00–19:00/.test(await p.textContent("#fitUpcoming")));
+      check("Fitness: Formular 29 Tage, 06:00–22:30, 30 Min–2 Std", await p.$$eval("#fitDate option", (o) => o.length) === 29
+        && await p.$eval("#fitTime option", (o) => o.value) === "06:00" && await p.$eval("#fitTime option:last-child", (o) => o.value) === "22:30"
+        && (await p.$$eval("#fitMinutes option", (o) => o.map((x) => x.value))).join() === "30,60,90,120");
+      await p.selectOption("#fitDate", { index: 1 });
+      check("Fitness: belegte Zeit am gewählten Tag als Hinweis", /18:00–19:00 \(Nr\. 011\)/.test(await p.textContent("#fitDayInfo")), await p.textContent("#fitDayInfo"));
+      check("Fitness: Wochenziel für mich (0 von 2)", /0× von 2/.test(await p.textContent("#fitMe")));
+      const board = await p.$$eval("#fitBoard li", (l) => l.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
+      check("Fitness: Rangliste Woche – 011 vorne mit 🥇 und 🔥 4", /🥇 Nr\. 011 2× · 2 Std 🔥 4/.test(board[0]), board);
+      await p.click("#fitPeriod [data-period=month]");
+      const board2 = await p.$$eval("#fitBoard li .fit-board__nr", (l) => l.map((x) => x.textContent));
+      check("Fitness: Monat umschaltbar – 007 vorne", board2[0] === "Nr. 007", board2);
+      await p.selectOption("#fitTime", "07:30"); await p.selectOption("#fitMinutes", "90");
+      await p.click("#formFit button[type=submit]"); await p.waitForTimeout(500);
+      const bk = (state.fitCalls || []).find((d) => d.action === "fitnessBook");
+      check("Fitness: Buchung sendet Tag, Uhrzeit, Dauer", bk && /^\d{4}-\d{2}-\d{2}$/.test(bk.date) && bk.time === "07:30" && bk.minutes === 90, bk);
+      await p.waitForTimeout(300);
+      check("Fitness: eigene Buchung mit „Stornieren“", await p.isVisible("#fitMine [data-fit-cancel]"));
+      p.once("dialog", (dlg) => dlg.accept());
+      await p.click("#fitMine [data-fit-cancel]"); await p.waitForTimeout(500);
+      check("Fitness: Stornieren sendet die ID", (state.fitCalls || []).some((d) => d.action === "fitnessCancel" && d.id === "F-NEW"));
+      await p.goto(`${base}?obj=lind6#hausmeister`); await p.waitForTimeout(800);
+      check("Fitness: Hausmeister-Bereich leitet in den Fitnessraum um", /#fitness$/.test(p.url()) && !(await p.isVisible("#scanBtn")));
+      check("Fitness: keine Hausmeister-Anfragen (Aufträge)", !(state.fitCalls || []).length || !state.tasksAsked);
+      await ctx.close();
+    }
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend({}) });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${STAFF}#hausmeister`); await p.waitForTimeout(300);
+      await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
+      check("Hausmeister: kein Fitnessraum-Link", !(await p.isVisible("[data-fit-link]")));
+      await p.goto(`${base}?obj=lind6#fitness`); await p.waitForTimeout(500);
+      check("Hausmeister: Fitnessraum gesperrt", await p.isVisible("#fitNone") && !(await p.isVisible("#fitArea")));
+      await ctx.close();
+    }
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend({}) });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${ADMIN}#hausmeister`); await p.waitForTimeout(300);
+      await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
+      check("Verwaltung (007): Fitnessraum-Link bei den Werkzeugen", await p.isVisible("#staffAdmin [data-fit-link]"));
       await ctx.close();
     }
 
