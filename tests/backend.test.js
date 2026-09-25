@@ -47,7 +47,7 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
     return { getResponseCode: () => 200, getContentText: () => JSON.stringify(/\/alerts/.test(r.url) ? { alerts: wx.alerts } : { weather: wx.hours }) };
   }); } },
   MailApp: { sendEmail: (m) => mails.push(m), getRemainingDailyQuota: () => 1500 },
-  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, onMonthDay: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
+  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, everyMinutes: () => b, onMonthDay: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
   CalendarApp: { getAllCalendars: () => [cal, { getName: () => 'Privat' }], getCalendarById: (id) => (id === 'good' ? cal : null), getCalendarsByName: (n) => (n === calName ? [cal] : []) },
   HtmlService: { createHtmlOutput: (h) => ({ html: h, getBlob: () => ({ getAs: (t) => ({ type: t, html: h, name: '', setName(n) { this.name = n; return this; } }) }), setTitle() { return this; }, addMetaTag() { return this; } }) },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (t) => ({ setMimeType: () => JSON.parse(t) }) },
@@ -755,6 +755,23 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   check('Push: künftiger Hinweis wird erst später gemeldet (nicht jetzt)', (() => { sent(); post({ action: 'adminNewsSave', token: admTok, title: 'Später', text: 'x', from: '2099-01-01' }); return sent().length === 0; })());
   check('Push: Abmelden löscht das Gerät', post({ action: 'pushUnsubscribe', pin: '13059', id: r1.id }).ok && !pg().some((r) => r[0] === r1.id));
   check('Push: Test-Funktion im Menü sendet an Verwaltung', ctx.pushTest() === 2 && sent().length === 2);
+  { // Fitnessraum: Erinnerung ca. 1 Stunde vorher
+    [rA, rF, r8].forEach((r) => { while (inbox(r.id).item); });
+    const fg = sheets['Fitness-Buchungen'].grid;
+    const at = (min) => new Date(Date.now() + min * 60000);
+    const yesterday = at(-24 * 60);
+    fg.push(['F-REM1', '010', at(60), at(120), 60, yesterday, '', '008', '']);   // fällig, gemeinsam
+    fg.push(['F-REM2', '007', at(58), at(88), 30, at(-10), '', '', '']);         // erst vor 10 Min. gebucht → keine Erinnerung
+    fg.push(['F-REM3', '011', at(180), at(240), 60, yesterday, '', '', '']);     // erst in 3 Std.
+    fg.push(['F-REM4', '007', at(55), at(85), 30, yesterday, 'ja', '', '']);     // storniert
+    sent();
+    const n1 = ctx.fitnessReminders();
+    const s7 = sent(), m10 = inbox(rF.id).item, m08 = inbox(r8.id).item;
+    check('Erinnerung: fällige Buchung → beide Beteiligten, sonst niemand', n1 === 1 && s7.length === 2 && s7.includes(EP(5)) && s7.includes(EP(6)), s7);
+    check('Erinnerung: Text mit Uhrzeit und Partner', m10.title === '⏰ In 1 Stunde: Fitnessraum' && /Uhr · mit Nr\. 008$/.test(m10.body) && /mit Nr\. 010$/.test(m08.body) && m10.url === '#fitness', [m10, m08]);
+    check('Erinnerung: nur einmal (Spalte „Erinnert“)', ctx.fitnessReminders() === 0 && sent().length === 0 && fg.find((r) => r[0] === 'F-REM1')[8] === 'ja' && fg[0][8] === 'Erinnert');
+    check('Erinnerung: Zeitauslöser alle 15 Min. wird beim Buchen angelegt (einmal)', triggers.filter((t) => t.getHandlerFunction() === 'fitnessReminders').length === 1);
+  }
   Object.keys(cache).forEach((k) => delete cache[k]);
 }
 

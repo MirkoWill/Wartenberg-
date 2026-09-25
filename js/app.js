@@ -2787,7 +2787,7 @@
   function pushInfo(group) {
     const s = staff();
     const fit = !!(s && s.user && s.user.fitness);
-    const fitText = "Fitnessraum: wenn dich jemand als Trainingspartner einträgt oder absagt.";
+    const fitText = "Fitnessraum: Erinnerung 1 Stunde vor deinem Training und wenn dich jemand als Trainingspartner einträgt oder absagt.";
     if (group === "Verwaltung") return `Neue Meldungen von Bewohnern und Mängel vom Hausmeister.${fit ? ` ${fitText}` : ""}`;
     if (group === "Hausmeister" || group === "Leitung") return "Neue Aufträge für den Hausmeisterdienst.";
     if (group === "Fitness") return fitText;
