@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=55">
+  <link rel="stylesheet" href="css/style.css?v=56">
 </head>
 <body>
   <header class="app-header">
@@ -185,6 +185,10 @@
 
         <!-- Scannen -->
         <div class="staff-pane" data-pane="scan">
+          <div class="plan-today" id="planToday" hidden>
+            <div class="plan-today__head"><strong>Heute zu tun</strong> <span class="badge" id="planTodayCount"></span></div>
+            <ul class="plan-today__list" id="planTodayList"></ul>
+          </div>
           <div class="scan-done" id="scanDone" hidden>
             <div class="scan-done__check" aria-hidden="true">✓</div>
             <div class="scan-done__text" id="scanDoneText">Gespeichert</div>
@@ -288,6 +292,30 @@
           <button class="btn btn--ghost btn--small" id="cockpitRefresh" type="button">↻ Aktualisieren</button>
         </div>
         <div class="kpis" id="cockpitKpis"></div>
+
+        <section id="cockpitNews" hidden>
+          <h2 class="section-title">Hinweise für Bewohner</h2>
+          <ul class="news-admin" id="newsAdminList"></ul>
+          <details class="rule" id="newsAdminNew">
+            <summary>➕ Neuen Hinweis veröffentlichen</summary>
+            <form class="form" id="formNewsAdmin" novalidate>
+              <label class="field"><span class="field__label">Titel *</span>
+                <input name="title" required maxlength="120" placeholder="z. B. Wasser abgestellt"></label>
+              <label class="field"><span class="field__label">Text</span>
+                <textarea name="text" rows="3" maxlength="1000" placeholder="z. B. Am Mittwoch von 9 bis 12 Uhr ist wegen Wartungsarbeiten das Wasser abgestellt."></textarea></label>
+              <div class="field-row">
+                <label class="field"><span class="field__label">Ab</span><input type="date" name="from"></label>
+                <label class="field"><span class="field__label">Bis (optional)</span><input type="date" name="to"></label>
+              </div>
+              <fieldset class="field"><legend class="field__label">Für wen?</legend>
+                <div class="chips" id="newsAdminEntrances"></div>
+                <span class="field__hint">Nichts ausgewählt = alle Aufgänge</span>
+              </fieldset>
+              <label class="remember"><input type="checkbox" name="important"><span>Wichtig (rot hervorgehoben)</span></label>
+              <button class="btn btn--primary btn--block" type="submit">Veröffentlichen</button>
+            </form>
+          </details>
+        </section>
 
         <h2 class="section-title">Aufträge</h2>
         <div class="chips" id="cockpitFilter" role="group" aria-label="Filter">
@@ -816,8 +844,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=55"></script>
-  <script src="js/i18n.js?v=55"></script>
-  <script src="js/app.js?v=55"></script>
+  <script src="js/config.js?v=56"></script>
+  <script src="js/i18n.js?v=56"></script>
+  <script src="js/app.js?v=56"></script>
 </body>
 </html>

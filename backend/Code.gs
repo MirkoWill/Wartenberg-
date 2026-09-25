@@ -997,6 +997,8 @@ function donePage(title, text, action) {
 const STAFF_ACTIONS = {
   adminOverview: (p, user) => adminOverview(p, user),
   adminUpdateTask: (p, user) => adminUpdateTask(p, user),
+  adminNewsSave: (p, user) => adminNewsSave(p, user),
+  adminNewsEnd: (p, user) => adminNewsEnd(p, user),
   hmLogin: (p, user) => staffLogin(user),
   logCleaning: (p, user) => logCleaning(p, user),
   getTasks: (p, user) => getTasks(p, user),
@@ -1172,7 +1174,21 @@ function staffLogin(user) {
   return {
     ok: true, user: { name: user.name, role: user.role },
     areas: activeAreas().map(({ residents, ...a }) => a), activities: activeActivities(),
+    plan: todayPlan(),
   };
+}
+
+/** „Heute zu tun“: eintägige Einträge des Reinigungsplans für heute mit Stand laut Nachweisen. */
+function todayPlan() {
+  try {
+    const day = berlinToday();
+    const items = planStatusForDay(day, activeAreas(), sheetObjects(CONFIG.SHEETS.cleaning), planRows())
+      .map((x) => ({ activity: plain(x.activity, 60), ort: plain(x.ort, 80), done: x.done === true }));
+    return { day: Utilities.formatDate(day, CONFIG.TIMEZONE, "yyyy-MM-dd"), items: items.slice(0, 40) };
+  } catch (err) {
+    console.warn("Heute zu tun:", err);
+    return { day: "", items: [] };
+  }
 }
 
 /** US 3.2 – Nachweis per QR-Scan (oder manuell gewählter Ort, als solcher gekennzeichnet). */
@@ -1855,6 +1871,7 @@ function adminOverview(p, user) {
     lookerUrl: lead ? "" : PropertiesService.getScriptProperties().getProperty("LOOKER_URL") || "",
     role: user.role,
     work: workLog(scans, areas, plan, now),
+    news: lead ? [] : adminNewsList(),
     time: now.toISOString(),
   };
 }
@@ -2437,3 +2454,61 @@ function ensureReportTrigger() {
   if (handlers.indexOf("monthlyReport") === -1) ScriptApp.newTrigger("monthlyReport").timeBased().onMonthDay(1).atHour(8).inTimezone(CONFIG.TIMEZONE).create();
   if (handlers.indexOf("monthlyReportSend") === -1) ScriptApp.newTrigger("monthlyReportSend").timeBased().onMonthDay(1).atHour(CONFIG.REPORT_SEND_HOUR).inTimezone(CONFIG.TIMEZONE).create();
 }
+
+/* ==========================================================================
+   Hinweise für Bewohner direkt aus dem Cockpit (Blatt „Aktuelles“) – nur Verwaltung
+   ========================================================================== */
+
+function requireVerwaltung(user) {
+  if (!user || user.role !== "Verwaltung") throw userError("Nur für die Verwaltung.", "staff");
+}
+
+/** Letzte Zeile mit Inhalt in den angegebenen Spalten (Kästchen-Spalten zählen nicht). */
+function lastContentRow(sheet, cols) {
+  const n = sheet.getLastRow();
+  if (n < 2) return 1;
+  const vals = sheet.getRange(1, 1, n, Math.max.apply(null, cols)).getValues();
+  for (let r = n; r > 1; r--) if (cols.some((c) => String(vals[r - 1][c - 1] === undefined ? "" : vals[r - 1][c - 1]).trim() !== "")) return r;
+  return 1;
+}
+
+/** Aktuelle und geplante Hinweise (für die Liste im Cockpit). */
+function adminNewsList() {
+  const ymd = (d) => (d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd") : "");
+  const today = ymd(new Date());
+  return sheetObjects(CONFIG.SHEETS.news)
+    .filter((r) => r.Aktiv === true && String(r.Titel || r.Text || "").trim() && (!(r.Bis instanceof Date) || ymd(r.Bis) >= today))
+    .map((r) => ({ row: r._row, title: plain(r.Titel, 120), text: plain(r.Text, 1000), important: r.Wichtig === true,
+      from: ymd(r.Von), to: ymd(r.Bis), only: String(r["Nur für Aufgang-IDs"] || "") }))
+    .slice(-20).reverse();
+}
+
+function adminNewsSave(p, user) {
+  requireVerwaltung(user);
+  const title = str(p.title, 120), text = str(p.text, 1000);
+  if (!title && !text) throw userError("Bitte Titel oder Text eingeben");
+  const date = (v) => { const d = parseIsoDate(String(v || "")); return d || ""; };
+  const from = date(p.from) || new Date(), to = date(p.to);
+  if (to && to < new Date(from.getFullYear(), from.getMonth(), from.getDate())) throw userError("„Bis“ liegt vor „Von“");
+  const only = (Array.isArray(p.only) ? p.only : []).map(objectId).filter(Boolean).slice(0, 20).join(", ");
+  const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.news.name);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const row = lastContentRow(sheet, [4, 5]) + 1;
+    sheet.getRange(row, 1, 1, 7).setValues([[true, from, to, protectCell(title), protectCell(text), p.important === true, only]]);
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true };
+}
+
+function adminNewsEnd(p, user) {
+  requireVerwaltung(user);
+  const row = Number(p.row);
+  const hit = sheetObjects(CONFIG.SHEETS.news).find((r) => r._row === row && r.Aktiv === true && plain(r.Titel, 120) === String(p.title || ""));
+  if (!hit) throw userError("Hinweis nicht gefunden");
+  getSpreadsheet().getSheetByName(CONFIG.SHEETS.news.name).getRange(row, 1).setValue(false);
+  return { ok: true };
+}
+
