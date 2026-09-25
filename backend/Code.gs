@@ -124,6 +124,16 @@ const CONFIG = {
     Elektroraum: { react: { workdaysBeforeAppointment: 1 }, done: { appointment: true } },
   },
   SLA_WARN_HOURS: 24,
+  // Monatsbericht für den Beirat: Entwurf am 1. um 8 Uhr an die Verwaltung, Versand um REPORT_SEND_HOUR.
+  REPORT_SEND_HOUR: 12,
+  REPORT_REPLY_TO: "info@willbrandt-kompagnon.de",
+  REPORT_SIGNATURE: [
+    "Mirko Willbrandt",
+    "Willbrandt und Kompagnon · Hausverwaltung",
+    "Lindenberger Str. 6 · 13059 Berlin",
+    "Telefon +49 30 99 27 07 47 · info@willbrandt-kompagnon.de",
+    "www.willbrandt-kompagnon.de",
+  ],
   // Wetter für die Startseite: Daten des Deutschen Wetterdienstes über Bright Sky (kostenlos, ohne Schlüssel).
   // Abruf nur durch dieses Script (1× pro Stunde, zwischengespeichert) – die Handys verbinden sich nicht mit Wetterdiensten.
   WEATHER: { lat: 52.574, lon: 13.514, days: 3, cacheMinutes: 60 },
@@ -1644,7 +1654,7 @@ function healthCheck(extra) {
     if (!ss.getSheetByName(CONFIG.SHEETS[k].name)) issues.push(`Blatt „${CONFIG.SHEETS[k].name}“ fehlt – setup ausführen.`);
   });
   const handlers = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
-  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest", "monthlyReport"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
+  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest", "monthlyReport", "monthlyReportSend"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
   if (planRows().length) { try { findCalendar(); } catch (e) { issues.push(e.userMessage || e.message); } }
   if (!activeAreas().length) issues.push("Keine aktiven QR-Orte.");
 
@@ -2181,7 +2191,7 @@ function laterScan(valid, day, x, areas) {
     .sort((a, b) => a["Zeitpunkt (Scan)"] - b["Zeitpunkt (Scan)"])[0] || null;
 }
 
-function reportHtml(r, preview) {
+function reportHtml(r, preview, comment) {
   const e = escHtml;
   const pct = (x) => (x === null || x === undefined ? "–" : `${Math.round(x * 100)} %`);
   const num = (x, d) => (x === null || x === undefined ? "–" : (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toString().replace(".", ","));
@@ -2207,6 +2217,7 @@ function reportHtml(r, preview) {
     <div class="brand">Willbrandt und Kompagnon · Hausverwaltung</div>
     <h1>Monatsbericht ${e(r.title)}</h1>
     <div class="muted">WEG Wartenberger Dorfkrug · für den Verwaltungsbeirat · erstellt ${e(r.created)} · ohne personenbezogene Daten</div>
+    ${String(comment || "").trim() ? `<div style="border-left:4pt solid #6d7454;background:#eef0e6;padding:8pt 10pt;margin-top:12pt"><strong>Anmerkungen der Verwaltung</strong><br>${e(String(comment).trim()).replace(/\n/g, "<br>")}</div>` : ""}
 
     <h2>Überblick</h2>
     <table><tr>
@@ -2252,11 +2263,11 @@ function reportHtml(r, preview) {
   </body></html>`;
 }
 
-/** PDF für den Vormonat (bzw. y/m) erstellen und im Drive-Ordner „Beiratsberichte“ ablegen. */
-function createReportPdf(y, m, preview) {
+/** PDF für y/m erstellen (mit optionalen Anmerkungen der Verwaltung) und – außer bei der Vorschau – ablegen. */
+function createReportPdf(y, m, preview, comment) {
   const r = reportData(y, m);
   const name = `Monatsbericht ${r.title} – WEG Wartenberger Dorfkrug${preview ? " (Vorschau)" : ""}.pdf`;
-  const blob = HtmlService.createHtmlOutput(reportHtml(r, preview)).getBlob().getAs("application/pdf").setName(name);
+  const blob = HtmlService.createHtmlOutput(reportHtml(r, preview, comment)).getBlob().getAs("application/pdf").setName(name);
   let fileId = "";
   if (!preview) {
     const props = PropertiesService.getScriptProperties();
@@ -2274,80 +2285,155 @@ function previousMonth() {
   return [d.getFullYear(), d.getMonth()];
 }
 
-/** Automatik am 1. um 8 Uhr: Bericht erstellen, an Verwaltung mit Freigabe-Link. */
+function reportPending() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty("REPORT_PENDING") || "null"); } catch (e) { return null; }
+}
+function saveReportPending(p) { PropertiesService.getScriptProperties().setProperty("REPORT_PENDING", JSON.stringify(p)); }
+function reportLink(token) { return `${CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl()}?action=releaseReport&t=${token}`; }
+
+/** Automatik am 1. um 8 Uhr: Bericht erstellen, Verwaltung bekommt PDF + Link zur Anmerkungs-/Freigabeseite. */
 function monthlyReport() {
   const [y, m] = previousMonth();
   const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
-  const res = createReportPdf(y, m, false);
+  const res = createReportPdf(y, m, true, ""); // Entwurf zum Ansehen; abgelegt wird die versendete Fassung
   const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
-  PropertiesService.getScriptProperties().setProperty("REPORT_PENDING", JSON.stringify({
-    token, fileId: res.fileId, title: res.r.title, created: Date.now(), sent: false,
-  }));
+  saveReportPending({ token, y, m, title: res.r.title, created: Date.now(), sent: false, hold: false, comment: "" });
   const emails = beiratEmails();
-  const base = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
-  const link = `${base}?action=releaseReport&t=${token}`;
   if (!to) return { ok: false, error: "NOTIFY_EMAIL fehlt" };
   MailApp.sendEmail({
-    to, subject: oneLine(`[Mieter-App] Monatsbericht ${res.r.title} – bitte freigeben`),
-    body: [`Der Monatsbericht ${res.r.title} für den Beirat ist fertig (PDF im Anhang und im Drive-Ordner „Beiratsberichte Mieter-App“).`, "",
-      emails.length ? `Nach Freigabe geht er an ${emails.length} Empfänger:` : "ACHTUNG: Script-Eigenschaft BEIRAT_EMAILS ist nicht eingetragen – Versand nicht möglich.",
-      ...emails.map((x) => `  • ${x}`), "", "An den Beirat senden:", link, "",
-      "Der Link ist 14 Tage gültig und funktioniert einmal."].join("\n"),
+    to, subject: oneLine(`[Mieter-App] Monatsbericht ${res.r.title} – Versand heute um ${CONFIG.REPORT_SEND_HOUR} Uhr`),
+    body: [`Der Monatsbericht ${res.r.title} für den Beirat ist fertig (Entwurf im Anhang).`, "",
+      emails.length ? `Er geht heute um ${CONFIG.REPORT_SEND_HOUR} Uhr automatisch an ${emails.length} Empfänger: ${emails.join(", ")}.`
+        : "ACHTUNG: Script-Eigenschaft BEIRAT_EMAILS ist nicht eingetragen – kein Versand möglich.", "",
+      "Anmerkungen ergänzen, sofort senden oder den Versand anhalten:", reportLink(token), "",
+      "Ohne Ihr Zutun wird der Bericht unverändert versendet."].join("\n"),
     attachments: [res.blob],
   });
   return { ok: true, title: res.r.title };
 }
 
-/** Freigabe-Link: erst Bestätigungsseite, dann Versand an BEIRAT_EMAILS (einmalig, 14 Tage gültig). */
-function releaseReportPage(q) {
-  const props = PropertiesService.getScriptProperties();
-  let pend = null;
-  try { pend = JSON.parse(props.getProperty("REPORT_PENDING") || "null"); } catch (e) { pend = null; }
-  const valid = pend && typeof q.t === "string" && /^[a-f0-9]{32,}$/i.test(q.t) && q.t === pend.token && Date.now() - pend.created < 14 * 86400000;
-  if (!valid) return donePage("Link ungültig", "Dieser Freigabe-Link ist ungültig oder abgelaufen.");
-  if (pend.sent) return donePage("Bereits versendet", `Der Monatsbericht ${pend.title} wurde bereits an den Beirat gesendet.`);
+/** Automatik am 1. um 12 Uhr: versenden, wenn nicht schon geschehen oder angehalten. */
+function monthlyReportSend() {
+  const p = reportPending();
+  if (!p || p.sent || p.hold || Date.now() - p.created > 86400000) return { sent: false };
+  return sendReportToBeirat(p);
+}
+
+/** Versand an BEIRAT_EMAILS (PDF mit Anmerkungen neu erstellt und abgelegt), Kopie an NOTIFY_EMAIL. */
+function sendReportToBeirat(p) {
   const emails = beiratEmails();
-  if (!emails.length) return donePage("Keine Empfänger", "Bitte zuerst die Script-Eigenschaft BEIRAT_EMAILS eintragen (Adressen mit Komma getrennt).");
-  if (q.confirm !== "1") {
-    const base = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
-    return donePage(`Monatsbericht ${pend.title}`, `Jetzt an ${emails.length} Empfänger im Beirat senden?`,
-      `<a class="btn" href="${escHtml(`${base}?action=releaseReport&t=${pend.token}&confirm=1`)}" target="_top">Ja, an den Beirat senden</a>`);
-  }
+  if (!emails.length) return { sent: false, error: "BEIRAT_EMAILS fehlt" };
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const again = JSON.parse(props.getProperty("REPORT_PENDING") || "null");
-    if (!again || again.token !== pend.token || again.sent) return donePage("Bereits versendet", `Der Monatsbericht ${pend.title} wurde bereits gesendet.`);
-    const blob = DriveApp.getFileById(pend.fileId).getBlob();
-    const cc = (props.getProperty("NOTIFY_EMAIL") || "").trim();
-    MailApp.sendEmail({
-      to: emails.join(","), cc: cc || undefined, name: CONFIG.SENDER_NAME,
-      subject: oneLine(`Monatsbericht ${pend.title} – WEG Wartenberger Dorfkrug`),
-      body: ["Guten Tag,", "", `anbei der Monatsbericht ${pend.title} aus der Mieter-App: Meldungen, Einhaltung der Service-Ziele und Reinigung laut Plan.`,
-        "Der Bericht enthält nur Zahlen, keine personenbezogenen Daten.", "", "Mit freundlichen Grüßen", CONFIG.SENDER_NAME].join("\n"),
-      attachments: [blob],
-    });
-    again.sent = true;
-    again.sentAt = Date.now();
-    props.setProperty("REPORT_PENDING", JSON.stringify(again));
+    const cur = reportPending();
+    if (!cur || cur.token !== p.token || cur.sent) return { sent: false, error: "bereits versendet" };
+    const res = createReportPdf(cur.y, cur.m, false, cur.comment);
+    const cc = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
+    const mail = reportMail(res.r, cur.comment);
+    MailApp.sendEmail({ to: emails.join(","), cc: cc || undefined, name: CONFIG.SENDER_NAME, replyTo: CONFIG.REPORT_REPLY_TO,
+      subject: oneLine(`Monatsbericht ${res.r.title} – WEG Wartenberger Dorfkrug`), body: mail.text, htmlBody: mail.html, attachments: [res.blob] });
+    cur.sent = true;
+    cur.sentAt = Date.now();
+    cur.fileId = res.fileId;
+    saveReportPending(cur);
+    return { sent: true, count: emails.length };
   } finally {
     lock.releaseLock();
   }
-  return donePage("Versendet", `Der Monatsbericht ${pend.title} ging an ${emails.length} Empfänger im Beirat. Sie erhalten eine Kopie.`);
 }
 
-/** Menü: Vorschau des Vormonats an NOTIFY_EMAIL (ohne Freigabe-Link, ohne Ablage). */
+/** Anschreiben an den Beirat (Text + HTML) mit Kurzfassung, Anmerkungen und Signatur. */
+function reportMail(r, comment) {
+  const pct = (x) => (x === null || x === undefined ? "–" : `${Math.round(x * 100)} %`);
+  const c = r.cur;
+  const clean = r.cleaning.soll ? r.cleaning.ist / r.cleaning.soll : null;
+  const facts = [
+    `Meldungen: ${c.received} eingegangen, ${c.closed} erledigt, ${c.open} offen am Monatsende`,
+    `Service-Ziele eingehalten: ${pct(c.slaQuote)} (Vormonat ${pct(r.prev.slaQuote)})`,
+    `Reinigung laut Plan: ${pct(clean)} am geplanten Tag${r.cleaning.late ? `, ${r.cleaning.late} nachgeholt` : ""}`,
+  ];
+  const note = String(comment || "").trim();
+  const sig = CONFIG.REPORT_SIGNATURE;
+  const text = [
+    "Sehr geehrte Mitglieder des Verwaltungsbeirats,", "",
+    `anbei erhalten Sie den Monatsbericht ${r.title} für die WEG Wartenberger Dorfkrug. Er zeigt, welche Anliegen über die Mieter-App eingegangen sind, wie zügig sie bearbeitet wurden und ob die Reinigung wie geplant erfolgt ist.`, "",
+    "Auf einen Blick:", ...facts.map((f) => `• ${f}`), "",
+    ...(note ? ["Anmerkungen der Verwaltung:", note, ""] : []),
+    "Der Bericht enthält ausschließlich Zahlen und keine personenbezogenen Daten. Für Rückfragen stehen wir Ihnen gern zur Verfügung – gern besprechen wir die Entwicklung auch in der nächsten Beiratssitzung.", "",
+    "Mit freundlichen Grüßen", "", ...sig,
+  ].join("\n");
+  const e = escHtml;
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#151515;max-width:640px">
+    <p>Sehr geehrte Mitglieder des Verwaltungsbeirats,</p>
+    <p>anbei erhalten Sie den <strong>Monatsbericht ${e(r.title)}</strong> für die WEG Wartenberger Dorfkrug. Er zeigt, welche Anliegen
+      über die Mieter-App eingegangen sind, wie zügig sie bearbeitet wurden und ob die Reinigung wie geplant erfolgt ist.</p>
+    <p style="margin-bottom:4px"><strong>Auf einen Blick:</strong></p>
+    <ul style="margin-top:0">${facts.map((f) => `<li>${e(f)}</li>`).join("")}</ul>
+    ${note ? `<div style="border-left:4px solid #6d7454;background:#eef0e6;padding:10px 14px;margin:14px 0"><strong>Anmerkungen der Verwaltung</strong><br>${e(note).replace(/\n/g, "<br>")}</div>` : ""}
+    <p>Der Bericht enthält ausschließlich Zahlen und keine personenbezogenen Daten. Für Rückfragen stehen wir Ihnen gern zur Verfügung –
+      gern besprechen wir die Entwicklung auch in der nächsten Beiratssitzung.</p>
+    <p>Mit freundlichen Grüßen</p>
+    <p style="margin-top:18px">${sig.map((l, i) => (i === 0 ? `<strong>${e(l)}</strong>` : i === 1 ? `<span style="color:#6d7454;font-weight:bold">${e(l)}</span>` : `<span style="color:#5f625a;font-size:13px">${e(l)}</span>`)).join("<br>")}</p>
+  </div>`;
+  return { text, html };
+}
+
+/** Seite hinter dem Link: Anmerkungen eintragen, sofort senden, um 12 Uhr senden lassen oder anhalten. */
+function releaseReportPage(q) {
+  const p = reportPending();
+  const valid = p && typeof q.t === "string" && /^[a-f0-9]{32,}$/i.test(q.t) && q.t === p.token && Date.now() - p.created < 14 * 86400000;
+  if (!valid) return donePage("Link ungültig", "Dieser Link ist ungültig oder abgelaufen.");
+  if (p.sent) return donePage("Bereits versendet", `Der Monatsbericht ${p.title} wurde bereits an den Beirat gesendet.`);
+  const emails = beiratEmails();
+  const act = String(q.do || "");
+  if (act) {
+    p.comment = String(q.comment || "").replace(/\r/g, "").slice(0, 3000);
+    if (act === "save") { p.hold = false; saveReportPending(p); return donePage("Gespeichert", `Ihre Anmerkungen sind gespeichert. Der Bericht geht heute um ${CONFIG.REPORT_SEND_HOUR} Uhr an den Beirat.`, backLink(p)); }
+    if (act === "hold") { p.hold = true; saveReportPending(p); return donePage("Angehalten", "Der automatische Versand ist angehalten. Über den Link in Ihrer Mail können Sie den Bericht später senden.", backLink(p)); }
+    if (act === "send") {
+      saveReportPending(p);
+      const res = sendReportToBeirat(p);
+      return res.sent ? donePage("Versendet", `Der Monatsbericht ${p.title} ging an ${res.count} Empfänger im Beirat. Sie erhalten eine Kopie.`)
+        : donePage("Nicht versendet", res.error === "BEIRAT_EMAILS fehlt" ? "Bitte zuerst die Script-Eigenschaft BEIRAT_EMAILS eintragen." : "Der Bericht wurde bereits versendet.");
+    }
+  }
+  const base = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
+  const status = p.hold ? "Automatischer Versand ist <strong>angehalten</strong>."
+    : `Geht heute um <strong>${CONFIG.REPORT_SEND_HOUR} Uhr</strong> automatisch an ${emails.length} Empfänger.`;
+  const form = `<form method="get" action="${escHtml(base)}" target="_top">
+      <input type="hidden" name="action" value="releaseReport"><input type="hidden" name="t" value="${escHtml(p.token)}">
+      <p style="font-size:15px">${status}${emails.length ? "" : " <strong>BEIRAT_EMAILS fehlt!</strong>"}</p>
+      <label style="font-weight:bold">Anmerkungen der Verwaltung (optional – erscheinen in der Mail und im PDF)</label>
+      <textarea name="comment" rows="7" maxlength="1500" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px;margin:6px 0 14px;border:1px solid #ccc;border-radius:8px">${escHtml(p.comment || "")}</textarea>
+      <button name="do" value="send" class="btn" style="width:100%;border:0;cursor:pointer">Jetzt an den Beirat senden</button>
+      <button name="do" value="save" style="width:100%;margin-top:10px;padding:14px;border:2px solid #6d7454;background:#fff;color:#6d7454;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer">Speichern – um ${CONFIG.REPORT_SEND_HOUR} Uhr senden</button>
+      <button name="do" value="hold" style="width:100%;margin-top:10px;padding:12px;border:0;background:none;color:#b3261e;font-size:15px;cursor:pointer">Diesen Monat nicht automatisch senden</button>
+    </form>`;
+  return donePage(`Monatsbericht ${p.title}`, "", form);
+}
+
+function backLink(p) {
+  return `<a class="btn" href="${escHtml(reportLink(p.token))}" target="_top">Zurück zum Bericht</a>`;
+}
+
+/** Menü: Vorschau des Vormonats an NOTIFY_EMAIL (ohne Ablage, ohne Versand). */
 function reportPreviewNow() {
   const [y, m] = previousMonth();
   const to = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").trim();
-  const res = createReportPdf(y, m, true);
-  if (to) MailApp.sendEmail({ to, subject: oneLine(`[Mieter-App] VORSCHAU Monatsbericht ${res.r.title}`),
-    body: "Vorschau des Monatsberichts (nicht an den Beirat versendet). Empfänger laut BEIRAT_EMAILS: " + (beiratEmails().join(", ") || "– noch keine eingetragen –"),
-    attachments: [res.blob] });
+  const res = createReportPdf(y, m, true, "");
+  if (to) {
+    const mail = reportMail(res.r, "(Hier stehen Ihre Anmerkungen, falls Sie welche eintragen.)");
+    MailApp.sendEmail({ to, subject: oneLine(`[Mieter-App] VORSCHAU Monatsbericht ${res.r.title}`),
+      body: "VORSCHAU – so sieht die Mail an den Beirat aus:\n\n" + mail.text,
+      htmlBody: `<p style="background:#fff1c7;padding:8px;font-family:Arial"><strong>VORSCHAU</strong> – so sieht die Mail an den Beirat aus (Empfänger: ${escHtml(beiratEmails().join(", ") || "noch keine eingetragen")})</p>` + mail.html,
+      attachments: [res.blob] });
+  }
   showResult("Monatsbericht", to ? `Vorschau ${res.r.title} an ${to} gesendet.` : "NOTIFY_EMAIL fehlt – keine Vorschau versendet.");
 }
 
 function ensureReportTrigger() {
-  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "monthlyReport");
-  if (!exists) ScriptApp.newTrigger("monthlyReport").timeBased().onMonthDay(1).atHour(8).inTimezone(CONFIG.TIMEZONE).create();
+  const handlers = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
+  if (handlers.indexOf("monthlyReport") === -1) ScriptApp.newTrigger("monthlyReport").timeBased().onMonthDay(1).atHour(8).inTimezone(CONFIG.TIMEZONE).create();
+  if (handlers.indexOf("monthlyReportSend") === -1) ScriptApp.newTrigger("monthlyReportSend").timeBased().onMonthDay(1).atHour(CONFIG.REPORT_SEND_HOUR).inTimezone(CONFIG.TIMEZONE).create();
 }
