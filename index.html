@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=63">
+  <link rel="stylesheet" href="css/style.css?v=64">
 </head>
 <body>
   <header class="app-header">
@@ -397,6 +397,10 @@
               <select name="minutes" id="fitMinutes" required></select>
             </label>
           </div>
+          <div class="field" id="fitWithWrap" hidden>
+            <span class="field__label">Gemeinsam mit (optional)</span>
+            <div class="chips" id="fitWith" role="group" aria-label="Gemeinsam mit"></div>
+          </div>
           <p class="muted small" id="fitDayInfo"></p>
           <button class="btn btn--primary btn--block" type="submit">Buchen</button>
         </form>
@@ -415,7 +419,8 @@
         </div>
         <ol class="fit-board" id="fitBoard"></ol>
         <p class="muted small">Gezählt werden gebuchte Zeiten, die schon begonnen haben. Nicht trainiert? Einfach bis zu 7 Tage
-          danach austragen. 🔥 = Wochen in Folge mit Training.</p>
+          danach austragen. Gemeinsame Trainings zählen für alle, die dabei sind. 🔥 = Wochen in Folge mit Training,
+          👥 = davon gemeinsam.</p>
 
         <details class="rule staff-privacy">
           <summary>Datenschutz-Hinweis</summary>
@@ -926,8 +931,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=63"></script>
-  <script src="js/i18n.js?v=63"></script>
-  <script src="js/app.js?v=63"></script>
+  <script src="js/config.js?v=64"></script>
+  <script src="js/i18n.js?v=64"></script>
+  <script src="js/app.js?v=64"></script>
 </body>
 </html>

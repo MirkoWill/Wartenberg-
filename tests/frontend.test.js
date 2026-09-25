@@ -452,8 +452,8 @@ function makeQrVideo(text) {
       const soon = new Date(); soon.setDate(soon.getDate() + 1); soon.setHours(18, 0, 0, 0);
       const state = { fitness: {
         ok: true, me: "010", weeklyGoal: 2,
-        upcoming: [{ id: "F-1", nr: "011", start: soon.toISOString(), end: new Date(soon.getTime() + 3600000).toISOString(), mine: false }],
-        mine: [],
+        upcoming: [{ id: "F-1", nr: "011", with: ["007"], start: soon.toISOString(), end: new Date(soon.getTime() + 3600000).toISOString(), mine: false }],
+        mine: [{ id: "F-P", nr: "008", with: ["010"], own: false, start: new Date(soon.getTime() + 86400000).toISOString(), end: new Date(soon.getTime() + 90000000).toISOString(), past: false }],
         members: ["007", "008", "010", "011"].map((nr, i) => ({ nr, week: { count: i === 3 ? 2 : 0, minutes: i === 3 ? 120 : 0 }, month: { count: 3 - i, minutes: 60 * (3 - i) }, year: { count: 5, minutes: 300 }, streak: i === 3 ? 4 : 0 })),
       } };
       const ctx = await newContext(browser, { backend: fakeBackend(state) });
@@ -468,17 +468,20 @@ function makeQrVideo(text) {
         && await p.$eval("#fitTime option", (o) => o.value) === "06:00" && await p.$eval("#fitTime option:last-child", (o) => o.value) === "22:30"
         && (await p.$$eval("#fitMinutes option", (o) => o.map((x) => x.value))).join() === "30,60,90,120");
       await p.selectOption("#fitDate", { index: 1 });
-      check("Fitness: belegte Zeit am gewählten Tag als Hinweis", /18:00–19:00 \(Nr\. 011\)/.test(await p.textContent("#fitDayInfo")), await p.textContent("#fitDayInfo"));
+      check("Fitness: belegte Zeit am gewählten Tag als Hinweis (gemeinsam: beide Nummern)", /18:00–19:00 \(Nr\. 011 \+ 007\)/.test(await p.textContent("#fitDayInfo")), await p.textContent("#fitDayInfo"));
       check("Fitness: Wochenziel für mich (0 von 2)", /0× von 2/.test(await p.textContent("#fitMe")));
       const board = await p.$$eval("#fitBoard li", (l) => l.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
       check("Fitness: Rangliste Woche – 011 vorne mit 🥇 und 🔥 4", /🥇 Nr\. 011 2× · 2 Std 🔥 4/.test(board[0]), board);
       await p.click("#fitPeriod [data-period=month]");
       const board2 = await p.$$eval("#fitBoard li .fit-board__nr", (l) => l.map((x) => x.textContent));
       check("Fitness: Monat umschaltbar – 007 vorne", board2[0] === "Nr. 007", board2);
+      check("Gemeinsam: als Partner gebucht → „mit Nr. 008“ und „Absagen“", /mit Nr\. 008/.test(await p.textContent("#fitMine")) && (await p.textContent("#fitMine [data-fit-cancel]")).trim() === "Absagen");
+      check("Gemeinsam: Auswahl zeigt die anderen drei Nummern", (await p.$$eval("#fitWith [data-with]", (b) => b.map((x) => x.dataset.with))).join() === "007,008,011");
+      await p.click("#fitWith [data-with='008']");
       await p.selectOption("#fitTime", "07:30"); await p.selectOption("#fitMinutes", "90");
       await p.click("#formFit button[type=submit]"); await p.waitForTimeout(500);
       const bk = (state.fitCalls || []).find((d) => d.action === "fitnessBook");
-      check("Fitness: Buchung sendet Tag, Uhrzeit, Dauer", bk && /^\d{4}-\d{2}-\d{2}$/.test(bk.date) && bk.time === "07:30" && bk.minutes === 90, bk);
+      check("Fitness: Buchung sendet Tag, Uhrzeit, Dauer und Partner", bk && /^\d{4}-\d{2}-\d{2}$/.test(bk.date) && bk.time === "07:30" && bk.minutes === 90 && bk.with.join() === "008", bk);
       await p.waitForTimeout(300);
       check("Fitness: eigene Buchung mit „Stornieren“", await p.isVisible("#fitMine [data-fit-cancel]"));
       p.once("dialog", (dlg) => dlg.accept());

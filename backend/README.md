@@ -173,6 +173,8 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
 - Regeln (`CONFIG.FITNESS`): eine Buchung zur Zeit, 6–23 Uhr, 30 Min bis 2 Std in 30-Minuten-Schritten,
   bis 28 Tage im Voraus, höchstens 10 offene Buchungen je Nummer. Stornieren: eigene Buchung (bis 7 Tage danach
   als „nicht trainiert“), die Verwaltung darf jede.
+- **Gemeinsam trainieren:** Beim Buchen optional „Gemeinsam mit“ andere Nummern wählen (Spalte „Mit“).
+  Die Buchung zählt dann für alle Beteiligten; ein Partner kann für sich absagen, die Buchung bleibt bestehen.
 - Statistik „Anfeuern“: Trainings (gebuchte Zeiten, die begonnen haben) je Woche/Monat/Jahr, Minuten,
   🔥 Wochen in Folge, Wochenziel (2×). Anzeige nur mit Nummern. Buchungen werden nach 2 Jahren gelöscht.
 
