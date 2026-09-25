@@ -2269,6 +2269,7 @@
       tile("Ø Reaktion", k.avgReactHours === null ? "–" : `${num(k.avgReactHours, 1)} Std.`, "", "90 Tage"),
       tile("Ø Durchlauf", k.avgLeadDays === null ? "–" : `${num(k.avgLeadDays, 1)} Tage`, "", "90 Tage"),
       tile("Reinigung laut Plan", pct(k.cleaningQuote), k.cleaningQuote === null ? "" : k.cleaningQuote >= 0.95 ? "green" : k.cleaningQuote >= 0.8 ? "yellow" : "red", `${k.cleaningIst || 0} von ${k.cleaningSoll || 0} (30 Tage)`),
+      tile("Langläufer", String(k.longRunners || 0), k.longRunners ? "long" : "", "außerhalb der Service-Ziele"),
       typeof k.errors24 === "number" ? tile("App-Fehler 24 Std.", String(k.errors24), k.errors24 ? "yellow" : "") : "",
     ].join("");
     // Leitung: keine Filter nach Zuständigkeit (sieht nur Hausmeister-Aufträge)
@@ -2288,6 +2289,7 @@
   function dueText(t) {
     const dt = (iso) => new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     const s = t.sla || {};
+    if (s.light === "long") return `⏳ Langläufer – außerhalb der Service-Ziele${t.longReason ? ` · ${t.longReason}` : ""}`;
     if (t.status === "erledigt") return `Erledigt ${t.done ? formatDate(new Date(t.done)) : ""}${s.react === "late" || s.done === "late" ? " · SLA verfehlt" : " · SLA eingehalten"}`;
     if (s.react === "overdue") return `Reaktion überfällig seit ${dt(s.reactDue)}`;
     if (s.done === "overdue") return `Erledigung überfällig seit ${dt(s.doneDue)}`;
@@ -2299,10 +2301,10 @@
     const f = cockpitFilter;
     tasks.forEach((t) => { t.sla = t.sla && typeof t.sla === "object" ? t.sla : {}; t.status = String(t.status || ""); });
     const list = tasks.filter((t) => (f === "done" ? t.status === "erledigt"
-      : t.status !== "erledigt" && (f === "open" || t.sla.light === f || t.owner === f)));
+      : t.status !== "erledigt" && (f === "open" || t.sla.light === f || (t.owner === f && t.sla.light !== "long"))));
     const opt = (vals, sel) => vals.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
     const lead = ((staff() || {}).user || {}).role === "Leitung";
-    const light = { red: "Überfällig", yellow: "Bald fällig", green: "Im Plan", done: "Erledigt" };
+    const light = { red: "Überfällig", yellow: "Bald fällig", green: "Im Plan", done: "Erledigt", long: "Langläufer" };
     $("#cockpitList").innerHTML = list.length ? list.map((t) => {
       const where = [t.entrance, t.wohnung ? whgLabel(t.wohnung) : "", t.ort].filter(Boolean).join(" · ");
       const phone = String(t.contact || "").replace(/[^\d+]/g, "");
@@ -2332,7 +2334,10 @@
               ${lead ? "" : `<label class="field"><span class="field__label">Zuständig</span>
                 <select name="owner">${opt(["Hausmeister", "Verwaltung"], t.owner)}</select></label>
               <label class="field"><span class="field__label">Notiz (nur intern)</span>
-                <textarea name="note" rows="2" maxlength="1000">${esc(t.note || "")}</textarea></label>`}
+                <textarea name="note" rows="2" maxlength="1000">${esc(t.note || "")}</textarea></label>
+              <label class="remember"><input type="checkbox" name="longRunner"${t.longRunner ? " checked" : ""}><span>⏳ Langläufer – wartet auf Firma o. Ä. (zählt nicht in die Service-Ziele)</span></label>
+              <label class="field"><span class="field__label">Grund (erscheint im Beiratsbericht – bitte ohne Namen)</span>
+                <input name="longReason" maxlength="300" value="${esc(t.longReason || "")}" placeholder="z. B. Warten auf Dachdecker, Teilreparatur erledigt"></label>`}
               <button class="btn btn--primary btn--small" type="submit">Speichern</button>
             </form>
           </details>
@@ -2356,6 +2361,7 @@
     const change = { status: form.elements.status.value };
     if (form.elements.owner) change.owner = form.elements.owner.value; // Leitung: nur Status
     if (form.elements.note) change.note = form.elements.note.value;
+    if (form.elements.longRunner) { change.longRunner = form.elements.longRunner.checked; change.longReason = form.elements.longReason.value.trim(); }
     const btn = form.querySelector('[type="submit"]');
     btn.disabled = true;
     try {
@@ -2366,6 +2372,8 @@
         const t = (c.data.tasks || []).find((x) => x.id === id);
         if (t) {
           Object.assign(t, change, { by: staff().user.name });
+          if (change.longRunner === true && t.status !== "erledigt") t.sla.light = "long";
+          if (change.longRunner === false && t.sla.light === "long") t.sla.light = "green";
           if (change.status === "erledigt") { t.sla.light = "done"; t.done = t.done || new Date().toISOString(); }
         }
         writeJson(COCKPIT_KEY, c);

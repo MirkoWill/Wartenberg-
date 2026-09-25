@@ -260,17 +260,20 @@ function makeQrVideo(text) {
             { time: "09:00", activity: "Kontrollgang", ort: "Tiefgarage", planned: false, manual: true }], missed: [], open: [{ activity: "Müllplatzreinigung", ort: "Müllplatz" }] },
           { date: "2026-09-22", planned: 2, plannedDone: 0, done: [], missed: [{ activity: "Treppenhausreinigung", ort: "Treppenhaus Lindenberger Str. 6", lateOn: "2026-09-23" },
             { activity: "Fensterreinigung Aufgang", ort: "Treppenhaus Lindenberger Str. 8", lateOn: "" }], open: [] }] },
-        tasks: [mk("T-1", "red"), mk("T-2", "yellow", { owner: "Verwaltung", type: "Mangel" }), mk("T-3", "done", { status: "erledigt", done: iso(-2) })] } };
+        tasks: [mk("T-1", "red"), mk("T-2", "yellow", { owner: "Verwaltung", type: "Mangel" }), mk("T-3", "done", { status: "erledigt", done: iso(-2) }),
+          mk("T-4", "long", { owner: "Verwaltung", type: "Mangel", longRunner: true, longReason: "Warten auf Dachdecker" })] } };
       const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
       const p = await newPage(ctx);
       await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
       check("Verwaltung: Tab heißt Cockpit", /Cockpit/.test(await p.textContent("#staffTab")) && (await p.getAttribute("#staffTab", "href")) === "#cockpit");
       await p.click("#staffTab"); await p.waitForSelector("#cockpitList .task");
-      check("Cockpit: Kennzahlen", (await p.$$(".kpi")).length === 8 && /80 %/.test(await p.textContent("#cockpitKpis")) && /5,5 Std\./.test(await p.textContent("#cockpitKpis")));
-      check("Cockpit: offene Aufträge mit Ampel, Überfälliges markiert", (await p.$$("#cockpitList .task")).length === 2 && await p.isVisible(".task--sla-red .sla-dot--red") && /überfällig/.test(await p.textContent(".task--sla-red .task__due")));
+      check("Cockpit: Kennzahlen", (await p.$$(".kpi")).length === 9 && /80 %/.test(await p.textContent("#cockpitKpis")) && /5,5 Std\./.test(await p.textContent("#cockpitKpis")));
+      check("Cockpit: offene Aufträge mit Ampel, Überfälliges markiert", (await p.$$("#cockpitList .task")).length === 3 && await p.isVisible(".task--sla-red .sla-dot--red") && /überfällig/.test(await p.textContent(".task--sla-red .task__due")));
       check("Cockpit-Tab aktiv markiert", (await p.getAttribute("#staffTab", "aria-current")) === "page");
       await p.click('#cockpitFilter [data-filter="red"]');
       check("Filter Überfällig", (await p.$$("#cockpitList .task")).length === 1);
+      await p.click('#cockpitFilter [data-filter="long"]');
+      check("Filter Langläufer: mit Grund, lila markiert", (await p.$$("#cockpitList .task")).length === 1 && /Dachdecker/.test(await p.textContent("#cockpitList .task__due")) && await p.isVisible(".sla-dot--long"));
       await p.click('#cockpitFilter [data-filter="Verwaltung"]');
       check("Filter Verwaltung", (await p.$$("#cockpitList .task")).length === 1 && /Mangel/.test(await p.textContent("#cockpitList .task__type")));
       await p.click('#cockpitFilter [data-filter="done"]');
@@ -303,7 +306,7 @@ function makeQrVideo(text) {
       await p.goto(`${base}?hm=${LEAD}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
       check("Leitung (001): Tab Cockpit + Werkzeuge", /Cockpit/.test(await p.textContent("#staffTab")) && await p.isVisible("#staffAdmin") && /Leitung/.test(await p.textContent("#staffName")));
       await p.click("#staffTab"); await p.waitForSelector("#cockpitList .task");
-      check("Leitung: keine Filter nach Zuständigkeit, kein App-Fehler-/Zähler-Bereich, kein Looker", !(await p.isVisible('#cockpitFilter [data-filter="Verwaltung"]')) && (await p.$$(".kpi")).length === 7 && (await p.$$("#cockpitCharts svg")).length === 2 && !(await p.isVisible("#cockpitLooker")));
+      check("Leitung: keine Filter nach Zuständigkeit, kein App-Fehler-/Zähler-Bereich, kein Looker", !(await p.isVisible('#cockpitFilter [data-filter="Verwaltung"]')) && (await p.$$(".kpi")).length === 8 && (await p.$$("#cockpitCharts svg")).length === 2 && !(await p.isVisible("#cockpitLooker")));
       await p.click(".task__edit summary");
       check("Leitung: nur Status bearbeitbar", await p.isVisible('.task__edit select[name="status"]') && !(await p.$('.task__edit select[name="owner"]')) && !(await p.$('.task__edit textarea[name="note"]')));
       await p.selectOption('.task__edit select[name="status"]', "erledigt"); await p.click('.task__edit [type="submit"]'); await p.waitForTimeout(400);

@@ -458,6 +458,37 @@ tr.down = false; tr.onlyVbb = false;
   check('Erneut formatieren: Startblatt nicht doppelt', sheets['Start'].grid.filter((r) => r[1] === 'Mieter-App WEG Wartenberger Dorfkrug').length === 1);
 }
 
+// ================= Langläufer =================
+{
+  const TH3 = vm.runInContext('CONFIG', ctx).SHEETS.tickets.headers;
+  const r = TH3.map(() => ''); r[TH3.indexOf('ID')] = 'T-LONG'; r[TH3.indexOf('Typ')] = 'Mangel'; r[TH3.indexOf('Status')] = 'in Arbeit';
+  r[TH3.indexOf('Eingang')] = new Date(Date.now() - 40 * 86400000); r[TH3.indexOf('Aufgang')] = 'Dorfstr. 24'; r[TH3.indexOf('Zuständig')] = 'Verwaltung';
+  sheets['Tickets'].grid.push(r);
+  let ov = post({ action: 'adminOverview', token: admTok });
+  check('Vor Kennzeichnung: 40 Tage alter Mangel ist rot', ov.tasks.find((x) => x.id === 'T-LONG').sla.light === 'red');
+  const od0 = ov.kpi.overdue;
+  check('Langläufer setzen (Verwaltung), Grund als Text', post({ action: 'adminUpdateTask', token: admTok, id: 'T-LONG', longRunner: true, longReason: '=Warten auf Dachdecker' }).ok
+    && r[TH3.indexOf('Langläufer')] === 'ja' && r[TH3.indexOf('Langläufer-Grund')].startsWith("'="));
+  ov = post({ action: 'adminOverview', token: admTok });
+  const lt = ov.tasks.find((x) => x.id === 'T-LONG');
+  check('Langläufer: keine Ampel, nicht überfällig, eigene Kennzahl', lt.sla.light === 'long' && lt.longRunner && ov.kpi.overdue === od0 - 1 && ov.kpi.longRunners >= 1, ov.kpi);
+  check('Leitung darf Langläufer nicht setzen', !post({ action: 'adminUpdateTask', token: leadTok, id: 'T-LONG', longRunner: false }).ok);
+  mails.length = 0; ctx.morningDigest();
+  check('Morgen-Mail nennt Langläufer nicht als überfällig', !mails.some((m) => /T-LONG/.test(m.body)));
+  ctx.rebuildAnalytics();
+  const an = sheets['Auswertung Aufträge'].grid, ah = an[0], ar = an.find((x) => x[0] === 'T-LONG');
+  check('Auswertung: Spalte Langläufer = 1, SLA „Langläufer“, nicht überfällig', ar[ah.indexOf('Langläufer')] === 1 && ar[ah.indexOf('SLA Erledigung')] === 'Langläufer' && ar[ah.indexOf('Überfällig')] === 0, ar);
+  const now = new Date();
+  const rd = ctx.reportData(now.getFullYear(), now.getMonth());
+  check('Monatsbericht: Langläufer gesondert mit Grund, nicht bei „überfällig“', rd.longRunners.some((x) => /Dachdecker/.test(x.reason) && x.entrance === 'Dorfstr. 24') && !rd.overdue.some((x) => x.since && x.entrance === 'Dorfstr. 24' && x.type === 'Mangel' && false)
+    && /Langläufer \(gesondert/.test(ctx.reportHtml(rd, false, '')) && /Langläufer/.test(ctx.reportMail(rd, '').text), rd.longRunners);
+  post({ action: 'adminUpdateTask', token: admTok, id: 'T-LONG', status: 'erledigt' });
+  const q = post({ action: 'adminOverview', token: admTok });
+  check('Erledigter Langläufer zählt nicht in SLA-Quote', q.kpi.closed90 === ov.kpi.closed90, [q.kpi.closed90, ov.kpi.closed90]);
+  check('Langläufer zurücknehmen', post({ action: 'adminUpdateTask', token: admTok, id: 'T-LONG', longRunner: false }).ok && r[TH3.indexOf('Langläufer')] === '');
+  r[TH3.indexOf('Status')] = 'erledigt';
+}
+
 // ================= Monatsbericht Beirat =================
 {
   const now = new Date();
