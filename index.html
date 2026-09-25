@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=57">
+  <link rel="stylesheet" href="css/style.css?v=58">
 </head>
 <body>
   <header class="app-header">
@@ -58,6 +58,7 @@
     <!-- Startseite (interner Name „notfall“ bleibt, damit alte Links/QR-Codes funktionieren) -->
     <section class="view" data-view="notfall" data-title="Start">
       <div class="news" id="newsBox" hidden></div>
+      <div class="polls" id="pollBox" hidden></div>
       <div class="weather" id="weatherBox" hidden></div>
       <h2 class="section-title section-title--first">Im Notfall</h2>
       <p class="lead">Einfach antippen – der Anruf startet sofort.</p>
@@ -314,6 +315,28 @@
               </fieldset>
               <label class="remember"><input type="checkbox" name="important"><span>Wichtig (rot hervorgehoben)</span></label>
               <button class="btn btn--primary btn--block" type="submit">Veröffentlichen</button>
+            </form>
+          </details>
+        </section>
+
+        <section id="cockpitPolls" hidden>
+          <h2 class="section-title">Stimmungsbild</h2>
+          <ul class="poll-admin" id="pollAdminList"></ul>
+          <details class="rule" id="pollAdminNew">
+            <summary>➕ Neue Umfrage starten</summary>
+            <form class="form" id="formPollAdmin" novalidate>
+              <label class="field"><span class="field__label">Frage *</span>
+                <input name="question" required maxlength="200" placeholder="z. B. Wünschen Sie Fahrradbügel im Hof?"></label>
+              <label class="field"><span class="field__label">Antworten * (eine pro Zeile, 2–6)</span>
+                <textarea name="options" rows="4" required placeholder="Ja&#10;Nein&#10;Ist mir egal"></textarea></label>
+              <label class="field"><span class="field__label">Läuft bis (optional)</span><input type="date" name="to"></label>
+              <fieldset class="field"><legend class="field__label">Für wen?</legend>
+                <div class="chips" id="pollAdminEntrances"></div>
+                <span class="field__hint">Nichts ausgewählt = alle Aufgänge</span>
+              </fieldset>
+              <label class="remember"><input type="checkbox" name="showResults" checked><span>Bewohner sehen nach ihrer Stimme das Ergebnis</span></label>
+              <button class="btn btn--primary btn--block" type="submit">Umfrage starten</button>
+              <p class="muted small">Anonym: gespeichert werden nur Antwort, Aufgang und Zeitpunkt. Eine Stimme je Gerät.</p>
             </form>
           </details>
         </section>
@@ -660,6 +683,13 @@
           Name, gewünschte Beschriftung und Ihre Kontaktangabe; die Übermittlung erfolgt per E-Mail.</p>
       </details>
       <details class="rule">
+        <summary>Umfragen (Stimmungsbild)</summary>
+        <p>Nehmen Sie an einer Umfrage teil, speichern wir nur Ihre Antwort, den Aufgang und den Zeitpunkt. Damit niemand
+          doppelt abstimmt, erzeugt die App auf Ihrem Gerät einen Zufallswert; gespeichert wird davon nur eine
+          verschlüsselte Einweg-Kennung, die keinen Rückschluss auf Sie zulässt. Keine Namen, keine Wohnungsnummern.
+          Die Stimmen werden nach spätestens zwei Jahren gelöscht.</p>
+      </details>
+      <details class="rule">
         <summary>Wetter – Deutscher Wetterdienst</summary>
         <p>Die Wetteranzeige auf der Startseite stammt vom Deutschen Wetterdienst (über den freien Dienst Bright Sky).
           Die Daten ruft unser Server (Google) für den Standort der Wohnanlage ab. Ihr Gerät verbindet sich dafür nicht
@@ -845,8 +875,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=57"></script>
-  <script src="js/i18n.js?v=57"></script>
-  <script src="js/app.js?v=57"></script>
+  <script src="js/config.js?v=58"></script>
+  <script src="js/i18n.js?v=58"></script>
+  <script src="js/app.js?v=58"></script>
 </body>
 </html>

@@ -542,6 +542,7 @@
     const cached = readJson(NEWS_KEY);
     renderNews(cached && cached.obj === OBJ.key ? cached.items : []);
     renderCare(cached && cached.obj === OBJ.key ? cached.care : null, cached ? cached.cleaningIcs : "");
+    renderPolls(cached && cached.obj === OBJ.key ? cached.polls : []);
     renderWeather(cached ? cached.weather : null);
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
@@ -550,8 +551,9 @@
       if (data.code === "pin") { handlePinRejected(); return; }
       if (!data.ok) return;
       newsLoadedAt = Date.now();
-      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items, care: data.care || null, weather: data.weather || null, cleaningIcs: data.cleaningIcs || "" });
+      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items, care: data.care || null, weather: data.weather || null, cleaningIcs: data.cleaningIcs || "", polls: data.polls || [] });
       renderNews(data.items);
+      renderPolls(data.polls);
       renderCare(data.care, data.cleaningIcs);
       renderWeather(data.weather);
     } catch (err) {
@@ -559,6 +561,76 @@
     }
   }
   viewEnterHooks.notfall = loadNews;
+
+  /* ======================================================================
+     Stimmungsbild – anonyme Umfrage auf der Startseite
+     ====================================================================== */
+
+  const POLLS_KEY = "mieterapp.polls";   // { [umfrageId]: gewählte Antwort } – nur auf diesem Gerät
+  const VOTER_KEY = "mieterapp.voter";   // Zufallswert gegen doppelte Stimmen (kein Personenbezug)
+
+  function voterId() {
+    let v = null;
+    try { v = localStorage.getItem(VOTER_KEY); } catch (e) { /* egal */ }
+    if (!/^[a-f0-9]{32}$/.test(v || "")) {
+      v = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+      try { localStorage.setItem(VOTER_KEY, v); } catch (e) { /* egal */ }
+    }
+    return v;
+  }
+
+  function pollBars(options, counts) {
+    const total = counts.reduce((a, b) => a + (Number(b) || 0), 0);
+    return `<ul class="poll__results">${options.map((o, i) => {
+      const n = Number(counts[i]) || 0, pct = total ? Math.round((n / total) * 100) : 0;
+      return `<li><span class="poll__opt">${esc(o)}</span><span class="poll__bar"><i style="width:${pct}%"></i></span><span class="poll__pct">${pct} %</span></li>`;
+    }).join("")}</ul><p class="muted small">${esc(t_("{n} Stimmen", { n: total }))}</p>`;
+  }
+
+  function renderPolls(polls) {
+    const box = $("#pollBox");
+    const list = Array.isArray(polls) ? polls.filter((p) => p && p.id && Array.isArray(p.options)) : [];
+    if (!list.length) { box.hidden = true; box.innerHTML = ""; return; }
+    const voted = readJson(POLLS_KEY) || {};
+    box.hidden = false;
+    box.innerHTML = list.map((p) => {
+      const mine = Object.prototype.hasOwnProperty.call(voted, p.id) ? voted[p.id] : null;
+      return `<article class="poll" data-poll="${esc(p.id)}">
+        <span class="poll__flag">${esc(t_("Ihre Meinung ist gefragt"))}</span>
+        <h3 class="poll__q">${esc(p.question)}</h3>
+        ${mine === null
+          ? `<div class="poll__options">${p.options.map((o, i) => `<button class="btn btn--ghost btn--block" type="button" data-vote="${i}">${esc(o)}</button>`).join("")}</div>
+             <p class="muted small">${esc(t_("Anonym – eine Stimme je Gerät."))}${p.to ? " " + esc(t_("Läuft bis {datum}.", { datum: formatDate(parseIsoDate(p.to)) })) : ""}</p>`
+          : `<p class="poll__thanks">✓ ${esc(t_("Danke für Ihre Stimme!"))}</p>${Array.isArray(p.results) ? pollBars(p.options, p.results) : ""}`}
+      </article>`;
+    }).join("");
+  }
+
+  async function vote(btn) {
+    const card = btn.closest("[data-poll]");
+    const id = card.dataset.poll;
+    $$("[data-vote]", card).forEach((b) => { b.disabled = true; });
+    try {
+      const res = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "vote", pollId: id, option: Number(btn.dataset.vote), voter: voterId(), obj: OBJ.key || "", pin: storedPin() }) });
+      const data = await res.json();
+      if (!data.ok && data.code !== "voted") throw Object.assign(new Error(data.error), { userMessage: data.error });
+      const voted = readJson(POLLS_KEY) || {};
+      voted[id] = Number(btn.dataset.vote);
+      writeJson(POLLS_KEY, voted);
+      const cached = readJson(NEWS_KEY);
+      if (cached && Array.isArray(cached.polls)) {
+        const p = cached.polls.find((x) => x.id === id);
+        if (p && Array.isArray(data.results)) p.results = data.results;
+        writeJson(NEWS_KEY, cached);
+        renderPolls(cached.polls);
+      }
+      toast(t_("Danke für Ihre Stimme!"), "ok");
+    } catch (err) {
+      $$("[data-vote]", card).forEach((b) => { b.disabled = false; });
+      toast(err.userMessage || t_("Senden fehlgeschlagen. Bitte Internetverbindung prüfen."), "error");
+    }
+  }
 
   /* ======================================================================
      Wetter – 3 Tage + Warnungen (Daten: Deutscher Wetterdienst, abgerufen vom Backend)
@@ -624,6 +696,8 @@
     try { await navigator.clipboard.writeText(b.dataset.copy); toast(t_("Adresse kopiert – im Kalender unter „Abonnieren“ einfügen."), "ok", 5000); }
     catch (err) { window.prompt(t_("Adresse kopieren:"), b.dataset.copy); }
   });
+
+  document.addEventListener("click", (e) => { const b = e.target.closest("[data-vote]"); if (b && !b.disabled) vote(b); });
 
   function initRouter() {
     // Ohne bekannten Aufgang zuerst die Auswahl zeigen.
@@ -2201,6 +2275,7 @@
     $$('#cockpitFilter [data-filter="Hausmeister"], #cockpitFilter [data-filter="Verwaltung"]').forEach((b) => { b.hidden = lead; });
     renderWork(d.work);
     renderNewsAdmin(d);
+    renderPollAdmin(d);
     renderCockpitList(Array.isArray(d.tasks) ? d.tasks : []);
     renderCockpitCharts(d);
     const looker = $("#cockpitLooker");
@@ -2359,6 +2434,65 @@
       await staffPost({ action: "adminNewsEnd", row: Number(btn.dataset.newsEnd), title: btn.dataset.newsTitle }, 30000);
       btn.closest("li").remove();
       toast("Hinweis beendet.", "ok");
+      loadCockpit();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.userMessage || "Beenden fehlgeschlagen.", "error");
+    }
+  }
+
+  /** Stimmungsbild: Ergebnisse, Beenden, neue Umfrage (nur Verwaltung). */
+  function renderPollAdmin(d) {
+    const box = $("#cockpitPolls");
+    const show = d.role !== "Leitung" && Array.isArray(d.polls);
+    box.hidden = !show;
+    if (!show) return;
+    const names = {};
+    CFG.HOUSES.forEach((h) => h.entrances.forEach((e) => { names[e.id] = e.name; }));
+    const who = (only) => { const ids = String(only || "").split(/[,;\s]+/).filter(Boolean); return ids.length ? ids.map((i) => names[i] || i).join(", ") : "alle Aufgänge"; };
+    $("#pollAdminList").innerHTML = d.polls.length ? d.polls.map((p) => `
+      <li class="poll poll--admin">
+        <span class="badge ${p.open ? "badge--in-Arbeit" : ""}">${p.open ? "läuft" : "beendet"}</span>
+        <h3 class="poll__q">${esc(p.question)}</h3>
+        ${pollBars(Array.isArray(p.options) ? p.options : [], Array.isArray(p.counts) ? p.counts : [])}
+        <p class="muted small">${esc(who(p.only))}${p.to ? ` · bis ${esc(formatDate(parseIsoDate(p.to)))}` : ""} · ${p.showResults ? "Ergebnis für Bewohner sichtbar" : "Ergebnis nur für die Verwaltung"}</p>
+        ${p.open ? `<button class="btn btn--ghost btn--small" type="button" data-poll-end="${esc(p.id)}">Umfrage beenden</button>` : ""}
+      </li>`).join("") : '<li class="muted">Noch keine Umfragen.</li>';
+    const chips = $("#pollAdminEntrances");
+    if (!chips.children.length) {
+      chips.innerHTML = CFG.HOUSES.flatMap((h) => h.entrances).map((e) =>
+        `<label class="chip chip--check"><input type="checkbox" name="only" value="${esc(e.id)}"><span>${esc(e.name)}</span></label>`).join("");
+    }
+  }
+
+  async function savePollAdmin(e) {
+    e.preventDefault();
+    const f = e.currentTarget;
+    if (!validate(f)) return;
+    const options = f.elements.options.value.split("\n").map((x) => x.trim()).filter(Boolean);
+    if (options.length < 2 || options.length > 6) { toast("Bitte 2 bis 6 Antworten eingeben (eine pro Zeile).", "error"); return; }
+    const btn = f.querySelector('[type="submit"]');
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "adminPollSave", question: f.elements.question.value.trim(), options, to: f.elements.to.value,
+        showResults: f.elements.showResults.checked, only: $$('input[name="only"]:checked', f).map((x) => x.value) }, 30000);
+      toast("Umfrage gestartet – Bewohner sehen sie auf der Startseite.", "ok", 6000);
+      f.reset();
+      $("#pollAdminNew").open = false;
+      loadCockpit();
+    } catch (err) {
+      toast(err.userMessage || "Starten fehlgeschlagen – bitte erneut versuchen.", "error");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function endPollAdmin(btn) {
+    if (!window.confirm("Umfrage beenden? Danach kann niemand mehr abstimmen.")) return;
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "adminPollEnd", id: btn.dataset.pollEnd }, 30000);
+      toast("Umfrage beendet.", "ok");
       loadCockpit();
     } catch (err) {
       btn.disabled = false;
@@ -2534,6 +2668,8 @@
     });
     $("#cockpitList").addEventListener("submit", saveCockpitTask);
     $("#formNewsAdmin").addEventListener("submit", saveNewsAdmin);
+    $("#formPollAdmin").addEventListener("submit", savePollAdmin);
+    $("#pollAdminList").addEventListener("click", (e) => { const b = e.target.closest("[data-poll-end]"); if (b) endPollAdmin(b); });
     $("#newsAdminList").addEventListener("click", (e) => { const b = e.target.closest("[data-news-end]"); if (b) endNewsAdmin(b); });
   }
 

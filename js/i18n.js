@@ -12,6 +12,11 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "Ihre Meinung ist gefragt": ["Your opinion counts", "Ваше мнение важно", "Ваша думка важлива", "Zajímá nás váš názor"],
+    "Anonym – eine Stimme je Gerät.": ["Anonymous – one vote per device.", "Анонимно – один голос с устройства.", "Анонімно – один голос з пристрою.", "Anonymně – jeden hlas na zařízení."],
+    "Läuft bis {datum}.": ["Open until {datum}.", "Идёт до {datum}.", "Триває до {datum}.", "Probíhá do {datum}."],
+    "Danke für Ihre Stimme!": ["Thank you for your vote!", "Спасибо за ваш голос!", "Дякуємо за ваш голос!", "Děkujeme za váš hlas!"],
+    "{n} Stimmen": ["{n} votes", "Голосов: {n}", "Голосів: {n}", "Hlasů: {n}"],
     "iPhone / Outlook": ["iPhone / Outlook", "iPhone / Outlook", "iPhone / Outlook", "iPhone / Outlook"],
     "Google Kalender": ["Google Calendar", "Google Календарь", "Google Календар", "Kalendář Google"],
     "Adresse kopieren": ["Copy address", "Скопировать адрес", "Скопіювати адресу", "Kopírovat adresu"],
