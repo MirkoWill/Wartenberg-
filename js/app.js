@@ -541,7 +541,7 @@
     // Höchstens alle 5 Minuten neu laden; bis dahin gespeicherten Stand zeigen.
     const cached = readJson(NEWS_KEY);
     renderNews(cached && cached.obj === OBJ.key ? cached.items : []);
-    renderCare(cached && cached.obj === OBJ.key ? cached.care : null);
+    renderCare(cached && cached.obj === OBJ.key ? cached.care : null, cached ? cached.cleaningIcs : "");
     renderWeather(cached ? cached.weather : null);
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
@@ -550,9 +550,9 @@
       if (data.code === "pin") { handlePinRejected(); return; }
       if (!data.ok) return;
       newsLoadedAt = Date.now();
-      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items, care: data.care || null, weather: data.weather || null });
+      writeJson(NEWS_KEY, { obj: OBJ.key, items: data.items, care: data.care || null, weather: data.weather || null, cleaningIcs: data.cleaningIcs || "" });
       renderNews(data.items);
-      renderCare(data.care);
+      renderCare(data.care, data.cleaningIcs);
       renderWeather(data.weather);
     } catch (err) {
       console.warn("Aktuelles:", err);
@@ -617,6 +617,14 @@
       <p class="weather__src">${esc(t_("Quelle: Deutscher Wetterdienst"))}</p>`;
   }
 
+  // „Adresse kopieren“ (Kalender-Abo)
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-copy]");
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast(t_("Adresse kopiert – im Kalender unter „Abonnieren“ einfügen."), "ok", 5000); }
+    catch (err) { window.prompt(t_("Adresse kopieren:"), b.dataset.copy); }
+  });
+
   function initRouter() {
     // Ohne bekannten Aufgang zuerst die Auswahl zeigen.
     if (!OBJ.key && !location.hash) history.replaceState(null, "", "#aufgang");
@@ -673,6 +681,7 @@
     const icsAbs = new URL(w.icsUrl, location.href).href;
     // webcal:// öffnet auf iPhone und vielen Android-Geräten direkt das Kalender-Abo.
     $("#wasteSubscribe").href = icsAbs.replace(/^https?:\/\//, "webcal://");
+    $("#wasteCal").innerHTML = calendarButtons(icsAbs);
     $("#wastePdf").href = w.pdfUrl;
     $("#bulkyLink").href = w.bulkyUrl;
     $("#sortingLink").href = w.sortingUrl;
@@ -2043,6 +2052,14 @@
             ? `<a href="tel:${esc(phone)}">${esc(t.contact)}</a>` : esc(t.contact)) : ""}</div>` : ""}
           <div class="task__meta muted small">${esc(t.id)} · ${esc(t.source)}${t.created ? " · " + esc(formatDate(parseIsoDate(t.created))) : ""}</div>
           <button class="btn btn--primary btn--small" type="button" data-done="${esc(t.id)}">✓ Erledigt</button>
+          <div class="task__complete" data-panel="${esc(t.id)}" hidden>
+            <label class="field"><span class="field__label">Foto nachher (optional)</span>
+              <input type="file" accept="image/*" capture="environment" data-photo></label>
+            <div class="task__complete-actions">
+              <button class="btn btn--primary btn--small" type="button" data-confirm-done="${esc(t.id)}">Als erledigt melden</button>
+              <button class="btn btn--ghost btn--small" type="button" data-cancel-done>Abbrechen</button>
+            </div>
+          </div>
         </li>`;
     }).join("") : '<li class="muted">Keine offenen Aufträge. 👍</li>';
   }
@@ -2054,16 +2071,20 @@
   }
 
   async function completeTask(id, btn) {
-    if (!window.confirm(`Auftrag ${id} als erledigt melden?`)) return;
+    const panel = btn.closest(".task__complete");
+    const file = panel && panel.querySelector("[data-photo]").files[0];
     btn.disabled = true;
+    const old = btn.textContent;
+    if (file) btn.textContent = "Foto wird gesendet …";
     try {
-      await staffPost({ action: "completeTask", id });
+      await staffPost({ action: "completeTask", id, photo: file ? await readPhoto(file) : undefined }, file ? 60000 : 30000);
       toast("Als erledigt gemeldet.", "ok");
       const c = readJson(TASKS_KEY); // sofort aus der Liste nehmen, nicht auf Google warten
       if (c) { c.tasks = (c.tasks || []).filter((t) => t.id !== id); writeJson(TASKS_KEY, c); renderTasks(c.tasks); }
       loadTasks();
     } catch (err) {
       btn.disabled = false;
+      btn.textContent = old;
       toast(err.userMessage || "Senden fehlgeschlagen – bitte später erneut versuchen.", "error");
     }
   }
@@ -2224,6 +2245,7 @@
           ${t.details ? `<p class="task__details">${esc(t.details)}</p>` : ""}
           ${t.name || t.contact ? `<div class="task__contact">${esc(t.name || "")}${t.contact ? " · " + (phone.length >= 6
             ? `<a href="tel:${esc(phone)}">${esc(t.contact)}</a>` : esc(t.contact)) : ""}</div>` : ""}
+          ${photoLinks(t)}
           <div class="task__meta muted small">${esc(t.id)} · ${esc(t.source === "Bewohner" ? "Bewohner" : "intern " + t.source)}`
             + `${t.created ? " · Eingang " + esc(formatDate(new Date(t.created))) : ""}${t.by ? " · zuletzt: " + esc(t.by) : ""}</div>
           <details class="task__edit">
@@ -2240,6 +2262,14 @@
           </details>
         </li>`;
     }).join("") : `<li class="muted">${f === "open" ? "Keine offenen Aufträge. 👍" : "Keine Aufträge in dieser Auswahl."}</li>`;
+  }
+
+  /** Vorher/Nachher-Fotos (Google Drive, nur mit Zugriff auf das Konto der Verwaltung sichtbar). */
+  function photoLinks(t) {
+    const ok = (u) => /^https:\/\/(drive|docs)\.google\.com\//.test(String(u || ""));
+    const links = [ok(t.photo) ? `<a href="${esc(t.photo)}" target="_blank" rel="noopener">📷 Foto vorher</a>` : "",
+      ok(t.photoDone) ? `<a href="${esc(t.photoDone)}" target="_blank" rel="noopener">📷 Foto nachher</a>` : ""].filter(Boolean);
+    return links.length ? `<div class="task__photos">${links.join(" · ")}</div>` : "";
   }
 
   async function saveCockpitTask(e) {
@@ -2431,9 +2461,23 @@
     $("#scanForm").addEventListener("submit", submitScan);
     $("#scanFormCancel").addEventListener("click", resetScanForm);
     $("#tasksRefresh").addEventListener("click", loadTasks);
+    // „✓ Erledigt“ öffnet ein kleines Feld für das (optionale) Nachher-Foto, dann „Als erledigt melden“.
     $("#taskList").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-done]");
-      if (btn) completeTask(btn.dataset.done, btn);
+      const open = e.target.closest("[data-done]");
+      if (open) {
+        const li = open.closest("li");
+        li.querySelector(".task__complete").hidden = false;
+        open.hidden = true;
+        return;
+      }
+      const ok = e.target.closest("[data-confirm-done]");
+      if (ok) { completeTask(ok.dataset.confirmDone, ok); return; }
+      const cancel = e.target.closest("[data-cancel-done]");
+      if (cancel) {
+        const li = cancel.closest("li");
+        li.querySelector(".task__complete").hidden = true;
+        li.querySelector("[data-done]").hidden = false;
+      }
     });
     $("#defectOrt").addEventListener("change", (e) => {
       const free = e.target.value === "__frei";
@@ -2495,7 +2539,18 @@
 
   /* ---------- Bewohner: Hausreinigung (zuletzt erledigt / geplant) ---------- */
 
-  function renderCare(care) {
+  /** Buttons „In den Kalender“: iPhone/Outlook (webcal), Google Kalender, Adresse kopieren. */
+  function calendarButtons(httpsUrl) {
+    const webcal = httpsUrl.replace(/^https?:\/\//, "webcal://");
+    const google = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`;
+    return `<div class="cal-buttons">
+      <a class="btn btn--ghost btn--small" href="${esc(webcal)}">📅 ${esc(t_("iPhone / Outlook"))}</a>
+      <a class="btn btn--ghost btn--small" href="${esc(google)}" target="_blank" rel="noopener">📅 ${esc(t_("Google Kalender"))}</a>
+      <button class="btn btn--ghost btn--small" type="button" data-copy="${esc(httpsUrl)}">🔗 ${esc(t_("Adresse kopieren"))}</button>
+    </div>`;
+  }
+
+  function renderCare(care, cleaningIcs) {
     const box = $("#careBox");
     const last = (care && care.last) || [];
     const next = (care && care.next) || [];
@@ -2514,6 +2569,8 @@
         ${next.length ? `<h3 class="care__title">${esc(t_("Geplant"))}</h3>
           <ul class="care__list">${next.map((n) => `<li><span class="care__date">${esc(range(n))}</span>
             <span><strong>${esc(t_(n.activity))}</strong>${n.ort ? `<br><span class="muted">${esc(n.ort)}</span>` : ""}</span></li>`).join("")}</ul>` : ""}
+        ${/^https:\/\/calendar\.google\.com\//.test(cleaningIcs || "") ? `<details class="care__cal"><summary>${esc(t_("Reinigungstermine im eigenen Kalender"))}</summary>
+          <p class="muted small">${esc(t_("Einmal abonnieren – neue Termine erscheinen automatisch."))}</p>${calendarButtons(cleaningIcs)}</details>` : ""}
       </div>`;
   }
 

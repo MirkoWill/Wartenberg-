@@ -21,7 +21,7 @@ const CONFIG = {
       name: "Tickets",
       headers: ["ID", "Eingang", "Typ", "Status", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Name",
         "Termin", "Details", "Ort", "Telefon/Kontakt", "Foto", "Erledigt am", "Notiz Verwaltung",
-        "Erledigt-Code", "Zuständig", "In Arbeit seit", "Bearbeitet von"],
+        "Erledigt-Code", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt"],
     },
     meter: {
       name: "Zählerstände",
@@ -61,7 +61,7 @@ const CONFIG = {
     staffDefects: {
       name: "Mängel Hausmeister",
       headers: ["ID", "Eingang", "Erfasst von (Nr)", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
-        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig", "In Arbeit seit", "Bearbeitet von"],
+        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt"],
     },
     // Für Looker Studio / Auswertungen – werden nachts und per Menü neu aufgebaut (nicht von Hand bearbeiten)
     analytics: {
@@ -573,7 +573,10 @@ function getNews(obj) {
     console.error("Wetter:", err);
     CacheService.getScriptCache().put("weather", "null", 600); // Dienst gestört: 10 Min. nicht erneut versuchen
   }
-  return { ok: true, items: items.slice(0, 10), care, weather };
+  // Kalender-Abo „Reinigung“: öffentliche iCal-Adresse des Google-Kalenders (Script-Eigenschaft CLEANING_ICS_URL)
+  const ics = String(PropertiesService.getScriptProperties().getProperty("CLEANING_ICS_URL") || "").trim();
+  const cleaningIcs = /^https:\/\/calendar\.google\.com\/calendar\/ical\/[^\s"'<>]+\.ics$/.test(ics) ? ics : "";
+  return { ok: true, items: items.slice(0, 10), care, weather, cleaningIcs };
 }
 
 /**
@@ -1263,6 +1266,11 @@ function completeTask(p, user) {
   try {
     row = sheetObjects(def).find((r) => r.ID === id);
     if (!row || !mayHandle(user, ownerOf(row, row.Typ || "Mangel (intern)"))) throw userError("Auftrag nicht gefunden");
+    if (p.photo && !row["Foto erledigt"]) {
+      // Nachher-Foto (optional) – Nachweis für Verwaltung und Beirat
+      const url = savePhoto(p.photo, `${id}_erledigt`);
+      if (url) sheet.getRange(row._row, def.headers.indexOf("Foto erledigt") + 1).setValue(url);
+    }
     if (row.Status !== "erledigt") {
       sheet.getRange(row._row, def.headers.indexOf("Status") + 1).setValue("erledigt");
       applyStatusTimestamps(sheet, def, row._row, "erledigt", row);
@@ -1585,6 +1593,7 @@ function deleteRowsWhere(def, isOld) {
   try {
     rows.sort((a, b) => b._row - a._row).forEach((r) => {
       if (r.Foto) trashPhoto(r.Foto);
+      if (r["Foto erledigt"]) trashPhoto(r["Foto erledigt"]);
       sheet.deleteRow(r._row);
     });
   } finally {
@@ -1754,7 +1763,7 @@ function allTasks() {
     entrance: String(r.Aufgang || "") || entranceName(r["Aufgang-ID"]),
     wohnung: String(r.Wohnung || ""), name: String(r.Name || ""), contact: String(r["Telefon/Kontakt"] || ""),
     details: String(r.Details || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
-    by: String(r["Bearbeitet von"] || ""), _row: r._row,
+    by: String(r["Bearbeitet von"] || ""), _row: r._row, photo: driveUrl(r.Foto), photoDone: driveUrl(r["Foto erledigt"]),
   }));
   const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter((r) => r.ID).map((r) => ({
     id: String(r.ID), kind: "defect", source: String(r["Erfasst von (Nr)"] || ""), type: "Mangel (intern)",
@@ -1762,7 +1771,7 @@ function allTasks() {
     inWork: date(r["In Arbeit seit"]), done: date(r["Erledigt am"]), termin: null, urgent: r.Dringend === true,
     entrance: entranceName(r["Aufgang-ID"]), object: String(r["Aufgang-ID"] || ""), wohnung: "", name: "", contact: "",
     details: String(r.Beschreibung || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
-    by: String(r["Bearbeitet von"] || ""), _row: r._row,
+    by: String(r["Bearbeitet von"] || ""), _row: r._row, photo: driveUrl(r.Foto), photoDone: driveUrl(r["Foto erledigt"]),
   }));
   return tickets.concat(defects);
 }
@@ -1794,6 +1803,12 @@ function slaInfo(t, now) {
   const hours = reactAt && t.created ? Math.max(0, (reactAt - t.created) / 3600000) : null;
   const days = closed && t.done && t.created ? Math.max(0, (t.done - t.created) / 86400000) : null;
   return { reactDue, doneDue, react, done, light, reactHours: hours, leadDays: days };
+}
+
+/** Nur echte Drive-Links weitergeben (keine beliebigen URLs aus der Tabelle). */
+function driveUrl(v) {
+  const s = String(v || "").trim();
+  return /^https:\/\/(drive|docs)\.google\.com\/[^\s"'<>]+$/.test(s) ? s : "";
 }
 
 function isoOrEmpty(d) { return d instanceof Date && !isNaN(d) ? d.toISOString() : ""; }
@@ -1846,7 +1861,7 @@ function adminOverview(p, user) {
     id: t.id, kind: t.kind, source: t.source, type: t.type, status: t.status, owner: t.owner, urgent: t.urgent,
     created: isoOrEmpty(t.created), inWork: isoOrEmpty(t.inWork), done: isoOrEmpty(t.done), termin: isoOrEmpty(t.termin),
     entrance: t.entrance, wohnung: t.wohnung, name: t.name, contact: t.contact, details: t.details, ort: t.ort,
-    note: t.note, by: t.by,
+    note: t.note, by: t.by, photo: t.photo, photoDone: t.photoDone,
     sla: { light: t.sla.light, react: t.sla.react, done: t.sla.done, reactDue: isoOrEmpty(t.sla.reactDue), doneDue: isoOrEmpty(t.sla.doneDue) },
   }));
   const rank = { red: 0, yellow: 1, green: 2, done: 3 };

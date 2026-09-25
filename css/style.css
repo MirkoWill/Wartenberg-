@@ -1062,3 +1062,13 @@ html.text-large body { zoom: 1.18; }
 .plan-today__list li:last-child { border-bottom: 0; }
 .plan-today__list li.is-done { opacity: .6; }
 .plan-today__list li.is-done strong { text-decoration: line-through; }
+
+/* Kalender-Abo */
+.cal-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.care__cal { margin-top: 12px; }
+.care__cal summary { cursor: pointer; font-weight: 700; color: var(--c-primary); min-height: 40px; display: flex; align-items: center; }
+
+/* Erledigen mit Nachher-Foto */
+.task__complete { margin-top: 8px; padding: 10px 12px; background: var(--c-primary-soft); border-radius: var(--radius); }
+.task__complete-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.task__photos { margin: 6px 0; font-size: 15px; }

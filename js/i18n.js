@@ -12,6 +12,13 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "iPhone / Outlook": ["iPhone / Outlook", "iPhone / Outlook", "iPhone / Outlook", "iPhone / Outlook"],
+    "Google Kalender": ["Google Calendar", "Google Календарь", "Google Календар", "Kalendář Google"],
+    "Adresse kopieren": ["Copy address", "Скопировать адрес", "Скопіювати адресу", "Kopírovat adresu"],
+    "Adresse kopieren:": ["Copy address:", "Скопируйте адрес:", "Скопіюйте адресу:", "Zkopírujte adresu:"],
+    "Adresse kopiert – im Kalender unter „Abonnieren“ einfügen.": ["Address copied – paste it in your calendar under “Subscribe”.", "Адрес скопирован – вставьте его в календаре в разделе «Подписаться».", "Адресу скопійовано – вставте її в календарі в розділі «Підписатися».", "Adresa zkopírována – vložte ji v kalendáři pod „Odebírat“."],
+    "Reinigungstermine im eigenen Kalender": ["Cleaning dates in your own calendar", "Даты уборки в вашем календаре", "Дати прибирання у вашому календарі", "Termíny úklidu ve vlastním kalendáři"],
+    "Einmal abonnieren – neue Termine erscheinen automatisch.": ["Subscribe once – new dates appear automatically.", "Подпишитесь один раз – новые даты появятся автоматически.", "Підпишіться один раз – нові дати з’являться автоматично.", "Stačí jednou odebírat – nové termíny se zobrazí automaticky."],
     "Nur Ihre Wohnung ohne Strom: Sicherungskasten im Flur prüfen. Ganzes Haus ohne Strom: Hausmeister-Notdienst anrufen. Auch die Nachbarhäuser oder die Straße dunkel: Stromnetz Berlin anrufen.": ["Only your flat without power: check the fuse box in the hallway. Whole building without power: call the caretaker emergency service. Neighbouring buildings or the street dark too: call Stromnetz Berlin.", "Нет света только в вашей квартире: проверьте электрощиток в прихожей. Нет света во всём доме: позвоните в аварийную службу хаусмайстера. Темно и в соседних домах или на улице: позвоните в Stromnetz Berlin.", "Немає світла лише у вашій квартирі: перевірте електрощиток у передпокої. Немає світла в усьому будинку: зателефонуйте до аварійної служби хаусмайстера. Темно й у сусідніх будинках або на вулиці: зателефонуйте до Stromnetz Berlin.", "Bez proudu jen váš byt: zkontrolujte pojistkovou skříň v předsíni. Bez proudu celý dům: zavolejte pohotovost domovníka. Tma i v sousedních domech nebo na ulici: zavolejte Stromnetz Berlin."],
     "Wohnung / Gewerbe *": ["Flat / business unit *", "Квартира / помещение *", "Квартира / приміщення *", "Byt / provozovna *"],
     "Wohnung / Gewerbe": ["Flat / business unit", "Квартира / помещение", "Квартира / приміщення", "Byt / provozovna"],
