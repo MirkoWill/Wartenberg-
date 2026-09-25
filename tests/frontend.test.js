@@ -626,6 +626,40 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Robustheit: unlesbare Server-Antwort, Versionen");
+    {
+      const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+      const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+      const ver = /CACHE_VERSION = "mieterapp-v(\d+)"/.exec(sw)[1];
+      const vs = [...html.matchAll(/\?v=(\d+)/g), ...sw.matchAll(/\?v=(\d+)/g)].map((m) => m[1]);
+      check("Version: index.html und Service Worker passen zusammen", vs.length >= 8 && vs.every((v) => v === ver), [ver, [...new Set(vs)]]);
+    }
+    {
+      const reports = [];
+      const ctx = await newContext(browser, { backend: async (d) => {
+        if (d.action === "reportError") { reports.push(d.message); return { ok: true }; }
+        if (d.action === "hmLogin") return "<html>Google Fehlerseite</html>";
+        return { ok: true, items: [] };
+      }, preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${ADMIN}#hausmeister`);
+      await p.waitForSelector("#staffRetry", { state: "visible", timeout: 15000 }).catch(() => {});
+      check("Unlesbare Antwort bei der Anmeldung: kein endloses „Anmeldung läuft“, sondern „Erneut versuchen“", await p.isVisible("#staffRetry") && !(await p.isVisible("#staffPendingWait")));
+      check("Unlesbare Antwort landet mit Textanfang im Fehlerprotokoll", reports.some((m) => /hmLogin: keine gültige Antwort \(HTTP 200/.test(m) && /Google Fehlerseite/.test(m)), reports);
+      await ctx.close();
+    }
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend({}), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`);
+      await p.evaluate(() => navigator.serviceWorker.ready); await p.waitForTimeout(600);
+      await p.reload(); await p.waitForTimeout(400); // jetzt steuert der Service Worker die Seite
+      const cached = await p.evaluate(async () => { await fetch("js/app.js?v=1"); await new Promise((r) => setTimeout(r, 300));
+        const keys = []; for (const n of await caches.keys()) for (const k of await (await caches.open(n)).keys()) keys.push(k.url); return keys; });
+      check("Service Worker speichert keine Dateien fremder Versionen (kein Mischmasch)", !cached.some((u) => /app\.js\?v=1$/.test(u)) && cached.some((u) => /app\.js\?v=\d+$/.test(u)), cached.filter((u) => /app\.js/.test(u)));
+      await ctx.close();
+    }
+
     console.log("--- Wetter");
     {
       const day = (off) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + off * 86400000));
