@@ -631,6 +631,12 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   check('Fitness: Statistik zählt vergangene, nicht stornierte', (new Date(Date.now() - 15 * 86400000).getFullYear() < new Date().getFullYear() || (m11.year.count === 3 && m11.year.minutes === 210)) && m11.streak >= 3 && ov.members.find((m) => m.nr === '008').year.count === 0, m11);
   check('Fitness: eigene vergangene Buchung zum Austragen', ov.mine.some((b) => b.id === 'F-OLD-0' && b.past) && !ov.mine.some((b) => b.id === 'F-OLD-2'));
 
+  { // Google Sheets speichert „010“ als Zahl 10 – eigene Buchung muss trotzdem erkannt und stornierbar sein
+    const r10 = g.find((r) => r[1] === '010' && r[2] > new Date() && r[2].getHours() === 22); r10[1] = 10;
+    const o10 = post({ action: 'fitnessOverview', token: fitTok });
+    check('Fitness: Nummer als Zahl im Blatt (10) → trotzdem „010“, eigene Buchung erkannt', o10.mine.some((b) => b.id === r10[0]) && o10.upcoming.some((b) => b.id === r10[0] && b.mine && b.nr === '010') && o10.members.every((m) => /^\d{3}$/.test(m.nr)), o10.mine);
+    check('Fitness: diese Buchung ist stornierbar', post({ action: 'fitnessCancel', token: fitTok, id: r10[0] }).ok && r10[6] === 'ja');
+  }
   check('Fitness: fremde Buchung nicht stornierbar', !post({ action: 'fitnessCancel', token: fit2Tok, id: b1.id }).ok);
   check('Fitness: zu alte Buchung nicht stornierbar', !post({ action: 'fitnessCancel', token: fit2Tok, id: 'F-OLD-2' }).ok);
   check('Fitness: eigene stornieren', post({ action: 'fitnessCancel', token: fitTok, id: b1.id }).ok && g.find((r) => r[0] === b1.id)[6] === 'ja');

@@ -2821,7 +2821,14 @@ function requireStaffWork(user) {
 }
 
 function fitnessRows() {
-  return sheetObjects(CONFIG.SHEETS.fitness).filter((r) => r.ID && r.Beginn instanceof Date && r.Ende instanceof Date && r.Storniert !== "ja");
+  return sheetObjects(CONFIG.SHEETS.fitness).filter((r) => r.ID && r.Beginn instanceof Date && r.Ende instanceof Date && r.Storniert !== "ja")
+    .map((r) => Object.assign(r, { Nr: fitnessNr(r.Nr) }));
+}
+
+/** Google Sheets macht aus „010“ gern die Zahl 10 – beim Lesen wieder dreistellig. */
+function fitnessNr(v) {
+  const s = String(v == null ? "" : v).trim();
+  return /^\d{1,2}$/.test(s) ? s.padStart(3, "0") : s;
 }
 
 function fitnessWeekStart(d) {
@@ -2895,7 +2902,9 @@ function fitnessBook(p, user) {
     }
     const id = newId("F");
     const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.fitness.name);
-    sheet.getRange(lastContentRow(sheet, [1]) + 1, 1, 1, CONFIG.SHEETS.fitness.headers.length)
+    const row = lastContentRow(sheet, [1]) + 1;
+    sheet.getRange(row, 2).setNumberFormat("@"); // „010“ bleibt „010“
+    sheet.getRange(row, 1, 1, CONFIG.SHEETS.fitness.headers.length)
       .setValues([[id, user.nr, start, end, minutes, now, ""]]);
     return { ok: true, id };
   } finally {
