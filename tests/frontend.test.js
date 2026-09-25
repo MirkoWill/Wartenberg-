@@ -124,6 +124,19 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    {
+      // Server-Probleme beim ersten Öffnen: klare Meldung, kein Fehlversuch
+      for (const [label, answer, re] of [["alter Server", { ok: false, error: "Unbekannte Aktion" }, /noch nicht auf dem neuesten Stand/],
+        ["Fehlerseite", "<html>Fehler</html>", /antwortet gerade nicht richtig/], ["kein Netz", "abort", /Keine Verbindung/]]) {
+        const ctx = await newContext(browser, { backend: async (d) => (d.action === "checkPin" ? answer : { ok: true, items: [] }) });
+        const p = await newPage(ctx);
+        await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(300);
+        await p.check("#consentCheck"); await p.fill("#pinInput", "48151623"); await p.click("#consentAccept"); await p.waitForTimeout(500);
+        check(`PIN-Prüfung, ${label}: passende Meldung, kein Fehlversuch gezählt`, re.test(await p.textContent("#pinMsg"))
+          && !(await p.evaluate(() => localStorage.getItem("mieterapp.pinlock"))) && await p.isVisible("#consent"), await p.textContent("#pinMsg"));
+        await ctx.close();
+      }
+    }
     console.log("--- Navigation");
     {
       const ctx = await newContext(browser, { backend: fakeBackend(), preset: "resident" });

@@ -12,6 +12,9 @@ window.I18N = {
     { code: "cs", label: "Čeština", locale: "cs-CZ" },
   ],
   T: {
+    "Der Server antwortet gerade nicht richtig (Code {code}). Bitte später erneut versuchen oder die Hausverwaltung informieren.": ["The server is not responding properly right now (code {code}). Please try again later or inform the property management.", "Сервер сейчас отвечает некорректно (код {code}). Попробуйте позже или сообщите управляющей компании.", "Сервер зараз відповідає некоректно (код {code}). Спробуйте пізніше або повідомте керуючу компанію.", "Server právě neodpovídá správně (kód {code}). Zkuste to prosím později nebo informujte správu domu."],
+    "Der Server ist noch nicht auf dem neuesten Stand. Bitte die Hausverwaltung informieren.": ["The server has not been updated yet. Please inform the property management.", "Сервер ещё не обновлён. Пожалуйста, сообщите управляющей компании.", "Сервер ще не оновлено. Будь ласка, повідомте керуючу компанію.", "Server ještě není aktualizován. Informujte prosím správu domu."],
+    "Der Server antwortet gerade nicht richtig. Bitte später erneut versuchen.": ["The server is not responding properly right now. Please try again later.", "Сервер сейчас отвечает некорректно. Попробуйте позже.", "Сервер зараз відповідає некоректно. Спробуйте пізніше.", "Server právě neodpovídá správně. Zkuste to prosím později."],
     "(erhalten Sie von der Hausverwaltung)": ["(provided by the property management)", "(выдаётся управляющей компанией)", "(надається керуючою компанією)", "(obdržíte od správy domu)"],
     "Bitte die PIN eingeben (nur Ziffern).": ["Please enter the PIN (digits only).", "Введите PIN-код (только цифры).", "Введіть PIN-код (лише цифри).", "Zadejte prosím PIN (pouze číslice)."],
     "PIN wird geprüft …": ["Checking PIN …", "Проверка PIN-кода …", "Перевірка PIN-коду …", "Ověřuji PIN …"],

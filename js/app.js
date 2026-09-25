@@ -296,16 +296,30 @@
     }
     // Nur der Server kennt die PIN.
     let res = null;
+    let r = null;
     msg.textContent = t_("PIN wird geprüft …");
     try {
-      const r = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      r = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "checkPin", pin }) });
-      res = await r.json();
     } catch (e) {
       msg.textContent = t_("Keine Verbindung. Zum ersten Öffnen wird Internet benötigt – bitte erneut versuchen.");
       return false;
     }
-    if (res && res.code === "pin_locked") { msg.textContent = res.error || t_("Zu viele Fehlversuche. Bitte später erneut versuchen."); return false; }
+    try { res = await r.json(); } catch (e) { res = null; }
+    // Server erreichbar, aber keine lesbare Antwort (z. B. Google-Fehlerseite): nicht als falsche PIN zählen
+    if (!res) {
+      msg.textContent = t_("Der Server antwortet gerade nicht richtig (Code {code}). Bitte später erneut versuchen oder die Hausverwaltung informieren.", { code: r.status });
+      reportError(`checkPin: keine JSON-Antwort (HTTP ${r.status})`, "pin");
+      return false;
+    }
+    if (res.code === "pin_locked") { msg.textContent = res.error || t_("Zu viele Fehlversuche. Bitte später erneut versuchen."); return false; }
+    // Andere Serverfehler (nicht „PIN falsch“): Meldung zeigen, keinen Fehlversuch zählen
+    if (!res.ok && res.code !== "pin") {
+      msg.textContent = res.error === "Unbekannte Aktion"
+        ? t_("Der Server ist noch nicht auf dem neuesten Stand. Bitte die Hausverwaltung informieren.")
+        : (res.error || t_("Der Server antwortet gerade nicht richtig. Bitte später erneut versuchen."));
+      return false;
+    }
     if (res && res.ok) {
       sessionPin = { pin };
       writeJson(PIN_KEY, sessionPin); // bleibt auf dem Gerät, bis die PIN sich ändert oder widerrufen wird
