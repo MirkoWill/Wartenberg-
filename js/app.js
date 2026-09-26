@@ -1037,6 +1037,7 @@
         wohnung: f.wohnung.value.trim(),
         name: f.name.value.trim(),
         ablesedatum: f.ablesedatum.value,
+        disclaimer: !!(f.disclaimer && f.disclaimer.checked), // „Freiwilliger Service ohne Gewähr“ bestätigt
         meters,
       };
     }, "Danke! Ihre Zählerstände wurden übermittelt.", null, (payload) => {

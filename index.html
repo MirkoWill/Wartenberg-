@@ -17,7 +17,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=71">
+  <link rel="stylesheet" href="css/style.css?v=72">
 </head>
 <body>
   <header class="app-header">
@@ -528,6 +528,14 @@
           Merken Sie sich die Stelle – im Notfall stellen Sie dort das Wasser ab.</p>
       </div>
 
+      <div class="disclaimer" role="note">
+        <p class="disclaimer__title">Freiwilliger Service – ohne Gewähr</p>
+        <p>Die Übermittlung Ihrer Zählerstände über diese App ist ein zusätzliches, freiwilliges Angebot der Hausverwaltung.
+          Für vollständige und richtige Angaben (z. B. Wohnungsnummer, Zählernummer und Zählerstand) sind Sie selbst
+          verantwortlich. Für Fehler bei der Angabe oder bei der Weitergabe übernehmen wir keine Gewähr.</p>
+        <p>Maßgeblich ist die Ablesung durch ista bzw. Ihre eigene Meldung an ista – diese Möglichkeit haben Sie weiterhin.</p>
+      </div>
+
       <form class="form" id="formWater" novalidate>
         <fieldset class="form-block">
           <legend class="form-block__title">Ihre Angaben</legend>
@@ -550,6 +558,10 @@
         <div id="meterList"></div>
         <button class="btn btn--ghost btn--block" id="addMeter" type="button">+ Weiteren Zähler hinzufügen</button>
 
+        <label class="remember remember--confirm">
+          <input type="checkbox" name="disclaimer" required>
+          <span>Ich habe verstanden: Dies ist ein freiwilliger Service ohne Gewähr. Maßgeblich ist die Ablesung durch ista.</span>
+        </label>
         <button class="btn btn--primary btn--block" type="submit" id="waterSubmit">Zählerstand senden</button>
       </form>
     </section>
@@ -944,8 +956,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=71"></script>
-  <script src="js/i18n.js?v=71"></script>
-  <script src="js/app.js?v=71"></script>
+  <script src="js/config.js?v=72"></script>
+  <script src="js/i18n.js?v=72"></script>
+  <script src="js/app.js?v=72"></script>
 </body>
 </html>

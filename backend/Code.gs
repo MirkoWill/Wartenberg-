@@ -26,7 +26,7 @@ const CONFIG = {
     meter: {
       name: "Zählerstände",
       headers: ["ID", "Eingang", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Raum", "Art",
-        "Zählernummer", "Zählerstand", "Name", "Foto", "Geprüft", "Erfassungs-ID", "Ablesedatum", "Einheit"],
+        "Zählernummer", "Zählerstand", "Name", "Foto", "Geprüft", "Erfassungs-ID", "Ablesedatum", "Einheit", "Hinweis ohne Gewähr bestätigt"],
     },
     // Wird automatisch aus "Zählerstände" erzeugt – nicht von Hand bearbeiten.
     meterOverview: {
@@ -424,6 +424,7 @@ function submitMeterReadings(p) {
     return [
       id, now, str(p.house, 60), str(p.entrance, 60), objectId(p.object),
       wohnung, m.raum, m.art, m.nr, m.stand, str(p.name, 80), photoUrl, false, batchId, ablesedatum, m.einheit,
+      p.disclaimer === true ? "ja" : "",
     ];
   });
   appendRows(CONFIG.SHEETS.meter.name, rows);
@@ -439,6 +440,7 @@ function submitMeterReadings(p) {
     ...rows.map((r) => `${r[6]} ${r[7]}: Zähler ${r[8]} – Stand ${String(r[9]).replace(".", ",")} ${r[15]} – Foto: ${r[11]}`),
     "",
     `Erfassungs-ID: ${batchId}`,
+    `Hinweis „freiwilliger Service ohne Gewähr, maßgeblich ist ista“ bestätigt: ${p.disclaimer === true ? "ja" : "nein (ältere App-Version)"}`,
   ]);
   return { ok: true, id: batchId, count: rows.length };
 }
