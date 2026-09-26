@@ -70,6 +70,10 @@ let r = post({ ...base, action: 'submitMeterReadings', wohnung: 'Whg 04', name: 
 check('3 Zähler in einer Meldung', r.ok && r.count === 3 && sheets['Zählerstände'].grid.length === 4, r);
 const zr = sheets['Zählerstände'].grid[1];
 check('Zeile: Erfassungs-ID + Ablesedatum', /^E-/.test(zr[13]) && zr[14] instanceof Date && zr[14].getDate() === 20 && zr[9] === 12.5, zr.slice(9));
+check('Zähler: Bestätigung „ohne Gewähr“ in der Tabelle und in der Mail', sheets['Zählerstände'].grid[0][16] === 'Hinweis ohne Gewähr bestätigt'
+  && (() => { mails.length = 0; post({ ...base, action: 'submitMeterReadings', wohnung: '9', ablesedatum: '2026-09-20', disclaimer: true, meters: [{ raum: 'Bad', art: 'Kalt', zaehlernummer: 'D1', zaehlerstand: '1', photo }] });
+    const g = sheets['Zählerstände'].grid; const i = g.findIndex((r) => r[8] === 'D1'); const ok = g[i][16] === 'ja' && mails.some((m) => /ohne Gewähr.*bestätigt: ja/.test(m.body));
+    g.splice(i, 1); ctx.rebuildMeterOverview(); return ok; })()); // Testmeldung wieder entfernen
 post({ ...base, action: 'submitMeterReadings', wohnung: 'Whg 01', name: 'Schmidt', ablesedatum: '2026-09-21', meters: [{ raum: 'Bad', art: 'Kalt', zaehlernummer: 'B1', zaehlerstand: '5', photo }] });
 post({ ...base, action: 'submitMeterReadings', wohnung: 'Whg 04', name: 'Müller', ablesedatum: '2027-03-01', meters: [{ raum: 'Bad', art: 'Kalt', zaehlernummer: 'A1', zaehlerstand: '20', photo }] });
 const ov = sheets['Übersicht Zähler'].grid;

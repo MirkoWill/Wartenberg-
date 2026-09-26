@@ -175,8 +175,15 @@ function makeQrVideo(text) {
       check("Heizungszähler: Raum Flur, Einheit wählbar", (await m2.locator("[data-f=raum]").inputValue()) === "Flur" && await m2.locator("[data-f=einheit]").isVisible());
       await m2.locator("[data-f=einheit]").selectOption("MWh"); await m2.locator("[data-f=zaehlernummer]").fill("H1"); await m2.locator("[data-f=zaehlerstand]").fill("4,321");
       await m2.locator("[data-f=foto]").setInputFiles(png);
+      check("Zähler: Hinweis „freiwilliger Service ohne Gewähr, maßgeblich ist ista“ sichtbar", await p.isVisible('[data-view="wasser"] .disclaimer')
+        && /keine Gewähr/.test(await p.textContent('[data-view="wasser"] .disclaimer')) && /ista/.test(await p.textContent('[data-view="wasser"] .disclaimer')));
+      await p.click("#waterSubmit"); await p.waitForTimeout(600);
+      check("Zähler: ohne Bestätigungs-Häkchen wird nicht gesendet", !ctx.requests.some((r) => r.action === "submitMeterReadings")
+        && await p.evaluate(() => document.activeElement && document.activeElement.name === "disclaimer"));
+      await p.check("#formWater [name=disclaimer]");
       await p.click("#waterSubmit"); await p.waitForTimeout(1200);
       const sent = ctx.requests.find((r) => r.action === "submitMeterReadings");
+      check("Zähler: Bestätigung wird mitgeschickt, danach wieder leer", sent && sent.disclaimer === true && !(await p.isChecked("#formWater [name=disclaimer]")));
       check("Zählermeldung gesendet (mit PIN, Einheiten)", sent && sent.pin === PIN && sent.meters.map((m) => `${m.art}/${m.einheit}/${m.zaehlerstand}`).join() === "Kalt/m³/12.5,Heizung/MWh/4.321", sent && sent.meters);
       check("Bestätigung mit Nummer", /E-260924-ABCD/.test(await p.textContent("#toast")));
       await p.goto(`${base}?obj=lind6#mangel`); await p.waitForTimeout(200);
