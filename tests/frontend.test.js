@@ -90,7 +90,12 @@ function makeQrVideo(text) {
       check("Erststart: Dialog mit PIN-Feld", await p.isVisible("#consent") && await p.isVisible("#pinInput"));
       await p.check("#consentCheck");
       check("Zustimmen ohne PIN gesperrt", await p.isDisabled("#consentAccept"));
-      for (const wrong of ["11111", "22222", "33333"]) { await p.fill("#pinInput", wrong); await p.click("#consentAccept"); await p.waitForTimeout(100); }
+      // Jede Eingabe wird vom Server geprüft: auf die Antwort warten statt feste Zeit (sonst auf langsamen Rechnern unzuverlässig)
+      for (const [i, wrong] of ["11111", "22222", "33333"].entries()) {
+        await p.fill("#pinInput", wrong); await p.click("#consentAccept");
+        await p.waitForFunction((n) => { const m = document.querySelector("#pinMsg").textContent;
+          return n < 2 ? /Falsche PIN/.test(m) && !/geprüft/.test(m) && document.querySelector("#pinInput").value === "" : /Fehlversuche/.test(m); }, i, { timeout: 10000 }).catch(() => {});
+      }
       check("3 Fehlversuche → Sperre", await p.isDisabled("#pinInput") && /Fehlversuche/.test(await p.textContent("#pinMsg")));
       await p.reload(); await p.waitForTimeout(300);
       check("Sperre bleibt nach Neuladen", await p.isDisabled("#pinInput"));
