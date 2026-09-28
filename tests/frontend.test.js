@@ -439,6 +439,19 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    {
+      // Mitarbeiter (ohne PIN) stimmt ab: der persönliche Link muss mitgeschickt werden, sonst „PIN ungültig“
+      const state = { polls: [{ id: "U-9", question: "Soll diese App eingeführt werden?", options: ["Ja", "Nein"], to: "", results: null }] };
+      const ctx = await newContext(browser, { backend: fakeBackend(state) });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${ADMIN}#hausmeister`); await p.waitForTimeout(300);
+      await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForSelector("#pollBox [data-vote]", { timeout: 10000 });
+      await p.click("#pollBox [data-vote] >> nth=0"); await p.waitForTimeout(600);
+      const v = ctx.requests.find((d) => d.action === "vote");
+      check("Umfrage als Verwaltung: Stimme mit persönlichem Link statt PIN", v && v.token === ADMIN && !/PIN ungültig/.test(await p.textContent("#toast")), v);
+      await ctx.close();
+    }
     console.log("--- Anmeldung über Link (langsamer Server)");
     {
       const state = { failLogin: 0 };

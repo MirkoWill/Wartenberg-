@@ -651,7 +651,8 @@
     $$("[data-vote]", card).forEach((b) => { b.disabled = true; });
     try {
       const res = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "vote", pollId: id, option: Number(btn.dataset.vote), voter: voterId(), obj: OBJ.key || "", pin: storedPin() }) });
+        body: JSON.stringify({ action: "vote", pollId: id, option: Number(btn.dataset.vote), voter: voterId(), obj: OBJ.key || "", pin: storedPin(),
+          token: isStaff() ? staff().token : undefined }) }); // Verwaltung/Hausmeister: persönlicher Link statt PIN
       const data = await readApiJson(res, "vote");
       if (!data.ok && data.code !== "voted") throw Object.assign(new Error(data.error), { userMessage: data.error });
       const voted = readJson(POLLS_KEY) || {};
