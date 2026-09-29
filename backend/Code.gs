@@ -11,6 +11,7 @@
  *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Aufträge an den Hausmeister)
  *   CALENDAR_ID         optional, Kalender für den Reinigungsplan (sonst Suche nach CONFIG.CALENDAR_NAME)
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
+ *   GTASKS_ON / GTASKS_LIST_ID  werden über das Menü „Google Tasks: einrichten …“ gesetzt (Dienst „Tasks“ nötig)
  *   APP_PIN             Zugangs-PIN der App – über das Menü „Zugangs-PIN ändern …“ setzen (nie in den Code). Bei Änderung auch
  *                       PIN_SHA256 in js/config.js anpassen.
  */
@@ -90,6 +91,11 @@ const CONFIG = {
     fitness: {
       name: "Fitness-Buchungen",
       headers: ["ID", "Nr", "Beginn", "Ende", "Minuten", "Gebucht am", "Storniert", "Mit", "Erinnert"],
+    },
+    // Abgleich mit Google Tasks (nur zur Übersicht – führend bleiben App und Tabelle). Nicht von Hand bearbeiten.
+    gtasks: {
+      name: "Google Tasks",
+      headers: ["Auftrag-ID", "Aufgaben-ID", "Angelegt", "Abgehakt"],
     },
     errors: {
       name: "Fehlerprotokoll",
@@ -258,6 +264,8 @@ function onOpen() {
     .addItem("Monatsbericht: Vorschau an mich", "reportPreviewNow")
     .addItem("Systemprüfung jetzt", "healthCheckNow")
     .addItem("Benachrichtigung testen (an Verwaltung)", "pushTest")
+    .addItem("Google Tasks: einrichten / jetzt abgleichen", "gtasksSetupNow")
+    .addItem("Google Tasks: Abgleich ausschalten", "gtasksOff")
     .addItem("Alte Daten jetzt löschen (Löschkonzept)", "cleanupNow")
     .addToUi();
 }
@@ -3460,4 +3468,136 @@ function resetStaffLink(nr) {
   sheet.getRange(hit._row, 4, 1, 2).setValues([[token, `${CONFIG.APP_URL}?hm=${token}#${role === "Fitness" ? "fitness" : "hausmeister"}`]]);
   CacheService.getScriptCache().remove("staff");
   return { ok: true, nr, token };
+}
+
+/* ==========================================================================
+   Google Tasks: offene Aufträge zusätzlich als Aufgaben (nur Übersicht, Einbahnstraße)
+   App und Tabelle bleiben führend. Neue Aufträge → Aufgabe in der Liste CONFIG.GTASKS.listName,
+   erledigt → abgehakt, wieder geöffnet → wieder offen. Eigene Aufgaben in Google Tasks bleiben unberührt.
+   Voraussetzung: Dienst „Google Tasks API“ (Kennung „Tasks“) im Apps-Script-Editor hinzugefügt.
+   ========================================================================== */
+
+const GTASKS = { listName: "Mieter-App Wartenberg", maxPerRun: 40, trigger: "gtasksSync" };
+
+function gtasksAvailable() {
+  return typeof Tasks !== "undefined" && Tasks && Tasks.Tasks && Tasks.Tasklists;
+}
+
+/** Aufgabenliste suchen oder anlegen; ID wird gemerkt. */
+function gtasksListId() {
+  const props = PropertiesService.getScriptProperties();
+  const known = props.getProperty("GTASKS_LIST_ID");
+  const lists = (Tasks.Tasklists.list({ maxResults: 100 }).items || []);
+  if (known && lists.some((l) => l.id === known)) return known;
+  const hit = lists.find((l) => l.title === GTASKS.listName) || Tasks.Tasklists.insert({ title: GTASKS.listName });
+  props.setProperty("GTASKS_LIST_ID", hit.id);
+  return hit.id;
+}
+
+/** Titel und Notiz einer Aufgabe – knapp, ohne Telefonnummern; Details stehen im Cockpit. */
+function gtasksResource(t, sla) {
+  const where = t.entrance || entranceName(t.object) || "";
+  const title = `${t.urgent ? "🔴 " : ""}${t.type}${where ? " · " + where : ""}${t.owner === "Hausmeister" ? " (Hausmeister)" : ""}`;
+  const notes = [
+    `Auftrag ${t.id} · zuständig: ${t.owner || "–"}`,
+    t.wohnung ? `Wohnung: ${plain(t.wohnung, 60)}` : "",
+    t.ort ? `Ort: ${plain(t.ort, 80)}` : "",
+    t.termin ? `Termin: ${Utilities.formatDate(t.termin, CONFIG.TIMEZONE, "dd.MM.yyyy")}` : "",
+    "",
+    plain(t.details, 600),
+    "",
+    `Bearbeiten im Cockpit: ${CONFIG.APP_URL}#cockpit`,
+    "(Wird automatisch abgehakt, sobald der Auftrag in der App erledigt ist.)",
+  ].filter((x, i, a) => x !== "" || (a[i - 1] !== "" && i > 0)).join("\n");
+  const res = { title: plain(title, 200), notes };
+  if (sla && sla.doneDue instanceof Date && !t.longRunner) {
+    res.due = Utilities.formatDate(sla.doneDue, CONFIG.TIMEZONE, "yyyy-MM-dd") + "T00:00:00.000Z";
+  }
+  return res;
+}
+
+/**
+ * Abgleich (Zeitauslöser alle 15 Min. und Menü). Gibt Zähler zurück; tut nichts, solange der Abgleich
+ * nicht über das Menü eingeschaltet oder der Dienst nicht hinzugefügt ist.
+ */
+function gtasksSync() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty("GTASKS_ON") !== "1") return { skipped: "aus" };
+  if (!gtasksAvailable()) return { skipped: "Dienst fehlt" };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { skipped: "läuft bereits" };
+  try {
+    const def = CONFIG.SHEETS.gtasks;
+    const ss = getSpreadsheet();
+    let sheet = ss.getSheetByName(def.name);
+    if (!sheet) {
+      sheet = ss.insertSheet(def.name);
+      sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers]).setFontWeight("bold").setBackground("#eef0e6");
+      sheet.setFrozenRows(1);
+    }
+    const map = {};
+    sheetObjects(def).forEach((r) => { if (r["Auftrag-ID"]) map[String(r["Auftrag-ID"])] = r; });
+    const listId = gtasksListId();
+    const now = new Date();
+    const out = { created: 0, completed: 0, reopened: 0, errors: 0 };
+    let firstErr = null;
+    let budget = GTASKS.maxPerRun;
+    allTasks().forEach((t) => {
+      if (budget <= 0) return;
+      const m = map[t.id];
+      const closed = t.status === "erledigt";
+      try {
+        if (!m && !closed) {
+          const task = Tasks.Tasks.insert(gtasksResource(t, slaInfo(t, now)), listId);
+          sheet.appendRow([t.id, task.id, now, ""]);
+          out.created++; budget--;
+        } else if (m && closed && !m.Abgehakt) {
+          try { Tasks.Tasks.patch({ status: "completed" }, listId, String(m["Aufgaben-ID"])); }
+          catch (err) { if (!/not ?found|404/i.test(String(err))) throw err; } // in Tasks gelöscht → trotzdem als erledigt merken
+          sheet.getRange(m._row, 4).setValue(now);
+          out.completed++; budget--;
+        } else if (m && !closed && m.Abgehakt) {
+          try { Tasks.Tasks.patch({ status: "needsAction", completed: null }, listId, String(m["Aufgaben-ID"])); }
+          catch (err) { if (!/not ?found|404/i.test(String(err))) throw err; }
+          sheet.getRange(m._row, 4).setValue("");
+          out.reopened++; budget--;
+        }
+      } catch (err) {
+        out.errors++;
+        firstErr = firstErr || err;
+        console.error("Google Tasks:", t.id, err);
+      }
+    });
+    if (firstErr) logServerError(firstErr, `Google Tasks (${out.errors} Fehler)`);
+    return out;
+  } catch (err) {
+    logServerError(err, "Google Tasks");
+    return { created: 0, completed: 0, reopened: 0, errors: 1 };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Menü: Abgleich einschalten, Liste anlegen, Zeitauslöser setzen und sofort abgleichen. */
+function gtasksSetupNow() {
+  if (!gtasksAvailable()) {
+    showResult("Google Tasks", "Der Dienst „Google Tasks API“ fehlt noch.\n\nIm Apps-Script-Editor links bei „Dienste“ auf + klicken, " +
+      "„Google Tasks API“ wählen (Kennung: Tasks) und „Hinzufügen“. Danach diesen Menüpunkt erneut aufrufen.");
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty("GTASKS_ON", "1");
+  if (!ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === GTASKS.trigger)) {
+    ScriptApp.newTrigger(GTASKS.trigger).timeBased().everyMinutes(15).create();
+  }
+  const r = gtasksSync();
+  showResult("Google Tasks", r.skipped ? `Nicht abgeglichen: ${r.skipped}.`
+    : `Liste „${GTASKS.listName}“ ist abgeglichen: ${r.created} neu, ${r.completed} abgehakt, ${r.reopened} wieder geöffnet` +
+      `${r.errors ? `, ${r.errors} Fehler (siehe Ausführungen)` : ""}.\n\nAb jetzt automatisch alle 15 Minuten.`);
+}
+
+/** Menü: Abgleich ausschalten (Aufgaben in Google Tasks bleiben stehen). */
+function gtasksOff() {
+  PropertiesService.getScriptProperties().setProperty("GTASKS_ON", "0");
+  ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === GTASKS.trigger).forEach((t) => ScriptApp.deleteTrigger(t));
+  showResult("Google Tasks", "Abgleich ausgeschaltet. Vorhandene Aufgaben in Google Tasks bleiben stehen.");
 }

@@ -202,6 +202,26 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
   automatisch, unbenutzte nach einem Jahr.
 - Test: Menü **Mieter-App → „Benachrichtigung testen (an Verwaltung)“** schickt eine Testnachricht an alle Handys der Verwaltung.
 
+## Google Tasks (Übersicht, optional) 💻 einmal am Computer
+
+App und Tabelle bleiben **führend**. Google Tasks zeigt nur zusätzlich alle offenen Aufträge an – z. B. in Gmail,
+im Google Kalender oder in der Tasks-App am Handy – neben eigenen Büro-Aufgaben.
+
+- **Einrichten (einmal):**
+  1. Apps-Script-Editor → links bei **„Dienste“** auf **+** → **„Google Tasks API“** → Kennung `Tasks` lassen → **Hinzufügen**.
+  2. Tabelle neu laden → Menü **Mieter-App → „Google Tasks: einrichten / jetzt abgleichen“** → Berechtigung erlauben.
+- Es entsteht die Liste **„Mieter-App Wartenberg“** im Google-Konto des Scripts. Jeder offene Auftrag (Bewohner-Meldungen
+  und Mängel vom Hausmeister) wird eine Aufgabe: Titel = Art · Aufgang (Hausmeister-Aufträge mit „(Hausmeister)“,
+  dringend mit 🔴), Fälligkeit = Service-Ziel „erledigen bis“, Notiz mit Auftragsnummer und Link ins Cockpit.
+  Keine Telefonnummern.
+- **Nur eine Richtung:** erledigt in App/Tabelle → Aufgabe wird abgehakt; wieder geöffnet → Aufgabe wieder offen.
+  Abhaken in Google Tasks ändert **nichts** am Auftrag.
+- Abgleich automatisch alle 15 Minuten (Zeitauslöser `gtasksSync`, höchstens 40 Änderungen je Lauf).
+  Zuordnung im Blatt **„Google Tasks“** – nicht von Hand bearbeiten.
+- **Eigene Themen** (Büro, Organisation): in Google Tasks eine eigene Liste anlegen, z. B. „Büro“. Die fasst das Script nie an.
+- Ausschalten: Menü **„Google Tasks: Abgleich ausschalten“** (vorhandene Aufgaben bleiben stehen).
+- Fehler (z. B. Kontingent) landen im **Fehlerprotokoll**; der nächste Lauf holt Fehlendes nach.
+
 ## Hinweise und Stimmungsbild aus dem Cockpit
 
 - **Hinweise für Bewohner:** Cockpit → „Hinweise für Bewohner“ → Titel, Text, ab/bis, Aufgänge, „wichtig“ →
