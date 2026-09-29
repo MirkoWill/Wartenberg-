@@ -3,16 +3,16 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v73";
+const CACHE_VERSION = "mieterapp-v74";
 const PUSH_CACHE = "mieterapp-push"; // Benachrichtigungen: { api, id } – bleibt bei neuen Versionen erhalten
 const VERSION = CACHE_VERSION.replace(/^.*-v/, ""); // z. B. "71" – muss zu den ?v= in index.html passen
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=73",
-  "./js/config.js?v=73",
-  "./js/i18n.js?v=73",
-  "./js/app.js?v=73",
+  "./css/style.css?v=74",
+  "./js/config.js?v=74",
+  "./js/i18n.js?v=74",
+  "./js/app.js?v=74",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
@@ -99,11 +99,17 @@ self.addEventListener("push", (event) => {
       }
     } catch (e) { /* ohne Netz: allgemeiner Hinweis */ }
     const msg = item || { title: "Mieter-App", body: "Es gibt Neuigkeiten – bitte die App öffnen.", url: "#notfall" };
-    await self.registration.showNotification(String(msg.title || "Mieter-App"), {
+    // Unterscheidbar ohne Hinsehen: dringend = 3× lang (bleibt stehen), neue Meldung/Auftrag = 3× kurz, sonst 1× kurz
+    const kind = msg.kind === "urgent" || msg.kind === "meldung" ? msg.kind : "info";
+    const vibrate = kind === "urgent" ? [600, 200, 600, 200, 600] : kind === "meldung" ? [150, 100, 150, 100, 150] : [150];
+    await self.registration.showNotification((kind === "urgent" ? "🔴 " : "") + String(msg.title || "Mieter-App"), {
       body: String(msg.body || ""),
       tag: msg.tag || undefined,
+      renotify: !!msg.tag,              // gleiche Meldung erneut → trotzdem wieder bemerkbar
+      requireInteraction: kind === "urgent",
+      vibrate,
       icon: "icons/icon-192.png",
-      data: { url: /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#notfall" },
+      data: { url: /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#notfall", kind },
     });
   })());
 });

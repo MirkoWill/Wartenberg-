@@ -387,8 +387,8 @@ function submitTicket(p) {
 
   // Benachrichtigungen: nur Art und Aufgang – keine Namen oder Wohnungen auf dem Sperrbildschirm
   const where = entranceName(objectId(p.object)) || plain(p.entrance, 60);
-  pushSend({ roles: ["Verwaltung"] }, { title: `Neue Meldung: ${type}`, body: where, url: "#cockpit", tag: id });
-  if (defaultOwner(type) === "Hausmeister") pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `Neuer Auftrag: ${type}`, body: where, url: "#hausmeister", tag: id });
+  pushSend({ roles: ["Verwaltung"] }, { title: `Neue Meldung: ${type}`, body: where, url: "#cockpit", tag: id, kind: "meldung" });
+  if (defaultOwner(type) === "Hausmeister") pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `Neuer Auftrag: ${type}`, body: where, url: "#hausmeister", tag: id, kind: "meldung" });
 
   return { ok: true, id };
 }
@@ -1384,7 +1384,7 @@ function submitStaffDefect(p, user) {
     photoUrl ? `Foto: ${photoUrl}` : "",
   ]);
   pushSend({ roles: ["Verwaltung"] }, { title: `${p.dringend === true ? "DRINGEND – " : ""}Mangel vom Hausmeister`, body: plain(ort, 80),
-    url: "#cockpit", tag: id, urgent: p.dringend === true });
+    url: "#cockpit", tag: id, urgent: p.dringend === true, kind: "meldung" });
   return { ok: true, id };
 }
 
@@ -2055,7 +2055,7 @@ function adminUpdateTask(p, user) {
       sheet.getRange(row._row, col("Zuständig")).setValue(p.owner);
       if (p.owner === "Hausmeister" && ownerOf(row, row.Typ || "Mangel (intern)") !== "Hausmeister") {
         pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `Neuer Auftrag: ${plain(row.Typ || "Mangel", 40)}`,
-          body: entranceName(row["Aufgang-ID"]) || plain(row.Ort, 80), url: "#hausmeister", tag: id });
+          body: entranceName(row["Aufgang-ID"]) || plain(row.Ort, 80), url: "#hausmeister", tag: id, kind: "meldung" });
       }
     }
     if (p.note !== undefined) sheet.getRange(row._row, col("Notiz Verwaltung")).setValue(protectCell(str(p.note, 1000)));
@@ -3301,8 +3301,10 @@ function pushSend(to, msg) {
       return (to.roles || []).indexOf(staff[nr]) !== -1 || (to.nrs || []).indexOf(nr) !== -1;
     }).slice(0, CONFIG.PUSH.maxPerSend);
     if (!targets.length) return 0;
+    // Art bestimmt Vibration/Verhalten auf dem Handy: dringend > Meldung/Auftrag > Info
+    const kind = msg.urgent ? "urgent" : msg.kind === "meldung" ? "meldung" : "info";
     const item = { title: plain(msg.title, 80), body: plain(msg.body || "", 180), url: /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#notfall",
-      tag: plain(msg.tag || "", 40), at: new Date().toISOString() };
+      tag: plain(msg.tag || "", 40), kind, at: new Date().toISOString() };
     const cache = CacheService.getScriptCache();
     targets.forEach((r) => {
       let list = [];

@@ -721,10 +721,12 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   const s2 = sent();
   const vw = inbox(rA.id).item, hmi = inbox(rH.id).item;
   check('Push: neue Meldung → Verwaltung (007+008), Klingelschild auch Hausmeister, nicht Bewohner/Fitness', s2.length === 3 && [EP(3), EP(6), EP(4)].every((e) => s2.includes(e)), s2);
+  check('Push: neue Meldung/Auftrag = Art „meldung“, Hinweis = „info“', vw.kind === 'meldung' && hmi.kind === 'meldung' && it.item.kind === 'info', [vw.kind, hmi.kind, it.item.kind]);
   check('Push: ohne Namen/Wohnung auf dem Sperrbildschirm', vw.title === 'Neue Meldung: Klingelschild' && vw.body === 'Lindenberger Str. 6' && vw.url === '#cockpit' && hmi.url === '#hausmeister' && !JSON.stringify([vw, hmi]).includes('Muster'), [vw, hmi]);
   post({ action: 'submitStaffDefect', token: hmTok, ort: 'Tiefgarage', beschreibung: 'Tor', dringend: true });
   const s3 = sent();
-  check('Push: dringender Mangel vom Hausmeister → Verwaltung', s3.length === 2 && inbox(rA.id).item.title === 'DRINGEND – Mangel vom Hausmeister', s3);
+  const dm = inbox(rA.id).item;
+  check('Push: dringender Mangel vom Hausmeister → Verwaltung, Art „dringend“', s3.length === 2 && dm.title === 'DRINGEND – Mangel vom Hausmeister' && dm.kind === 'urgent', [s3, dm]);
   post({ action: 'adminPollSave', token: admTok, question: 'Fahrradständer?', options: ['Ja', 'Nein'] });
   const s4 = sent();
   check('Push: neue Umfrage → alle Bewohner', s4.length === 2 && s4.includes(EP(1)) && s4.includes(EP(2)) && inbox(r2.id).item.title === '🗳️ Neue Umfrage', s4);
