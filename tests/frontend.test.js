@@ -655,6 +655,23 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Robustheit: kurze Google-Fehlerseite (HTTP 404) wird einmal wiederholt");
+    {
+      const reports = [];
+      let newsCalls = 0;
+      const ctx = await newContext(browser, { backend: async (d) => {
+        if (d.action === "reportError") { reports.push(d.message); return { ok: true }; }
+        if (d.action === "news") { newsCalls++; return newsCalls === 1 ? { __html: "<html>window['ppConfig'] = {}</html>", __status: 404 } : { ok: true, items: [{ id: "n1", title: "Wieder da", text: "Hallo" }] }; }
+        return { ok: true, items: [] };
+      }, preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`);
+      await p.waitForFunction(() => /Wieder da/.test(document.body.textContent), null, { timeout: 8000 }).catch(() => {});
+      check("404-Fehlerseite: zweiter Versuch klappt, Hinweis wird angezeigt", newsCalls === 2 && /Wieder da/.test(await p.textContent("body")), newsCalls);
+      check("404-Fehlerseite: nach erfolgreicher Wiederholung kein Eintrag im Fehlerprotokoll", !reports.some((m) => /news/.test(m)), reports);
+      await ctx.close();
+    }
+
     console.log("--- Robustheit: unlesbare Server-Antwort, Versionen");
     {
       const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");

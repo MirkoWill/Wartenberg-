@@ -62,6 +62,7 @@ async function newContext(browser, { backend, preset, lang, width = 390, height 
     const res = backend ? await backend(d) : { ok: true, items: [] };
     if (res === null) return; // hängt
     if (res === "abort") return route.abort("internetdisconnected");
+    if (res && res.__html) return route.fulfill({ status: res.__status || 200, contentType: "text/html", body: res.__html }); // Google-Fehlerseite
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(res) });
   });
   await ctx.route("**/*.transport.rest/**", (route) => {
