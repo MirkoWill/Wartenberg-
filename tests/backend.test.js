@@ -47,7 +47,7 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
     return { getResponseCode: () => 200, getContentText: () => JSON.stringify(/\/alerts/.test(r.url) ? { alerts: wx.alerts } : { weather: wx.hours }) };
   }); } },
   MailApp: { sendEmail: (m) => mails.push(m), getRemainingDailyQuota: () => 1500 },
-  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, everyMinutes: () => b, onMonthDay: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
+  ScriptApp: { getService: () => ({ getUrl: () => 'https://x/exec' }), getProjectTriggers: () => triggers, deleteTrigger: (t) => { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); }, newTrigger: (fn) => { const b = { timeBased: () => b, everyDays: () => b, everyMinutes: () => b, onMonthDay: () => b, atHour: () => b, inTimezone: () => b, create: () => { triggers.push({ getHandlerFunction: () => fn }); } }; return b; } },
   CalendarApp: { getAllCalendars: () => [cal, { getName: () => 'Privat' }], getCalendarById: (id) => (id === 'good' ? cal : null), getCalendarsByName: (n) => (n === calName ? [cal] : []) },
   HtmlService: { createHtmlOutput: (h) => ({ html: h, getBlob: () => ({ getAs: (t) => ({ type: t, html: h, name: '', setName(n) { this.name = n; return this; } }) }), setTitle() { return this; }, addMetaTag() { return this; } }) },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (t) => ({ setMimeType: () => JSON.parse(t) }) },
@@ -880,5 +880,53 @@ check('Systemprüfung ohne Probleme: keine Mail', hc.issues.length === 0 && mail
 const nm = props.NOTIFY_EMAIL; delete props.NOTIFY_EMAIL;
 check('Systemprüfung erkennt fehlende NOTIFY_EMAIL', ctx.healthCheck().issues.some((i) => /NOTIFY_EMAIL/.test(i)));
 props.NOTIFY_EMAIL = nm;
+
+// Google Tasks: Einbahnstraße App → Aufgaben (nur Übersicht)
+{
+  const gt = { lists: [], tasks: {}, seq: 0, fail: false };
+  alerts.length = 0;
+  delete ctx.Tasks;
+  ctx.gtasksSetupNow();
+  check('Google Tasks: ohne Dienst verständlicher Hinweis, nichts eingeschaltet', alerts.some((a) => /Google Tasks API/.test(a)) && props.GTASKS_ON !== '1', alerts);
+  check('Google Tasks: Abgleich ohne Einschalten tut nichts', ctx.gtasksSync().skipped === 'aus');
+  ctx.Tasks = {
+    Tasklists: { list: () => ({ items: gt.lists }), insert: (l) => { const x = { id: 'L' + (++gt.seq), title: l.title }; gt.lists.push(x); return x; } },
+    Tasks: { insert: (r, list) => { if (gt.fail) throw new Error('quota'); const id = 'K' + (++gt.seq); gt.tasks[id] = Object.assign({ id, list, status: 'needsAction' }, r); return gt.tasks[id]; },
+      patch: (r, list, id) => { if (!gt.tasks[id]) throw new Error('Not Found'); Object.assign(gt.tasks[id], r); return gt.tasks[id]; } },
+  };
+  alerts.length = 0;
+  ctx.gtasksSetupNow();
+  const firstRun = Object.keys(gt.tasks).length;
+  for (let i = 0; i < 5; i++) ctx.gtasksSync(); // höchstens 40 je Lauf – der Rest folgt in den nächsten Läufen
+  const open = ctx.allTasks().filter((t) => t.status !== 'erledigt');
+  const made = Object.values(gt.tasks);
+  check('Google Tasks: Liste angelegt, je offener Auftrag eine Aufgabe', gt.lists.length === 1 && gt.lists[0].title === 'Mieter-App Wartenberg' && made.length === open.length && open.length > 0 && firstRun === Math.min(40, open.length), [firstRun, made.length, open.length]);
+  check('Google Tasks: Zeitauslöser alle 15 Min.', triggers.some((t) => t.getHandlerFunction() === 'gtasksSync'));
+  check('Google Tasks: Titel mit Art, Notiz mit Auftrag + Cockpit-Link, ohne Telefon', made.every((k) => k.title && /Auftrag /.test(k.notes) && /#cockpit/.test(k.notes) && !/Telefon|Kontakt/.test(k.notes)) && made.some((k) => /^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/.test(k.due || '')), made[0]);
+  check('Google Tasks: zweiter Lauf legt nichts doppelt an', ctx.gtasksSync().created === 0 && Object.keys(gt.tasks).length === made.length);
+  // Auftrag erledigen → abgehakt; wieder öffnen → offen
+  const t0 = open.find((t) => t.kind === 'ticket');
+  const tk = sheets['Tickets']; const H = tk.grid[0]; const statusCol = H.indexOf('Status');
+  const row = tk.grid.findIndex((r) => String(r[0]) === t0.id);
+  const mapRow = sheets['Google Tasks'].grid.find((r) => r[0] === t0.id);
+  tk.grid[row][statusCol] = 'erledigt';
+  let r2 = ctx.gtasksSync();
+  check('Google Tasks: erledigt in der App → abgehakt', r2.completed === 1 && gt.tasks[mapRow[1]].status === 'completed', r2);
+  tk.grid[row][statusCol] = 'in Arbeit';
+  r2 = ctx.gtasksSync();
+  check('Google Tasks: wieder geöffnet → wieder offen', r2.reopened === 1 && gt.tasks[mapRow[1]].status === 'needsAction', r2);
+  delete gt.tasks[mapRow[1]]; tk.grid[row][statusCol] = 'erledigt';
+  r2 = ctx.gtasksSync();
+  check('Google Tasks: in Tasks gelöschte Aufgabe stört nicht', r2.completed === 1 && r2.errors === 0, r2);
+  // Fehler beim Anlegen → Fehlerprotokoll, kein Absturz
+  post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'Tasks-Test' });
+  gt.fail = true; const before = (sheets['Fehlerprotokoll'].grid || []).length;
+  r2 = ctx.gtasksSync(); gt.fail = false;
+  check('Google Tasks: Fehler landet im Fehlerprotokoll, kein Absturz', r2.errors === 1 && sheets['Fehlerprotokoll'].grid.length === before + 1 && /Google Tasks/.test(sheets['Fehlerprotokoll'].grid.slice(-1)[0][1]), r2);
+  check('Google Tasks: nächster Lauf holt es nach', ctx.gtasksSync().created === 1);
+  ctx.gtasksOff();
+  check('Google Tasks: ausschalten entfernt Auslöser', props.GTASKS_ON === '0' && !triggers.some((t) => t.getHandlerFunction() === 'gtasksSync') && ctx.gtasksSync().skipped === 'aus');
+  sheets['Fehlerprotokoll'].grid.splice(1);
+}
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (Löschkonzept/Überwachung)');
 process.exitCode = fails ? 1 : 0;
