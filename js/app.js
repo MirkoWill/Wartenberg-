@@ -2076,17 +2076,22 @@
     const k = d.kpi || {};
     const pct = (x) => (typeof x !== "number" ? "–" : `${Math.round(x * 100)} %`);
     const num = (x, digits) => (typeof x !== "number" ? "–" : x.toLocaleString("de-DE", { maximumFractionDigits: digits }));
-    const tile = (label, value, cls, sub) => `<div class="kpi${cls ? " kpi--" + cls : ""}"><div class="kpi__value">${esc(value)}</div>`
-      + `<div class="kpi__label">${esc(label)}</div>${sub ? `<div class="kpi__sub">${esc(sub)}</div>` : ""}</div>`;
+    // Mit filter: Kachel ist ein Knopf und zeigt die passenden Tickets in der Liste unten
+    const tile = (label, value, cls, sub, filter) => {
+      const tag = filter ? "button" : "div";
+      const attrs = filter ? ` type="button" data-kpi-filter="${esc(filter)}" aria-label="${esc(`${label}: ${value} – Tickets anzeigen`)}"` : "";
+      return `<${tag} class="kpi${filter ? " kpi--link" : ""}${cls ? " kpi--" + cls : ""}"${attrs}><div class="kpi__value">${esc(value)}</div>`
+        + `<div class="kpi__label">${esc(label)}${filter ? ' <span class="kpi__go" aria-hidden="true">›</span>' : ""}</div>${sub ? `<div class="kpi__sub">${esc(sub)}</div>` : ""}</${tag}>`;
+    };
     $("#cockpitKpis").innerHTML = [
-      tile("Offen", String(k.open || 0)),
-      tile("Überfällig", String(k.overdue || 0), k.overdue ? "red" : "green"),
-      tile("Bald fällig", String(k.dueSoon || 0), k.dueSoon ? "yellow" : ""),
+      tile("Offen", String(k.open || 0), "", "", "open"),
+      tile("Überfällig", String(k.overdue || 0), k.overdue ? "red" : "green", "", "red"),
+      tile("Bald fällig", String(k.dueSoon || 0), k.dueSoon ? "yellow" : "", "", "yellow"),
       tile("SLA eingehalten", pct(k.slaQuote), k.slaQuote === null ? "" : k.slaQuote >= 0.9 ? "green" : k.slaQuote >= 0.7 ? "yellow" : "red", `${k.closed90 || 0} erledigt in 90 Tagen`),
       tile("Ø Reaktion", k.avgReactHours === null ? "–" : `${num(k.avgReactHours, 1)} Std.`, "", "90 Tage"),
       tile("Ø Durchlauf", k.avgLeadDays === null ? "–" : `${num(k.avgLeadDays, 1)} Tage`, "", "90 Tage"),
       tile("Reinigung laut Plan", pct(k.cleaningQuote), k.cleaningQuote === null ? "" : k.cleaningQuote >= 0.95 ? "green" : k.cleaningQuote >= 0.8 ? "yellow" : "red", `${k.cleaningIst || 0} von ${k.cleaningSoll || 0} (30 Tage)`),
-      tile("Langläufer", String(k.longRunners || 0), k.longRunners ? "long" : "", "außerhalb der Service-Ziele"),
+      tile("Langläufer", String(k.longRunners || 0), k.longRunners ? "long" : "", "außerhalb der Service-Ziele", "long"),
       typeof k.errors24 === "number" ? tile("App-Fehler 24 Std.", String(k.errors24), k.errors24 ? "yellow" : "") : "",
     ].join("");
     // Leitung: keine Filter nach Zuständigkeit (sieht nur Hausmeister-Aufträge)
@@ -2502,13 +2507,22 @@
       staffLogin().then(() => { if (currentView === "cockpit" && !readJson(COCKPIT_KEY)) loadCockpit(); });
     };
     $("#cockpitRefresh").addEventListener("click", loadCockpit);
-    $("#cockpitFilter").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-filter]");
-      if (!b) return;
-      cockpitFilter = b.dataset.filter;
-      $$("#cockpitFilter [data-filter]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    const setCockpitFilter = (f) => {
+      cockpitFilter = f;
+      $$("#cockpitFilter [data-filter]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.filter === f)));
       const c = readJson(COCKPIT_KEY);
       if (c && c.data) renderCockpitList(Array.isArray(c.data.tasks) ? c.data.tasks : []);
+    };
+    $("#cockpitFilter").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-filter]");
+      if (b) setCockpitFilter(b.dataset.filter);
+    });
+    // Kacheln oben (Offen, Überfällig, …): Filter setzen und zur Ticketliste springen
+    $("#cockpitKpis").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-kpi-filter]");
+      if (!b) return;
+      setCockpitFilter(b.dataset.kpiFilter);
+      $("#cockpitFilter").scrollIntoView({ behavior: "smooth", block: "start" });
     });
     $("#cockpitList").addEventListener("submit", saveCockpitTask);
     $("#formNewsAdmin").addEventListener("submit", saveNewsAdmin);

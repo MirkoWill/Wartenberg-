@@ -986,6 +986,11 @@ html.text-large body { zoom: 1.18; }
 .kpi__value { font-size: 26px; font-weight: 800; line-height: 1.1; }
 .kpi__label { font-weight: 700; margin-top: 2px; }
 .kpi__sub { font-size: 14px; color: var(--c-muted); }
+button.kpi { font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; }
+.kpi--link:hover { background: var(--c-primary-soft); }
+#cockpitFilter { scroll-margin-top: 76px; }
+.kpi--link:focus-visible { outline: 3px solid var(--c-primary); outline-offset: 2px; }
+.kpi__go { color: var(--c-muted); font-weight: 400; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .chip { min-height: 40px; padding: 6px 14px; border: 1.5px solid var(--c-border); border-radius: 999px; background: var(--c-surface); color: inherit; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-primary-ink); }

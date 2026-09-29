@@ -322,7 +322,10 @@ function makeQrVideo(text) {
       check("Filter Verwaltung", (await p.$$("#cockpitList .task")).length === 1 && /Mangel/.test(await p.textContent("#cockpitList .task__type")));
       await p.click('#cockpitFilter [data-filter="done"]');
       check("Filter Erledigt", (await p.$$("#cockpitList .task")).length === 1 && /eingehalten/.test(await p.textContent("#cockpitList .task__due")));
-      await p.click('#cockpitFilter [data-filter="open"]');
+      await p.click('#cockpitKpis [data-kpi-filter="red"]');
+      check("Kachel Überfällig zeigt die überfälligen Tickets", (await p.$$("#cockpitList .task")).length === 1 && await p.getAttribute('#cockpitFilter [data-filter="red"]', "aria-pressed") === "true");
+      await p.click('#cockpitKpis [data-kpi-filter="open"]');
+      check("Kachel Offen zeigt alle offenen Tickets", (await p.$$("#cockpitList .task")).length === 3 && await p.getAttribute('#cockpitFilter [data-filter="open"]', "aria-pressed") === "true");
       await p.click('.task--sla-red .task__edit summary');
       await p.selectOption('.task--sla-red select[name="status"]', "in Arbeit");
       await p.fill('.task--sla-red textarea[name="note"]', "Schild bestellt");
