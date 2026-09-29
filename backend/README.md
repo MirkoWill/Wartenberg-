@@ -190,6 +190,11 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
     Außerdem eine **Erinnerung ca. 1 Stunde vor jeder Buchung** an alle Beteiligten (Zeitauslöser `fitnessReminders`
     alle 15 Minuten, legt sich beim ersten Buchen selbst an; Spalte „Erinnert“ verhindert doppelte Erinnerungen).
 - Auf dem Sperrbildschirm stehen nur Art und Aufgang – keine Namen oder Wohnungen.
+- **Unterscheidbar am Handy:** dringend = 🔴 im Titel, 3× lange Vibration, bleibt stehen bis zum Antippen;
+  neue Meldung/neuer Auftrag = 3× kurze Vibration; Hinweise/Fitnessraum = 1× kurz.
+- **Eigener Ton (Android):** App über Chrome → „Zum Startbildschirm hinzufügen“/„App installieren“ installieren,
+  dann eine Benachrichtigung lange antippen → ⚙️ Einstellungen → „Ton“ → eigenen Ton wählen. (Web-Apps können den Ton
+  nicht selbst festlegen; der Ton gilt dann für alle Benachrichtigungen dieser App.)
 - Technik: Web Push mit VAPID. Die Schlüssel legt das Script beim ersten Einschalten selbst an
   (Script-Eigenschaften `VAPID_PRIVATE` / `VAPID_PUBLIC` – **nicht ändern oder löschen**, sonst müssen alle neu einschalten).
   Über den Push-Dienst (bei Chrome: Google) geht nur ein leeres Signal; den Text holt die App bei uns ab.

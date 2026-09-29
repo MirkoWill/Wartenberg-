@@ -600,8 +600,9 @@ function makeQrVideo(text) {
       if (reg) {
         await cdp.send("ServiceWorker.deliverPushMessage", { origin: new URL(base).origin, registrationId: reg.registrationId, data: "" });
         await p.waitForTimeout(1500);
-        const shown = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((n) => ({ title: n.title, body: n.body, url: n.data && n.data.url })));
-        check("Push: Signal → Text abgeholt und als Benachrichtigung angezeigt", shown.some((n) => n.title === "📢 Wasser abgestellt" && n.body === "Montag 8–12 Uhr" && n.url === "#notfall"), shown);
+        const shown = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((n) => ({ title: n.title, body: n.body, url: n.data && n.data.url, sticky: n.requireInteraction, vib: [...(n.vibrate || [])] })));
+        check("Push: Signal → Text abgeholt und als Benachrichtigung angezeigt", shown.some((n) => /Wasser abgestellt$/.test(n.title) && n.body === "Montag 8–12 Uhr" && n.url === "#cockpit"), shown);
+        check("Push: dringend = 🔴 im Titel, bleibt stehen, 3× lange Vibration", shown.some((n) => n.title.startsWith("🔴 ") && n.sticky === true && n.vib.length === 5 && n.vib[0] >= 500), shown);
       } else check("Push: Service Worker registriert", false);
 
       await p.click(`${box} [data-push-toggle]`);
