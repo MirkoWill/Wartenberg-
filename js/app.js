@@ -41,6 +41,20 @@
   window.addEventListener("error", (e) => reportError(e.message, `${String(e.filename || "").split("/").pop()}:${e.lineno}`));
 
   /**
+   * Anfrage ans Backend. Google liefert gelegentlich kurz eine eigene Fehlerseite (HTTP 404/5xx, HTML statt JSON),
+   * z. B. während eine neue Version bereitgestellt wird. Dann wurde das Skript gar nicht ausgeführt –
+   * deshalb nach kurzer Pause genau einmal wiederholen, bevor ein Fehler gemeldet wird.
+   */
+  async function apiFetch(url, opts) {
+    const res = await fetch(url, opts);
+    const html = /text\/html/i.test(res.headers.get("content-type") || "");
+    const post = opts && opts.method === "POST"; // 5xx bei POST: evtl. schon ausgeführt → nicht doppelt senden
+    if (!html || !(res.status === 404 || (!post && res.status >= 500))) return res;
+    await new Promise((r) => setTimeout(r, 1500));
+    return fetch(url, opts);
+  }
+
+  /**
    * Antwort des Backends lesen. Kommt kein JSON zurück (z. B. eine Google-Fehlerseite), wird das mit HTTP-Code und
    * Textanfang ins Fehlerprotokoll geschrieben (ohne Tags, gekürzt) und ein Fehler geworfen – nie still „leer“ weitermachen.
    */
@@ -316,7 +330,7 @@
     let r = null;
     msg.textContent = t_("PIN wird geprüft …");
     try {
-      r = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      r = await apiFetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "checkPin", pin }) });
     } catch (e) {
       msg.textContent = t_("Keine Verbindung. Zum ersten Öffnen wird Internet benötigt – bitte erneut versuchen.");
@@ -518,7 +532,7 @@
     if (!list.length || !CFG.API_URL) return;
     try {
       const url = `${CFG.API_URL}?action=status&ids=${encodeURIComponent(list.map((t) => t.id).join(","))}${pinParam()}`;
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await readApiJson(res, "status");
       if (data.code === "pin") { handlePinRejected(); return; }
       const byId = {};
@@ -585,7 +599,7 @@
     renderWeather(cached ? cached.weather : null);
     if (!CFG.API_URL || Date.now() - newsLoadedAt < 5 * 60 * 1000) return;
     try {
-      const res = await fetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}${pinParam()}`);
+      const res = await apiFetch(`${CFG.API_URL}?action=news&obj=${encodeURIComponent(OBJ.key || "")}${pinParam()}`);
       const data = await readApiJson(res, "news");
       if (data.code === "pin") { handlePinRejected(); return; }
       if (!data.ok) return;
@@ -650,7 +664,7 @@
     const id = card.dataset.poll;
     $$("[data-vote]", card).forEach((b) => { b.disabled = true; });
     try {
-      const res = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      const res = await apiFetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "vote", pollId: id, option: Number(btn.dataset.vote), voter: voterId(), obj: OBJ.key || "", pin: storedPin(),
           token: isStaff() ? staff().token : undefined }) }); // Verwaltung/Hausmeister: persönlicher Link statt PIN
       const data = await readApiJson(res, "vote");
@@ -1306,7 +1320,7 @@
       await new Promise((r) => setTimeout(r, 600));
       return { ok: true, demo: true };
     }
-    const res = await fetch(CFG.API_URL, {
+    const res = await apiFetch(CFG.API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ ...payload, pin: storedPin(), token: isStaff() ? staff().token : undefined }),
@@ -1538,7 +1552,7 @@
     const timer = setTimeout(() => ctrl.abort(), timeoutMs); // Google antwortet manchmal gar nicht
     let res;
     try {
-      res = await fetch(CFG.API_URL, {
+      res = await apiFetch(CFG.API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ ...payload, token: payload.token || (s && s.token) }),
@@ -2777,7 +2791,7 @@
 
   async function pushApi(payload) {
     const s = staff();
-    const res = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+    const res = await apiFetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ ...payload, pin: storedPin(), token: s && s.token }) });
     const data = await readApiJson(res, String(payload.action || "post"));
     if (!res.ok || data.ok === false) { const err = new Error(data.error || `HTTP ${res.status}`); err.userMessage = data.error; throw err; }
