@@ -31,7 +31,8 @@ function fakeBackend(state = {}) {
     if (["hmLogin", "logCleaning", "getTasks", "completeTask", "submitStaffDefect", "adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd", "adminPollSave", "adminPollEnd"].includes(d.action)) {
       if (!staff) return { ok: false, error: "Kein gültiger Zugang", code: "staff" };
       if (state.offline && d.action === "logCleaning") return "abort";
-      if (d.action === "hmLogin") return { ok: true, user: staff, areas: AREAS, activities: ACTIVITIES, plan: state.plan || null };
+      if (d.action === "hmLogin") return { ok: true, user: staff, areas: AREAS, activities: ACTIVITIES, plan: state.plan || null, ntfy: ["Verwaltung", "Leitung"].includes(staff.role) ? "wk007-" + "a".repeat(32) : "" };
+      if (d.action === "ntfyTest") return { ok: true };
       if (d.action === "getTasks" && staff.role === "Fitness") state.tasksAsked = true;
       if (d.action === "getTasks") return state.hangTasks ? null : { ok: true, tasks: state.tasks || [] };
       if (d.action === "completeTask") { state.tasks = (state.tasks || []).filter((t) => t.id !== d.id); return { ok: true }; }
@@ -252,6 +253,7 @@ function makeQrVideo(text) {
       await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForSelector(".task");
       check("Aufträge: dringend zuerst, Telefon als Link", (await p.$$eval(".task__type", (t) => t.map((x) => x.textContent))).join() === "Mangel (intern),Klingelschild" && (await p.getAttribute(".task a[href^=tel]", "href")) === "tel:01701234567");
       check("Hausmeister: keine Auswahl „Wer kümmert sich?“ beim Mangel", await p.$eval("#defectOwnerWrap", (e) => e.hidden));
+      check("Hausmeister: kein Kasten für die Alarm-App", !(await p.isVisible("[data-ntfy-box]")));
       await p.click('[data-done="M-1"]');
       check("Erledigt öffnet Feld für Nachher-Foto", await p.isVisible('[data-panel="M-1"] [data-photo]'));
       await p.setInputFiles('[data-panel="M-1"] [data-photo]', { name: "nachher.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
@@ -328,6 +330,10 @@ function makeQrVideo(text) {
       check("Verwaltung: Mangel mit Zuständig Hausmeister + dringend gesendet, Bestätigung", dq && dq.owner === "Hausmeister" && dq.dringend === true && /an den Hausmeister übergeben/.test(await p.textContent("body")), dq);
       check("Nach dem Senden: Auswahl wieder auf Verwaltung", await p.isChecked('#formStaffDefect [name="owner"][value="Verwaltung"]'));
       await p.evaluate(() => { location.hash = "cockpit"; }); await p.waitForSelector("#cockpitList .task");
+      const nbox = '[data-view="cockpit"] [data-ntfy-box]';
+      check("Cockpit: Kasten Alarm-App mit Abo-Link zum eigenen Kanal", await p.isVisible(nbox) && (await p.getAttribute(`${nbox} a[href^="ntfy://"]`, "href")) === "ntfy://ntfy.sh/wk007-" + "a".repeat(32));
+      await p.click(`${nbox} summary`); await p.click(`${nbox} [data-ntfy-test]`); await p.waitForTimeout(600);
+      check("Alarm-App: Test-Alarm wird angefordert", ctx.requests.some((r) => r.action === "ntfyTest") && /Test-Alarm gesendet/.test(await p.textContent("body")));
       await p.click('#cockpitFilter [data-filter="red"]');
       check("Filter Überfällig", (await p.$$("#cockpitList .task")).length === 1);
       await p.click('#cockpitFilter [data-filter="long"]');

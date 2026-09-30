@@ -4,7 +4,7 @@ const fs = require('fs'), vm = require('vm');
 process.env.TZ = 'Europe/Berlin';
 let calName = 'WEG Wartenberger Dorfkrug'; const trashed = []; const alerts = []; const cache = {}; const triggers = [];
 const events = {}; let evSeq = 0;
-const fetches = []; const pushLog = []; const pushCodes = {}; let pushThrow = false; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
+const fetches = []; const pushLog = []; const ntfyLog = []; const pushCodes = {}; let pushThrow = false; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
 const mkHours = (date, icons, tmin, tmax) => Array.from({ length: 24 }, (_, h) => ({ timestamp: `${date}T${String(h).padStart(2, '0')}:00:00+02:00`, temperature: tmin + (tmax - tmin) * Math.sin(Math.PI * h / 23), icon: icons(h), precipitation: icons(h) === 'rain' ? 0.5 : 0 }));
 const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = []; let cacheNews = false;
@@ -34,7 +34,8 @@ const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, e
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); if (f === 'HH:mm') return `${p(d.getHours())}:${p(d.getMinutes())}`; return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
   CacheService: { getScriptCache: () => ({ get: (k) => cache[k] || null, put: (k, v) => { if (!cacheNews && /^news_/.test(k)) return; cache[k] = v; }, remove: (k) => { delete cache[k]; }, removeAll: (ks) => ks.forEach((k) => delete cache[k]) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, tryLock() { return true; }, releaseLock() {} }) },
-  UrlFetchApp: { fetchAll: (reqs) => {
+  UrlFetchApp: { fetch: (url, o) => { ntfyLog.push(JSON.parse(o.payload)); return { getResponseCode: () => 200 }; }, fetchAll: (reqs) => {
+    if (reqs.length && /^https:\/\/ntfy\.sh/.test(reqs[0].url)) { reqs.forEach((r) => ntfyLog.push(JSON.parse(r.payload))); return reqs.map(() => ({ getResponseCode: () => 200 })); }
     if (reqs.length && /^https:\/\/fcm\.googleapis\.com\//.test(reqs[0].url)) { if (pushThrow) throw new Error('Push down'); pushLog.push(...reqs); return reqs.map((r) => ({ getResponseCode: () => pushCodes[r.url] || 201, getContentText: () => '' })); }
     fetches.push(...reqs.map((r) => r.url)); if (wx.fail) throw new Error('DNS'); return reqs.map((r) => {
     if (/transport\.rest/.test(r.url)) {
@@ -734,6 +735,22 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   check('Verwaltung erfasst Mangel → Zuständig Hausmeister gespeichert', vd.ok && vd.owner === 'Hausmeister' && vrow[12] === 'Hausmeister' && vrow[7] === true && vrow[3] === 'Verwaltung', vrow);
   check('Verwaltung → Hausmeister: dringender Auftrag an Hausmeister, Info an Kollegin, nicht an sich selbst', s3b.includes(EP(4)) && s3b.includes(EP(6)) && !s3b.includes(EP(3))
     && hmv.kind === 'urgent' && /Neuer Auftrag: Mangel/.test(hmv.title) && hmv.url === '#hausmeister' && colleague && /→ Hausmeister/.test(colleague.title), [s3b, hmv, colleague]);
+  // Alarm-App ntfy: eigener geheimer Kanal je Nummer (nur Verwaltung/Leitung)
+  const la = post({ action: 'hmLogin', token: admTok }), lb = post({ action: 'hmLogin', token: adm2Tok }), lh = post({ action: 'hmLogin', token: hmTok }), ll = post({ action: 'hmLogin', token: leadTok });
+  check('ntfy: Kanal für Verwaltung/Leitung (geheim, stabil), keiner für Hausmeister', /^wk007-[a-f0-9]{32}$/.test(la.ntfy) && /^wk008-/.test(lb.ntfy) && /^wk001-/.test(ll.ntfy) && lh.ntfy === '' && post({ action: 'hmLogin', token: admTok }).ntfy === la.ntfy, [la.ntfy, lb.ntfy, ll.ntfy, lh.ntfy]);
+  ntfyLog.length = 0; sent();
+  post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '3', name: 'Max Muster', details: 'Schild' });
+  const n1 = ntfyLog.splice(0);
+  check('ntfy: neue Meldung → 007, 008 (Priorität 4) und 001 (Auftrag), ohne Namen', n1.length === 3 && n1.every((m) => m.priority === 4 && /^https:\/\/app\./.test(m.click)) && [la.ntfy, lb.ntfy, ll.ntfy].every((t) => n1.some((m) => m.topic === t)) && !JSON.stringify(n1).includes('Muster'), n1);
+  post({ action: 'submitStaffDefect', token: admTok, ort: 'Keller', beschreibung: 'Wasser', dringend: true, owner: 'Hausmeister' });
+  const n2 = ntfyLog.splice(0);
+  check('ntfy: dringend → Priorität 5 an 001, Kollegin 008 Priorität 4, nicht an 007 selbst', n2.some((m) => m.topic === ll.ntfy && m.priority === 5 && m.tags.includes('rotating_light')) && n2.some((m) => m.topic === lb.ntfy && m.priority === 4) && !n2.some((m) => m.topic === la.ntfy), n2);
+  post({ action: 'adminPollSave', token: admTok, question: 'Test?', options: ['Ja', 'Nein'] });
+  check('ntfy: Hinweise/Umfragen (Info) gehen nicht an ntfy', ntfyLog.splice(0).length === 0);
+  const nt = post({ action: 'ntfyTest', token: admTok }), nth = post({ action: 'ntfyTest', token: hmTok });
+  check('ntfy: Test-Alarm nur an den eigenen Kanal, Hausmeister abgelehnt', nt.ok && ntfyLog.length === 1 && ntfyLog[0].topic === la.ntfy && ntfyLog[0].priority === 5 && nth.ok === false, [nt, nth, ntfyLog]);
+  ntfyLog.length = 0; sent();
+  for (let i = 0; i < 6; i++) { if (!inbox(rA.id).item && !inbox(r8.id).item && !inbox(rH.id).item) break; } // Postfächer leeren
   const vd2 = post({ action: 'submitStaffDefect', token: hmTok, ort: 'Keller', beschreibung: 'x', owner: 'Hausmeister' });
   sent();
   check('Hausmeister kann Zuständigkeit nicht selbst wählen (bleibt Verwaltung)', vd2.owner === 'Verwaltung' && sheets['Mängel Hausmeister'].grid.find((r) => r[0] === vd2.id)[12] === 'Verwaltung');
