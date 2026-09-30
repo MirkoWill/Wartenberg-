@@ -727,6 +727,16 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   const s3 = sent();
   const dm = inbox(rA.id).item;
   check('Push: dringender Mangel vom Hausmeister → Verwaltung, Art „dringend“', s3.length === 2 && dm.title === 'DRINGEND – Mangel vom Hausmeister' && dm.kind === 'urgent', [s3, dm]);
+  const vd = post({ action: 'submitStaffDefect', token: admTok, ort: 'Haustür Lindenberger Str. 6', beschreibung: 'Schließt nicht', dringend: true, owner: 'Hausmeister' });
+  const s3b = sent();
+  const hmv = inbox(rH.id).item; let colleague = null; for (let i = 0; i < 5; i++) { const x = inbox(r8.id).item; if (x && /Mangel erfasst/.test(x.title)) colleague = x; } // ältere Nachrichten zuerst abholen
+  const vrow = sheets['Mängel Hausmeister'].grid.find((r) => r[0] === vd.id);
+  check('Verwaltung erfasst Mangel → Zuständig Hausmeister gespeichert', vd.ok && vd.owner === 'Hausmeister' && vrow[12] === 'Hausmeister' && vrow[7] === true && vrow[3] === 'Verwaltung', vrow);
+  check('Verwaltung → Hausmeister: dringender Auftrag an Hausmeister, Info an Kollegin, nicht an sich selbst', s3b.includes(EP(4)) && s3b.includes(EP(6)) && !s3b.includes(EP(3))
+    && hmv.kind === 'urgent' && /Neuer Auftrag: Mangel/.test(hmv.title) && hmv.url === '#hausmeister' && colleague && /→ Hausmeister/.test(colleague.title), [s3b, hmv, colleague]);
+  const vd2 = post({ action: 'submitStaffDefect', token: hmTok, ort: 'Keller', beschreibung: 'x', owner: 'Hausmeister' });
+  sent();
+  check('Hausmeister kann Zuständigkeit nicht selbst wählen (bleibt Verwaltung)', vd2.owner === 'Verwaltung' && sheets['Mängel Hausmeister'].grid.find((r) => r[0] === vd2.id)[12] === 'Verwaltung');
   post({ action: 'adminPollSave', token: admTok, question: 'Fahrradständer?', options: ['Ja', 'Nein'] });
   const s4 = sent();
   check('Push: neue Umfrage → alle Bewohner', s4.length === 2 && s4.includes(EP(1)) && s4.includes(EP(2)) && inbox(r2.id).item.title === '🗳️ Neue Umfrage', s4);

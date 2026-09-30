@@ -1687,6 +1687,9 @@
       + (s.areas || []).map((a) => `<option>${esc(a.ort)}</option>`).join("")
       + `<option value="__frei">Anderer Ort / Wohnung …</option>`;
     defectOrt.value = keep;
+    // Verwaltung entscheidet bei der Aufnahme, ob sie selbst oder der Hausmeister sich kümmert
+    $("#defectOwnerWrap").hidden = s.user.role !== "Verwaltung";
+    $("#cockpitDefect").hidden = s.user.role !== "Verwaltung";
     renderQueueBadge();
     renderToday();
   }
@@ -2005,14 +2008,17 @@
     btn.disabled = true;
     try {
       const free = form.elements.ort.value === "__frei";
+      const verw = !$("#defectOwnerWrap").hidden;
       const res = await staffPost({
         action: "submitStaffDefect",
         ort: free ? form.elements.ortFrei.value.trim() : form.elements.ort.value,
         beschreibung: form.elements.beschreibung.value.trim(),
         dringend: form.elements.dringend.checked,
+        owner: verw ? form.elements.owner.value : undefined,
         photo: await readPhoto(form.elements.foto.files[0]),
       });
-      toast(`Mangel gemeldet. Nr. ${res.id}`, "ok", 7000);
+      toast(res.owner === "Hausmeister" && verw ? `Mangel an den Hausmeister übergeben. Nr. ${res.id}` : `Mangel gemeldet. Nr. ${res.id}`, "ok", 7000);
+      if (verw) localStorage.removeItem(COCKPIT_KEY); // Cockpit beim nächsten Öffnen frisch laden
       form.reset();
       form.classList.remove("was-validated");
       $("#defectOrtFreeWrap").hidden = true;
@@ -2521,6 +2527,7 @@
       staffLogin().then(() => { if (currentView === "cockpit" && !readJson(COCKPIT_KEY)) loadCockpit(); });
     };
     $("#cockpitRefresh").addEventListener("click", loadCockpit);
+    $("#cockpitDefect").addEventListener("click", () => { location.hash = "hausmeister"; selectStaffPane("defect"); });
     const setCockpitFilter = (f) => {
       cockpitFilter = f;
       $$("#cockpitFilter [data-filter]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.filter === f)));

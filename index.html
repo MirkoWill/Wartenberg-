@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=77">
+  <link rel="stylesheet" href="css/style.css?v=78">
 </head>
 <body>
   <header class="app-header">
@@ -254,6 +254,11 @@
               <textarea name="beschreibung" rows="4" required maxlength="2000"></textarea>
             </label>
             <label class="remember"><input type="checkbox" name="dringend"> <span>Dringend</span></label>
+            <fieldset class="field defect-owner" id="defectOwnerWrap" hidden>
+              <legend class="field__label">Wer kümmert sich?</legend>
+              <label class="remember"><input type="radio" name="owner" value="Verwaltung" checked> <span>Verwaltung (wir selbst)</span></label>
+              <label class="remember"><input type="radio" name="owner" value="Hausmeister"> <span>An den Hausmeister übergeben</span></label>
+            </fieldset>
             <label class="field">
               <span class="field__label">Foto</span>
               <input type="file" name="foto" accept="image/*" capture="environment" data-preview="defectPhotoPreview">
@@ -294,6 +299,7 @@
           <span class="muted small" id="cockpitStatus">–</span>
           <button class="btn btn--ghost btn--small" id="cockpitRefresh" type="button">↻ Aktualisieren</button>
         </div>
+        <button class="btn btn--primary btn--block" id="cockpitDefect" type="button" hidden>🛠️ Mangel erfassen</button>
         <div class="kpis" id="cockpitKpis"></div>
 
         <section id="cockpitNews" hidden>
@@ -957,8 +963,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=77"></script>
-  <script src="js/i18n.js?v=77"></script>
-  <script src="js/app.js?v=77"></script>
+  <script src="js/config.js?v=78"></script>
+  <script src="js/i18n.js?v=78"></script>
+  <script src="js/app.js?v=78"></script>
 </body>
 </html>

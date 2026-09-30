@@ -1383,17 +1383,28 @@ function submitStaffDefect(p, user) {
   const photoUrl = p.photo ? savePhoto(p.photo, `${id}_Mangel`) : "";
   const ort = str(p.ort, 120);
   const area = activeAreas().find((a) => a.ort === p.ort);
+  const urgent = p.dringend === true;
+  // Verwaltung entscheidet bei der Aufnahme, wer sich kümmert; Mängel vom Hausmeister gehen immer an die Verwaltung.
+  const verw = user.role === "Verwaltung";
+  const owner = verw && CONFIG.OWNERS.indexOf(p.owner) !== -1 ? p.owner : defaultOwner("Mangel (intern)");
   appendRow(CONFIG.SHEETS.staffDefects.name, [
-    id, new Date(), str(user.name, 80), user.role, ort, area ? area.aufgang : "", text, p.dringend === true,
-    photoUrl, CONFIG.STATUS_OPEN, "", "", defaultOwner("Mangel (intern)"),
+    id, new Date(), str(user.name, 80), user.role, ort, area ? area.aufgang : "", text, urgent,
+    photoUrl, CONFIG.STATUS_OPEN, "", "", owner,
   ]);
-  notify(`${p.dringend === true ? "DRINGEND – " : ""}Mangel vom ${user.role}: ${plain(ort, 60)} (${id})`, [
-    `Erfasst von: ${user.name}`, `Ort: ${plain(ort, 120)}`, `Beschreibung: ${plain(text)}`,
+  notify(`${urgent ? "DRINGEND – " : ""}Mangel vom ${user.role}: ${plain(ort, 60)} (${id})`, [
+    `Erfasst von: ${user.name}`, `Ort: ${plain(ort, 120)}`, `Beschreibung: ${plain(text)}`, `Zuständig: ${owner}`,
     photoUrl ? `Foto: ${photoUrl}` : "",
   ]);
-  pushSend({ roles: ["Verwaltung"] }, { title: `${p.dringend === true ? "DRINGEND – " : ""}Mangel vom Hausmeister`, body: plain(ort, 80),
-    url: "#cockpit", tag: id, urgent: p.dringend === true, kind: "meldung" });
-  return { ok: true, id };
+  const prefix = urgent ? "DRINGEND – " : "";
+  if (owner === "Hausmeister") {
+    pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `${prefix}Neuer Auftrag: Mangel`, body: plain(ort, 80),
+      url: "#hausmeister", tag: id, urgent, kind: "meldung" });
+  }
+  // Verwaltung: Mängel vom Hausmeister an alle; selbst erfasste nur an die Kollegin/den Kollegen
+  pushSend({ roles: ["Verwaltung"], exceptNr: verw ? user.nr : undefined },
+    { title: verw ? `${prefix}Mangel erfasst von Nr. ${user.nr}${owner === "Hausmeister" ? " → Hausmeister" : ""}` : `${prefix}Mangel vom Hausmeister`,
+      body: plain(ort, 80), url: "#cockpit", tag: id, urgent: urgent && !verw, kind: "meldung" }); // Kollegin/Kollege: nur Info, kein Alarm
+  return { ok: true, id, owner };
 }
 
 /* ---------- Reinigungsplan ---------- */

@@ -3,16 +3,16 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v77";
+const CACHE_VERSION = "mieterapp-v78";
 const PUSH_CACHE = "mieterapp-push"; // Benachrichtigungen: { api, id } – bleibt bei neuen Versionen erhalten
 const VERSION = CACHE_VERSION.replace(/^.*-v/, ""); // z. B. "71" – muss zu den ?v= in index.html passen
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=77",
-  "./js/config.js?v=77",
-  "./js/i18n.js?v=77",
-  "./js/app.js?v=77",
+  "./css/style.css?v=78",
+  "./js/config.js?v=78",
+  "./js/i18n.js?v=78",
+  "./js/app.js?v=78",
   "./manifest.json",
   "./icons/favicon-32.png",
   "./icons/apple-touch-icon.png",
@@ -88,6 +88,9 @@ self.addEventListener("fetch", (event) => {
 
 /* ---------- Benachrichtigungen (nur Android) ----------
    Das Signal vom Push-Dienst ist leer; den Text holen wir mit der Geräte-Kennung beim Backend ab. */
+const URGENT_ALERTS = 3;
+const URGENT_GAP_MS = 4000;
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let item = null;
@@ -100,18 +103,27 @@ self.addEventListener("push", (event) => {
       }
     } catch (e) { /* ohne Netz: allgemeiner Hinweis */ }
     const msg = item || { title: "Mieter-App", body: "Es gibt Neuigkeiten – bitte die App öffnen.", url: "#notfall" };
-    // Unterscheidbar ohne Hinsehen: dringend = 3× lang (bleibt stehen), neue Meldung/Auftrag = 3× kurz, sonst 1× kurz
+    // Android (ab Version 8) ignoriert eigene Vibrationsmuster von Web-Apps – unterscheidbar wird „dringend“ daher so:
+    // 🔴 im Titel und der Hinweiston kommt 3× (alle 4 Sek.), bis die Benachrichtigung geöffnet oder weggewischt wird.
     const kind = msg.kind === "urgent" || msg.kind === "meldung" ? msg.kind : "info";
-    const vibrate = kind === "urgent" ? [600, 200, 600, 200, 600] : kind === "meldung" ? [150, 100, 150, 100, 150] : [150];
-    await self.registration.showNotification((kind === "urgent" ? "🔴 " : "") + String(msg.title || "Mieter-App"), {
+    const tag = msg.tag || (kind === "urgent" ? `urgent-${Date.now()}` : undefined);
+    const show = (alerts) => self.registration.showNotification((kind === "urgent" ? "🔴 " : "") + String(msg.title || "Mieter-App"), {
       body: String(msg.body || ""),
-      tag: msg.tag || undefined,
-      renotify: !!msg.tag,              // gleiche Meldung erneut → trotzdem wieder bemerkbar
+      tag,
+      renotify: !!tag,                  // gleiche Meldung erneut → trotzdem wieder Ton
       requireInteraction: kind === "urgent",
-      vibrate,
+      vibrate: kind === "urgent" ? [600, 200, 600, 200, 600] : kind === "meldung" ? [150, 100, 150, 100, 150] : [150],
       icon: "icons/icon-192.png",
-      data: { url: /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#notfall", kind },
+      data: { url: /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#notfall", kind, alerts },
     });
+    await show(1);
+    if (kind !== "urgent") return;
+    for (let n = 2; n <= URGENT_ALERTS; n++) {
+      await new Promise((r) => setTimeout(r, URGENT_GAP_MS));
+      const still = await self.registration.getNotifications({ tag });
+      if (!still.length) return;       // schon geöffnet oder weggewischt
+      await show(n);
+    }
   })());
 });
 
