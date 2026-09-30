@@ -35,7 +35,7 @@ function fakeBackend(state = {}) {
       if (d.action === "getTasks" && staff.role === "Fitness") state.tasksAsked = true;
       if (d.action === "getTasks") return state.hangTasks ? null : { ok: true, tasks: state.tasks || [] };
       if (d.action === "completeTask") { state.tasks = (state.tasks || []).filter((t) => t.id !== d.id); return { ok: true }; }
-      if (d.action === "submitStaffDefect") return { ok: true, id: "M-260924-ABCD" };
+      if (d.action === "submitStaffDefect") return { ok: true, id: "M-260924-ABCD", owner: staff.role === "Verwaltung" && d.owner ? d.owner : "Verwaltung" };
       if (["adminOverview", "adminUpdateTask", "adminNewsSave", "adminNewsEnd", "adminPollSave", "adminPollEnd"].includes(d.action)) {
         if (staff.role === "Hausmeister") return { ok: false, error: "Nur für Verwaltung und Leitung.", code: "staff" };
         if (staff.role === "Leitung" && state.leadOverview && d.action === "adminOverview") return state.leadOverview;
@@ -251,6 +251,7 @@ function makeQrVideo(text) {
       await p.waitForTimeout(3000);
       await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForSelector(".task");
       check("Aufträge: dringend zuerst, Telefon als Link", (await p.$$eval(".task__type", (t) => t.map((x) => x.textContent))).join() === "Mangel (intern),Klingelschild" && (await p.getAttribute(".task a[href^=tel]", "href")) === "tel:01701234567");
+      check("Hausmeister: keine Auswahl „Wer kümmert sich?“ beim Mangel", await p.$eval("#defectOwnerWrap", (e) => e.hidden));
       await p.click('[data-done="M-1"]');
       check("Erledigt öffnet Feld für Nachher-Foto", await p.isVisible('[data-panel="M-1"] [data-photo]'));
       await p.setInputFiles('[data-panel="M-1"] [data-photo]', { name: "nachher.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
@@ -314,6 +315,19 @@ function makeQrVideo(text) {
       check("Cockpit: Kennzahlen", (await p.$$(".kpi")).length === 9 && /80 %/.test(await p.textContent("#cockpitKpis")) && /5,5 Std\./.test(await p.textContent("#cockpitKpis")));
       check("Cockpit: offene Aufträge mit Ampel, Überfälliges markiert", (await p.$$("#cockpitList .task")).length === 3 && await p.isVisible(".task--sla-red .sla-dot--red") && /überfällig/.test(await p.textContent(".task--sla-red .task__due")));
       check("Cockpit-Tab aktiv markiert", (await p.getAttribute("#staffTab", "aria-current")) === "page");
+      // Verwaltung erfasst selbst einen Mangel und übergibt ihn gleich (dringend) an den Hausmeister
+      await p.click("#cockpitDefect"); await p.waitForSelector('[data-pane="defect"]:not([hidden])', { timeout: 5000 }).catch(() => {});
+      check("Cockpit: „Mangel erfassen“ öffnet das Formular mit „Wer kümmert sich?“", await p.isVisible("#formStaffDefect") && await p.isVisible("#defectOwnerWrap"));
+      await p.selectOption("#defectOrt", { index: 1 });
+      await p.fill('#formStaffDefect [name="beschreibung"]', "Haustür schließt nicht");
+      await p.check('#formStaffDefect [name="dringend"]');
+      await p.check('#formStaffDefect [name="owner"][value="Hausmeister"]');
+      await p.click("#formStaffDefect [type=submit]");
+      await p.waitForFunction(() => /an den Hausmeister übergeben/.test(document.body.textContent), null, { timeout: 5000 }).catch(() => {});
+      const dq = ctx.requests.find((r) => r.action === "submitStaffDefect");
+      check("Verwaltung: Mangel mit Zuständig Hausmeister + dringend gesendet, Bestätigung", dq && dq.owner === "Hausmeister" && dq.dringend === true && /an den Hausmeister übergeben/.test(await p.textContent("body")), dq);
+      check("Nach dem Senden: Auswahl wieder auf Verwaltung", await p.isChecked('#formStaffDefect [name="owner"][value="Verwaltung"]'));
+      await p.evaluate(() => { location.hash = "cockpit"; }); await p.waitForSelector("#cockpitList .task");
       await p.click('#cockpitFilter [data-filter="red"]');
       check("Filter Überfällig", (await p.$$("#cockpitList .task")).length === 1);
       await p.click('#cockpitFilter [data-filter="long"]');
@@ -605,7 +619,13 @@ function makeQrVideo(text) {
         await p.waitForTimeout(1500);
         const shown = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((n) => ({ title: n.title, body: n.body, url: n.data && n.data.url, sticky: n.requireInteraction, vib: [...(n.vibrate || [])] })));
         check("Push: Signal → Text abgeholt und als Benachrichtigung angezeigt", shown.some((n) => /Wasser abgestellt$/.test(n.title) && n.body === "Montag 8–12 Uhr" && n.url === "#cockpit"), shown);
-        check("Push: dringend = 🔴 im Titel, bleibt stehen, 3× lange Vibration", shown.some((n) => n.title.startsWith("🔴 ") && n.sticky === true && n.vib.length === 5 && n.vib[0] >= 500), shown);
+        check("Push: dringend = 🔴 im Titel, bleibt stehen", shown.some((n) => n.title.startsWith("🔴 ") && n.sticky === true), shown);
+        let alerts = 0;
+        for (let i = 0; i < 30 && alerts < 3; i++) {
+          await p.waitForTimeout(500);
+          alerts = await p.evaluate(async () => { const n = (await (await navigator.serviceWorker.ready).getNotifications())[0]; return (n && n.data && n.data.alerts) || 0; });
+        }
+        check("Push: dringend meldet sich 3× (Ton wiederholt), nur eine Benachrichtigung", alerts === 3 && (await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).length)) === 1, alerts);
       } else check("Push: Service Worker registriert", false);
 
       await p.click(`${box} [data-push-toggle]`);

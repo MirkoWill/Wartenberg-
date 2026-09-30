@@ -88,7 +88,7 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 | **Tätigkeiten** | Auswahlliste beim Scannen; beliebig erweiterbar. |
 | **Reinigung** | Jeder Nachweis: Scan-Zeit, Ort, Tätigkeit, Mitarbeiter-Nr, Notiz, Foto, *Erfassung* = „QR-Scan“ oder „manuell gewählt“ (QR-Code beschädigt). |
 | **Zuständig** (Spalte in *Tickets* und *Mängel Hausmeister*) | Wer den Auftrag erledigt: *Hausmeister* oder *Verwaltung*. Der Hausmeister sieht im Portal **nur** „Hausmeister“-Aufträge, die Verwaltung (007) sieht alle. Voreinstellung: Klingelschild → Hausmeister; Elektroraum, Mängel der Bewohner und interne Mängel → Verwaltung (umstellen per Auswahl in der Zelle, z. B. einen Mangel an den Hausmeister geben). Standards in `CONFIG.DEFAULT_OWNER`. |
-| **Mängel Hausmeister** | Vom Hausmeister/der Verwaltung erfasste Mängel, getrennt von den Bewohner-Tickets; Status wie bei *Tickets*. |
+| **Mängel Hausmeister** | Vom Hausmeister/der Verwaltung erfasste Mängel, getrennt von den Bewohner-Tickets; Status wie bei *Tickets*. Die Verwaltung wählt beim Erfassen („🛠️ Mangel erfassen“ im Cockpit) gleich *Dringend* und *Wer kümmert sich?* (Verwaltung oder Hausmeister). |
 | **Reinigungsplan** | Termine vom Hausmeister (siehe unten). |
 
 **Als App auf dem Startbildschirm:** Nach dem Öffnen des persönlichen Links im Browser-Menü „Zum Startbildschirm
@@ -185,13 +185,16 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
 - Wer bekommt was:
   - **Bewohner:** neuer Hinweis aus dem Cockpit (sofort gültig) und neue Umfrage – nur für den eigenen Aufgang.
   - **Hausmeister / Leitung:** neuer Auftrag für den Hausmeisterdienst (z. B. Klingelschild, Zuständigkeit geändert).
-  - **Verwaltung (007/008):** jede neue Meldung von Bewohnern und Mängel vom Hausmeister (dringend = laut).
+  - **Verwaltung (007/008):** jede neue Meldung von Bewohnern und Mängel vom Hausmeister (dringend = laut). Erfasst die
+    Verwaltung selbst einen Mangel („🛠️ Mangel erfassen“ im Cockpit), bekommt nur die Kollegin/der Kollege eine Info;
+    wird er dabei an den Hausmeister übergeben, bekommen Hausmeister und Leitung einen neuen Auftrag (dringend = laut).
   - **Fitnessraum:** wenn dich jemand als Trainingspartner einträgt, absagt oder die gemeinsame Buchung storniert.
     Außerdem eine **Erinnerung ca. 1 Stunde vor jeder Buchung** an alle Beteiligten (Zeitauslöser `fitnessReminders`
     alle 15 Minuten, legt sich beim ersten Buchen selbst an; Spalte „Erinnert“ verhindert doppelte Erinnerungen).
 - Auf dem Sperrbildschirm stehen nur Art und Aufgang – keine Namen oder Wohnungen.
-- **Unterscheidbar am Handy:** dringend = 🔴 im Titel, 3× lange Vibration, bleibt stehen bis zum Antippen;
-  neue Meldung/neuer Auftrag = 3× kurze Vibration; Hinweise/Fitnessraum = 1× kurz.
+- **Unterscheidbar am Handy:** dringend = 🔴 im Titel, der Hinweiston kommt **3× (alle 4 Sekunden)**, bis die Benachrichtigung
+  geöffnet oder weggewischt wird; alles andere klingelt 1×. Eigene Vibrationsmuster je Art kann Android (ab Version 8)
+  für Web-Apps nicht – Ton und Vibration legt Android einheitlich für die App fest.
 - **Eigener Ton (Android):** App über Chrome → „Zum Startbildschirm hinzufügen“/„App installieren“ installieren,
   dann eine Benachrichtigung lange antippen → ⚙️ Einstellungen → „Ton“ → eigenen Ton wählen. (Web-Apps können den Ton
   nicht selbst festlegen; der Ton gilt dann für alle Benachrichtigungen dieser App.)
