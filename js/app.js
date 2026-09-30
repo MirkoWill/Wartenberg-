@@ -1611,7 +1611,8 @@
         // Inzwischen abgemeldet oder anderer Zugang? Dann die verspätete Antwort verwerfen.
         const cur = staff();
         if (!cur || cur.token !== s.token) return;
-        writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities, plan: data.plan || null });
+        writeJson(STAFF_KEY, { ...cur, user: data.user, areas: data.areas, activities: data.activities, plan: data.plan || null,
+          ntfy: /^wk\d{1,4}-[a-f0-9]{32}$/.test(data.ntfy || "") ? data.ntfy : "" });
         // Aufträge nur vorladen, wenn sie gebraucht werden (Hausmeister-Bereich) – im Cockpit spart das eine Anfrage
         const fitOnly = data.user && data.user.role === "Fitness";
         if (!fitOnly && (!isAdmin() || currentView === "hausmeister")) loadTasks();
@@ -1690,6 +1691,7 @@
     // Verwaltung entscheidet bei der Aufnahme, ob sie selbst oder der Hausmeister sich kümmert
     $("#defectOwnerWrap").hidden = s.user.role !== "Verwaltung";
     $("#cockpitDefect").hidden = s.user.role !== "Verwaltung";
+    renderNtfyBoxes(s);
     renderQueueBadge();
     renderToday();
   }
@@ -2895,7 +2897,42 @@
     });
   }
 
+  /* ---------- Alarm-App ntfy (Verwaltung/Leitung) ---------- */
+
+  function renderNtfyBoxes(s) {
+    const topic = (s && s.ntfy) || "";
+    $$("[data-ntfy-box]").forEach((box) => {
+      box.hidden = !topic;
+      if (!topic) return;
+      box.innerHTML = `<details class="ntfy"><summary><strong>🚨 Alarm-App (ntfy)</strong>
+          <span class="muted small">Neue Meldungen laut, dringende als echter Alarm – auch bei Stummschaltung einstellbar.</span></summary>
+        <ol class="ntfy__steps small">
+          <li><a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">ntfy aus dem Play Store installieren</a> (kostenlos).</li>
+          <li><a href="ntfy://ntfy.sh/${esc(topic)}">Hier tippen, um deinen Alarm-Kanal zu abonnieren</a> – oder in ntfy „+“ und diesen Namen eingeben:
+            <code class="ntfy__topic">${esc(topic)}</code> (geheim halten).</li>
+          <li>In ntfy den Kanal öffnen → ⋮ → „Benachrichtigungen“: bei <em>Höchste Priorität</em> Ton/Vibration wählen und
+            „Nicht stören überschreiben“ einschalten.</li>
+          <li><button class="btn btn--ghost btn--small" type="button" data-ntfy-test>Test-Alarm senden</button></li>
+        </ol>
+        <p class="muted small">Inhalt nur Art und Ort (keine Namen). Die normalen Benachrichtigungen kannst du danach ausschalten, sonst kommt alles doppelt.</p>
+      </details>`;
+    });
+  }
+
   function initPush() {
+    document.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-ntfy-test]");
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        await staffPost({ action: "ntfyTest" });
+        toast("Test-Alarm gesendet – er sollte gleich in ntfy ankommen.", "ok", 6000);
+      } catch (err) {
+        toast(err.userMessage || "Test-Alarm fehlgeschlagen. Bitte Internetverbindung prüfen.", "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
     renderPushBoxes();
     document.addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-push-toggle]");

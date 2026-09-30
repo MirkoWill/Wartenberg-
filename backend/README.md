@@ -205,6 +205,23 @@ geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und
   automatisch, unbenutzte nach einem Jahr.
 - Test: Menü **Mieter-App → „Benachrichtigung testen (an Verwaltung)“** schickt eine Testnachricht an alle Handys der Verwaltung.
 
+## Alarm-App ntfy (Verwaltung 007/008, Leitung 001)
+
+Web-Apps können auf Android weder eigene Töne noch lange Vibration auslösen. Für einen echten Alarm gibt es daher
+zusätzlich die kostenlose App **ntfy** (Play Store, „ntfy“ von Philipp Heckel).
+
+- Jede Nummer bekommt beim Anmelden automatisch einen **eigenen, geheimen Kanal** (`wk007-…`, 32 Zufallszeichen;
+  Script-Eigenschaft `NTFY_TOPICS` – nicht löschen, sonst muss jede/r neu abonnieren).
+- Einrichten am Handy: App → Cockpit (bzw. Hausmeister-Bereich für 001) → Kasten **„🚨 Alarm-App (ntfy)“** →
+  ntfy installieren → Link „Alarm-Kanal abonnieren“ antippen → in ntfy beim Kanal unter „Benachrichtigungen“ für
+  *Höchste Priorität* Ton/Vibration wählen und „Nicht stören überschreiben“ einschalten → „Test-Alarm senden“.
+- Was kommt: neue Meldungen/Aufträge mit **Priorität 4** (laut), **dringende** mit **Priorität 5** (Alarm, 🚨).
+  Hinweise, Umfragen und Fitnessraum gehen nicht an ntfy. Selbst erfasste Mängel bekommt man nicht; die Kollegin/der
+  Kollege nur als Priorität 4.
+- Inhalt wie bei den Benachrichtigungen: nur Art und Aufgang/Ort, keine Namen, Wohnungen oder Telefonnummern.
+  Die Nachrichten laufen über den öffentlichen Server ntfy.sh; geschützt ist der Kanal nur durch seinen geheimen Namen.
+- Neuen Kanal (z. B. Handy verloren): Eintrag der Nummer in `NTFY_TOPICS` löschen – beim nächsten Anmelden entsteht ein neuer.
+
 ## Google Tasks (Übersicht, optional) 💻 einmal am Computer
 
 App und Tabelle bleiben **führend**. Google Tasks zeigt nur zusätzlich alle offenen Aufträge an – z. B. in Gmail,

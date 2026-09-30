@@ -11,6 +11,7 @@
  *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Aufträge an den Hausmeister)
  *   CALENDAR_ID         optional, Kalender für den Reinigungsplan (sonst Suche nach CONFIG.CALENDAR_NAME)
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
+ *   NTFY_TOPICS         geheime Alarm-Kanäle (ntfy) je Nummer – legt das Script selbst an, nicht löschen
  *   GTASKS_ON / GTASKS_LIST_ID  werden über das Menü „Google Tasks: einrichten …“ gesetzt (Dienst „Tasks“ nötig)
  *   APP_PIN             Zugangs-PIN der App – über das Menü „Zugangs-PIN ändern …“ setzen (nie in den Code). Bei Änderung auch
  *                       PIN_SHA256 in js/config.js anpassen.
@@ -1080,6 +1081,7 @@ const STAFF_ACTIONS = {
   adminPollEnd: (p, user) => adminPollEnd(p, user),
   adminNewsEnd: (p, user) => adminNewsEnd(p, user),
   hmLogin: (p, user) => staffLogin(user),
+  ntfyTest: (p, user) => ntfyTest(user),
   logCleaning: (p, user) => { requireStaffWork(user); return logCleaning(p, user); },
   getTasks: (p, user) => { requireStaffWork(user); return getTasks(p, user); },
   completeTask: (p, user) => { requireStaffWork(user); return completeTask(p, user); },
@@ -1262,6 +1264,7 @@ function staffLogin(user) {
     areas: activeAreas().map(({ residents, ...a }) => a), activities: activeActivities(),
     // „Heute zu tun“ nur für den Hausmeisterdienst – die Verwaltung braucht es nicht (Anmeldung bleibt schnell)
     plan: user.role === "Verwaltung" ? null : todayPlan(),
+    ntfy: ntfyTopicFor(user), // persönlicher Alarm-Kanal (nur Verwaltung/Leitung), sonst ""
   };
 }
 
@@ -3305,6 +3308,7 @@ function activeStaffRoles() {
  * Fehler beim Versand stören die eigentliche Aktion nie.
  */
 function pushSend(to, msg) {
+  if (!to.residents) ntfySend(to, msg); // Alarm-App für Verwaltung/Leitung – unabhängig von Web-Push
   try {
     const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.push.name);
     if (!sheet || sheet.getLastRow() < 2) return 0; // noch niemand angemeldet: nichts weiter lesen
@@ -3611,4 +3615,77 @@ function gtasksOff() {
   PropertiesService.getScriptProperties().setProperty("GTASKS_ON", "0");
   ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === GTASKS.trigger).forEach((t) => ScriptApp.deleteTrigger(t));
   showResult("Google Tasks", "Abgleich ausgeschaltet. Vorhandene Aufgaben in Google Tasks bleiben stehen.");
+}
+
+/* ==========================================================================
+   Alarm-App ntfy (Android): neue Meldungen laut, dringende als Alarm – für Verwaltung und Leitung
+   Jede Nummer hat einen eigenen, geheimen Kanal (Script-Eigenschaft NTFY_TOPICS). Inhalt wie bei den
+   Benachrichtigungen: nur Art und Ort, keine Namen/Wohnungen. Priorität 5 = dringend, 4 = neue Meldung/Auftrag.
+   ========================================================================== */
+
+const NTFY = { server: "https://ntfy.sh", roles: ["Verwaltung", "Leitung"] };
+
+function ntfyTopics() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty("NTFY_TOPICS") || "{}") || {}; } catch (e) { return {}; }
+}
+
+/** Kanal dieser Nummer (wird beim ersten Anmelden angelegt); "" für andere Rollen. */
+function ntfyTopicFor(user) {
+  if (!user || NTFY.roles.indexOf(user.role) === -1) return "";
+  const nr = String(user.nr || "");
+  if (!/^\d{1,4}$/.test(nr)) return "";
+  const topics = ntfyTopics();
+  if (!topics[nr]) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const fresh = ntfyTopics();
+      if (!fresh[nr]) {
+        fresh[nr] = `wk${nr}-${Utilities.getUuid().replace(/-/g, "")}`; // 32 Zufallszeichen: nicht zu erraten
+        PropertiesService.getScriptProperties().setProperty("NTFY_TOPICS", JSON.stringify(fresh));
+      }
+      return fresh[nr];
+    } finally {
+      lock.releaseLock();
+    }
+  }
+  return topics[nr];
+}
+
+/** Nur neue Meldungen/Aufträge und dringende Meldungen; gleiche Empfänger-Regeln wie pushSend. */
+function ntfySend(to, msg) {
+  try {
+    if (!msg.urgent && msg.kind !== "meldung") return 0;
+    const topics = ntfyTopics();
+    if (!Object.keys(topics).length) return 0;
+    const staff = activeStaffRoles();
+    const nrs = Object.keys(topics).filter((nr) => Object.prototype.hasOwnProperty.call(staff, nr) && NTFY.roles.indexOf(staff[nr]) !== -1
+      && nr !== to.exceptNr && ((to.roles || []).indexOf(staff[nr]) !== -1 || (to.nrs || []).indexOf(nr) !== -1));
+    if (!nrs.length) return 0;
+    UrlFetchApp.fetchAll(nrs.map((nr) => ntfyRequest(topics[nr], msg)));
+    return nrs.length;
+  } catch (err) {
+    console.error("ntfy:", err);
+    return 0;
+  }
+}
+
+function ntfyRequest(topic, msg) {
+  const url = /^#[a-z]{1,20}$/.test(msg.url || "") ? msg.url : "#cockpit";
+  return {
+    url: NTFY.server, method: "post", contentType: "application/json", muteHttpExceptions: true,
+    payload: JSON.stringify({
+      topic, title: plain(msg.title, 80), message: plain(msg.body || msg.title, 180) || "Mieter-App",
+      priority: msg.urgent ? 5 : 4, tags: msg.urgent ? ["rotating_light"] : ["house"], click: CONFIG.APP_URL + url,
+    }),
+  };
+}
+
+/** Aus der App: Test-Alarm an den eigenen Kanal. */
+function ntfyTest(user) {
+  const topic = ntfyTopicFor(user);
+  if (!topic) throw userError("Nur für Verwaltung und Leitung.", "staff");
+  const code = UrlFetchApp.fetch(NTFY.server, ntfyRequest(topic, { title: "Test-Alarm Mieter-App", body: "So klingt eine dringende Meldung.", url: "#cockpit", urgent: true })).getResponseCode();
+  if (code >= 400) throw userError("Test-Alarm konnte nicht gesendet werden. Bitte später erneut versuchen.");
+  return { ok: true };
 }
