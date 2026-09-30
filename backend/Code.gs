@@ -2056,6 +2056,7 @@ function adminUpdateTask(p, user) {
   const def = /^M-/.test(id) ? CONFIG.SHEETS.staffDefects : CONFIG.SHEETS.tickets;
   const sheet = getSpreadsheet().getSheetByName(def.name);
   const col = (h) => def.headers.indexOf(h) + 1;
+  let handover = null; // Benachrichtigung erst nach dem Speichern senden (Sperre kurz halten)
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -2076,8 +2077,8 @@ function adminUpdateTask(p, user) {
       if (CONFIG.OWNERS.indexOf(p.owner) === -1) throw userError("Ungültige Zuständigkeit");
       sheet.getRange(row._row, col("Zuständig")).setValue(p.owner);
       if (p.owner === "Hausmeister" && ownerOf(row, row.Typ || "Mangel (intern)") !== "Hausmeister") {
-        pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `Neuer Auftrag: ${plain(row.Typ || "Mangel", 40)}`,
-          body: entranceName(row["Aufgang-ID"]) || plain(row.Ort, 80), url: "#hausmeister", tag: id, kind: "meldung" });
+        handover = { title: `Neuer Auftrag: ${plain(row.Typ || "Mangel", 40)}`,
+          body: entranceName(row["Aufgang-ID"]) || plain(row.Ort, 80), url: "#hausmeister", tag: id, kind: "meldung" };
       }
     }
     if (p.note !== undefined) sheet.getRange(row._row, col("Notiz Verwaltung")).setValue(protectCell(str(p.note, 1000)));
@@ -2087,6 +2088,7 @@ function adminUpdateTask(p, user) {
   } finally {
     lock.releaseLock();
   }
+  if (handover) pushSend({ roles: ["Hausmeister", "Leitung"] }, handover);
   return { ok: true };
 }
 
@@ -3539,8 +3541,11 @@ function gtasksSync() {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty("GTASKS_ON") !== "1") return { skipped: "aus" };
   if (!gtasksAvailable()) return { skipped: "Dienst fehlt" };
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(20000)) return { skipped: "läuft bereits" };
+  // Bewusst KEINE Script-Sperre: die Aufrufe an Google Tasks dauern und würden sonst jedes Speichern in der App
+  // blockieren. Doppelte Läufe verhindert ein Merker im Cache (verfällt nach 5 Min. von selbst).
+  const cache = CacheService.getScriptCache();
+  if (cache.get("gtasks_running")) return { skipped: "läuft bereits" };
+  cache.put("gtasks_running", "1", 300);
   try {
     const def = CONFIG.SHEETS.gtasks;
     const ss = getSpreadsheet();
@@ -3589,7 +3594,7 @@ function gtasksSync() {
     logServerError(err, "Google Tasks");
     return { created: 0, completed: 0, reopened: 0, errors: 1 };
   } finally {
-    lock.releaseLock();
+    cache.remove("gtasks_running");
   }
 }
 
