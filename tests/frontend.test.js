@@ -626,6 +626,12 @@ function makeQrVideo(text) {
           alerts = await p.evaluate(async () => { const n = (await (await navigator.serviceWorker.ready).getNotifications())[0]; return (n && n.data && n.data.alerts) || 0; });
         }
         check("Push: dringend meldet sich 3× (Ton wiederholt), nur eine Benachrichtigung", alerts === 3 && (await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).length)) === 1, alerts);
+        // Zweites Signal ohne abzuholende Nachricht: keine zusätzliche „Es gibt Neuigkeiten“-Meldung
+        await p.evaluate(async (api) => { await (await caches.open("mieterapp-push")).put("push-config", new Response(JSON.stringify({ api, id: "a".repeat(40) }))); }, `${base}tests/fixtures/push-inbox-empty.json`);
+        await cdp.send("ServiceWorker.deliverPushMessage", { origin: new URL(base).origin, registrationId: reg.registrationId, data: "" });
+        await p.waitForTimeout(1500);
+        const after = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((n) => n.title));
+        check("Push: leeres Doppel-Signal → keine zweite Meldung „Es gibt Neuigkeiten“", after.length === 1 && after[0].startsWith("🔴 "), after);
       } else check("Push: Service Worker registriert", false);
 
       await p.click(`${box} [data-push-toggle]`);

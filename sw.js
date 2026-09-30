@@ -3,16 +3,16 @@
  * Notfallnummern & Verhaltensregeln sind damit auch ohne Netz verfügbar.
  * Beim Ändern von Dateien CACHE_VERSION hochzählen.
  */
-const CACHE_VERSION = "mieterapp-v78";
+const CACHE_VERSION = "mieterapp-v79";
 const PUSH_CACHE = "mieterapp-push"; // Benachrichtigungen: { api, id } – bleibt bei neuen Versionen erhalten
 const VERSION = CACHE_VERSION.replace(/^.*-v/, ""); // z. B. "71" – muss zu den ?v= in index.html passen
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=78",
-  "./js/config.js?v=78",
-  "./js/i18n.js?v=78",
-  "./js/app.js?v=78",
+  "./css/style.css?v=79",
+  "./js/config.js?v=79",
+  "./js/i18n.js?v=79",
+  "./js/app.js?v=79",
   "./manifest.json",
   "./icons/favicon-32.png",
   "./icons/apple-touch-icon.png",
@@ -102,6 +102,17 @@ self.addEventListener("push", (event) => {
         item = (await r.json()).item || null;
       }
     } catch (e) { /* ohne Netz: allgemeiner Hinweis */ }
+    if (!item) {
+      // Nichts abzuholen (z. B. doppeltes Signal, Nachricht schon abgeholt): Chrome verlangt trotzdem eine Anzeige.
+      // Liegt schon eine unserer Benachrichtigungen da, diese still erneut zeigen statt „Es gibt Neuigkeiten“.
+      const open = await self.registration.getNotifications();
+      const last = open[open.length - 1];
+      if (last) {
+        await self.registration.showNotification(last.title, { body: last.body, tag: last.tag || undefined, renotify: false, silent: true,
+          requireInteraction: last.requireInteraction, icon: "icons/icon-192.png", data: last.data });
+        return;
+      }
+    }
     const msg = item || { title: "Mieter-App", body: "Es gibt Neuigkeiten – bitte die App öffnen.", url: "#notfall" };
     // Android (ab Version 8) ignoriert eigene Vibrationsmuster von Web-Apps – unterscheidbar wird „dringend“ daher so:
     // 🔴 im Titel und der Hinweiston kommt 3× (alle 4 Sek.), bis die Benachrichtigung geöffnet oder weggewischt wird.
