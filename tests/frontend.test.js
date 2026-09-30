@@ -238,7 +238,7 @@ function makeQrVideo(text) {
       await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])");
       check("Angemeldet als Nr. 100, Tab sichtbar", (await p.textContent("#staffName")) === "Nr. 100" && await p.isVisible("#staffTab"));
       check("Manifest der Hausmeister-App aktiv", (await p.getAttribute("#appManifest", "href")) === "manifest-hausmeister.json");
-      await p.click("#scanBtn"); await p.waitForSelector("#scanForm:not([hidden])", { timeout: 15000 });
+      await p.click("#scanBtn"); await p.waitForSelector("#scanForm:not([hidden])", { timeout: 40000 }); // JS-QR-Erkennung auf langsamen CI-Rechnern braucht mitunter > 15 s
       check("Kamera-Scan erkennt den QR-Code", (await p.textContent("#scanPlace")) === AREAS[0].ort && (await p.inputValue("#scanActivity")) === "Treppenhausreinigung");
       const t0 = Date.now(); await p.click("#scanForm [type=submit]"); await p.waitForSelector("#scanDone:not([hidden])");
       check("Haken sofort (< 1,5 s)", Date.now() - t0 < 1500);
