@@ -869,6 +869,34 @@ function makeQrVideo(text) {
       check("Keine automatische Installations-Einblendung", prevented);
       await ctx.close();
     }
+    console.log("--- Hilfe: App auf den Startbildschirm");
+    {
+      const SAMSUNG = "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36";
+      const CHROME = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36";
+      const fakePrompt = () => { const e = new Event("beforeinstallprompt", { cancelable: true }); e.prompt = () => { window.__prompted = true; return Promise.resolve(); }; e.userChoice = Promise.resolve({ outcome: "accepted" }); window.dispatchEvent(e); };
+      let ctx = await newContext(browser, { preset: "resident", extra: { userAgent: SAMSUNG } });
+      let p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(400);
+      check("Samsung Internet: Hilfe mit ☰ → „Seite hinzufügen zu“ → „Startbildschirm“", await p.isVisible("#installCard") && /Seite hinzufügen zu/.test(await p.textContent("#installCard")) && /Startbildschirm/.test(await p.textContent("#installCard")));
+      await p.evaluate(fakePrompt); await p.waitForTimeout(100);
+      check("Samsung Internet: mit Browser-Angebot nur noch „Jetzt hinzufügen“ + bestätigen", await p.isVisible("[data-install-now]"));
+      await p.click("[data-install-now]"); await p.waitForTimeout(300);
+      check("„Jetzt hinzufügen“ öffnet die Bestätigung des Browsers, danach verschwindet die Hilfe", await p.evaluate(() => window.__prompted === true) && !(await p.isVisible("#installCard")));
+      await ctx.close();
+      ctx = await newContext(browser, { preset: "resident", extra: { userAgent: CHROME } });
+      p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(400);
+      await p.evaluate(fakePrompt); await p.waitForTimeout(100);
+      check("Chrome: Anleitung ⋮ → „Zum Startbildschirm hinzufügen“, kein Direkt-Knopf", /Zum Startbildschirm hinzufügen/.test(await p.textContent("#installCard")) && !(await p.$("[data-install-now]")));
+      await p.click("#installCard [data-install-hide]"); await p.reload(); await p.waitForTimeout(400);
+      check("Ausgeblendet bleibt ausgeblendet", !(await p.isVisible("#installCard")));
+      await ctx.close();
+      ctx = await newContext(browser, { preset: "resident" });
+      p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForTimeout(400);
+      check("PC: keine Startbildschirm-Hilfe", !(await p.isVisible("#installCard")));
+      await ctx.close();
+    }
   } catch (err) {
     check("Test lief ohne Abbruch durch", false, String(err && err.stack || err));
   } finally {

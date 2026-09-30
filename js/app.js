@@ -12,9 +12,14 @@
   "use strict";
 
   // Keine automatische „App installieren“-Einblendung: Manche Handys blockieren die dabei erzeugte
-  // Android-App („für ältere Android-Version“). Die App läuft im Browser; wer ein Symbol möchte, nutzt
-  // bewusst Menü ⋮ → „Zum Startbildschirm hinzufügen“.
-  window.addEventListener("beforeinstallprompt", (e) => e.preventDefault());
+  // Android-App („für ältere Android-Version“). Stattdessen zeigt die Startseite eine Hilfe „Auf den
+  // Startbildschirm“ passend zum Browser; außerhalb von Chrome genügt dort ein Tipp zum Bestätigen.
+  let installEvt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installEvt = e;
+    if (typeof window.__renderInstallCard === "function") window.__renderInstallCard();
+  });
 
   // Größere Schrift (Schalter „A+“), sofort anwenden, damit nichts springt.
   const TEXT_KEY = "mieterapp.textsize";
@@ -3004,6 +3009,68 @@
      Kurze Einführung (3 Schritte, einmal pro Gerät) und größere Schrift
      ====================================================================== */
 
+  /* ---------- Hilfe: App auf den Startbildschirm ---------- */
+
+  const INSTALL_KEY = "mieterapp.installHint";
+
+  function browserKind() {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "ios";
+    if (!/Android/i.test(ua)) return "";
+    if (/SamsungBrowser/i.test(ua)) return "samsung";
+    if (/Firefox/i.test(ua)) return "firefox";
+    if (/EdgA|OPR|YaBrowser|MiuiBrowser|HuaweiBrowser/i.test(ua)) return "other";
+    return /Chrome\//.test(ua) ? "chrome" : "other";
+  }
+
+  function isInstalled() {
+    try { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch (e) { return false; }
+  }
+
+  const INSTALL_STEPS = {
+    samsung: ["Unten rechts auf ☰ (drei Striche) tippen.", "„Seite hinzufügen zu“ wählen.", "„Startbildschirm“ tippen und mit „Hinzufügen“ bestätigen."],
+    chrome: ["Oben rechts auf ⋮ (drei Punkte) tippen.", "„Zum Startbildschirm hinzufügen“ wählen.", "Mit „Hinzufügen“ bestätigen."],
+    firefox: ["Auf ⋮ (drei Punkte) tippen.", "„Installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.", "Mit „Hinzufügen“ bestätigen."],
+    ios: ["Auf das Teilen-Symbol tippen (Quadrat mit Pfeil nach oben).", "„Zum Home-Bildschirm“ wählen.", "Oben rechts auf „Hinzufügen“ tippen."],
+    other: ["Das Menü des Browsers öffnen.", "„Zum Startbildschirm hinzufügen“ (oder „Installieren“) wählen.", "Bestätigen."],
+  };
+
+  function renderInstallCard() {
+    const card = $("#installCard");
+    if (!card) return;
+    const kind = browserKind();
+    const hidden = !kind || isInstalled() || !hasConsent() || !readJson(INTRO_KEY) && !isStaff() || !!readJson(INSTALL_KEY);
+    card.hidden = hidden;
+    if (hidden) return;
+    // In Chrome bewusst ohne Direkt-Knopf (erzeugt dort eine Android-App, die manche Handys blockieren)
+    const oneTap = !!installEvt && kind !== "chrome";
+    card.innerHTML = `<div class="install-card__head"><strong>📲 ${esc(t_("App auf den Startbildschirm"))}</strong>
+        <button class="install-card__close" type="button" data-install-hide aria-label="${esc(t_("Ausblenden"))}">✕</button></div>
+      <p class="small">${esc(t_("Dann öffnen Sie die App mit einem Tipp – wie jede andere App."))}</p>
+      ${oneTap ? `<button class="btn btn--primary btn--block" type="button" data-install-now>${esc(t_("Jetzt hinzufügen"))}</button>
+        <p class="muted small">${esc(t_("Danach nur noch bestätigen."))}</p>`
+        : `<ol class="install-card__steps small">${INSTALL_STEPS[kind].map((x) => `<li>${esc(t_(x))}</li>`).join("")}</ol>`}
+      <button class="btn btn--ghost btn--small" type="button" data-install-hide>${esc(t_("Erledigt / nicht nötig"))}</button>`;
+  }
+  window.__renderInstallCard = renderInstallCard;
+
+  function initInstallCard() {
+    renderInstallCard();
+    document.addEventListener("click", async (e) => {
+      if (e.target.closest("[data-install-hide]")) { writeJson(INSTALL_KEY, { hidden: Date.now() }); renderInstallCard(); return; }
+      if (!e.target.closest("[data-install-now]") || !installEvt) return;
+      const evt = installEvt;
+      installEvt = null;
+      try {
+        await evt.prompt();
+        const choice = await evt.userChoice;
+        if (choice && choice.outcome === "accepted") writeJson(INSTALL_KEY, { installed: Date.now() });
+      } catch (err) { console.warn("Installieren:", err); }
+      renderInstallCard(); // abgelehnt/nicht möglich: Schritt-für-Schritt-Anleitung zeigen
+    });
+    window.addEventListener("appinstalled", () => { writeJson(INSTALL_KEY, { installed: Date.now() }); renderInstallCard(); });
+  }
+
   const INTRO_KEY = "mieterapp.intro";
   const INTRO = [
     { icon: "🏠", title: "Start", text: "Aktuelles aus dem Haus und alle Notfallnummern. Ein Tipp genügt, und der Anruf startet." },
@@ -3034,6 +3101,7 @@
     $("#intro").hidden = true;
     document.body.classList.toggle("has-modal", !$("#consent").hidden);
     writeJson(INTRO_KEY, { seen: Date.now() });
+    renderInstallCard();
   }
 
   /** Einmal pro Gerät, nach der Zustimmung; nicht für den Hausmeisterdienst. */
@@ -3095,7 +3163,7 @@
     [
       renderEntrancePicker, renderEmergency, renderWaste, renderInfos, initTransit,
       initWaterForm, initPowerForm, initElectricForm, initBellForm, initDefectForm,
-      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff, initFitness, initPush, initIntro, initTextSize,
+      initPhotoPreviews, initProfile, initConsent, initStatus, initLanguage, initStaff, initFitness, initPush, initIntro, initInstallCard, initTextSize,
     ].forEach((step) => {
       try { step(); } catch (err) { console.error(`Fehler in ${step.name}:`, err); setTimeout(() => reportError(`${step.name}: ${err.message}`, "init"), 3000); }
     });

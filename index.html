@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=81">
+  <link rel="stylesheet" href="css/style.css?v=82">
 </head>
 <body>
   <header class="app-header">
@@ -58,6 +58,7 @@
     <!-- ============ EPIC 1 – US 1.1: Notfall ============ -->
     <!-- Startseite (interner Name „notfall“ bleibt, damit alte Links/QR-Codes funktionieren) -->
     <section class="view" data-view="notfall" data-title="Start">
+      <div class="install-card" id="installCard" hidden></div>
       <div class="news" id="newsBox" hidden></div>
       <div class="polls" id="pollBox" hidden></div>
       <div class="weather" id="weatherBox" hidden></div>
@@ -965,8 +966,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=81"></script>
-  <script src="js/i18n.js?v=81"></script>
-  <script src="js/app.js?v=81"></script>
+  <script src="js/config.js?v=82"></script>
+  <script src="js/i18n.js?v=82"></script>
+  <script src="js/app.js?v=82"></script>
 </body>
 </html>
