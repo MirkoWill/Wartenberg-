@@ -2210,7 +2210,19 @@
     btn.disabled = true;
     try {
       await staffPost({ action: "adminUpdateTask", id, ...change }, 30000);
-      toast(`${id} gespeichert.`, "ok");
+    } catch (err) {
+      btn.disabled = false;
+      if (err.name === "AbortError") {
+        // Keine Antwort in 30 Sek. – die Änderung kann trotzdem angekommen sein: frisch laden statt „fehlgeschlagen“
+        toast("Der Server antwortet gerade sehr langsam. Ich lade den aktuellen Stand – bitte prüfen, ob die Änderung übernommen wurde.", "error", 9000);
+        loadCockpit();
+      } else {
+        toast(err.userMessage || "Speichern fehlgeschlagen – bitte erneut versuchen.", "error");
+      }
+      return;
+    }
+    toast(`${id} gespeichert.`, "ok");
+    try {
       const c = readJson(COCKPIT_KEY); // sofort anzeigen, Ampel kommt mit dem nächsten Laden
       if (c) {
         const t = (c.data.tasks || []).find((x) => x.id === id);
@@ -2223,12 +2235,11 @@
         writeJson(COCKPIT_KEY, c);
         renderCockpitList(c.data.tasks || []);
       }
-      localRemove(TASKS_KEY);
-      loadCockpit();
     } catch (err) {
-      btn.disabled = false;
-      toast(err.userMessage || "Speichern fehlgeschlagen – bitte erneut versuchen.", "error");
+      console.warn("Cockpit-Anzeige:", err); // gespeichert ist es – nur die Sofort-Anzeige hat nicht geklappt
     }
+    localRemove(TASKS_KEY);
+    loadCockpit();
   }
 
   /** Hinweise für Bewohner: aktive Liste + Formular (nur Verwaltung). */
