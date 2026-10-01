@@ -2725,7 +2725,7 @@
       const pct = Math.min(100, Math.round((m.week.count / goal) * 100));
       return `<li class="${m.nr === me ? "fit-board__me" : ""}"><span class="fit-board__medal" aria-hidden="true">${medal}</span>
         <span class="fit-board__nr">Nr. ${esc(m.nr)}</span>
-        <span class="fit-board__val">${s.count}× · ${esc(s.minutes ? fitDuration(Math.round(s.minutes / 30) * 30) : "0 Min")}${s.together ? ` · 👥 ${s.together}` : ""}</span>
+        <span class="fit-board__val">${s.count} ${s.count === 1 ? "Training" : "Trainings"} · ${esc(s.minutes ? fitDuration(Math.round(s.minutes / 30) * 30) : "0 Min")} gesamt${s.together ? ` · 👥 ${s.together}` : ""}</span>
         <span class="fit-board__streak">${m.streak ? `🔥 ${m.streak}` : ""}</span>
         <span class="fit-bar fit-bar--small" title="Wochenziel ${m.week.count}/${goal}"><i style="width:${pct}%"></i></span></li>`;
     }).join("");

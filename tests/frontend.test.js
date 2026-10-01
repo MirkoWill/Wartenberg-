@@ -540,7 +540,7 @@ function makeQrVideo(text) {
       check("Fitness: belegte Zeit am gewählten Tag als Hinweis (gemeinsam: beide Nummern)", /18:00–19:00 \(Nr\. 011 \+ 007\)/.test(await p.textContent("#fitDayInfo")), await p.textContent("#fitDayInfo"));
       check("Fitness: Wochenziel für mich (0 von 2)", /0× von 2/.test(await p.textContent("#fitMe")));
       const board = await p.$$eval("#fitBoard li", (l) => l.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
-      check("Fitness: Rangliste Woche – 011 vorne mit 🥇 und 🔥 4", /🥇 Nr\. 011 2× · 2 Std 🔥 4/.test(board[0]), board);
+      check("Fitness: Rangliste Woche – 011 vorne mit 🥇 und 🔥 4", /🥇 Nr\. 011 2 Trainings · 2 Std gesamt 🔥 4/.test(board[0]), board);
       await p.click("#fitPeriod [data-period=month]");
       const board2 = await p.$$eval("#fitBoard li .fit-board__nr", (l) => l.map((x) => x.textContent));
       check("Fitness: Monat umschaltbar – 007 vorne", board2[0] === "Nr. 007", board2);
