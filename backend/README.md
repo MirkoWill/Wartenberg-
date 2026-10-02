@@ -28,7 +28,6 @@ Dauer: ca. 10 Minuten, einmalig. Kosten: 0 €.
 | `NOTIFY_EMAIL` | `verwaltung@example.org` | E-Mail bei jedem neuen Antrag, jeder Zählermeldung und jeder Erledigt-Meldung (mehrere kommagetrennt). Prüfen: Funktion **testMail** ausführen. |
 | `APP_PIN` | – | Zugangs-PIN der App (6–12 Ziffern). **Nur über das Menü „Mieter-App → Zugangs-PIN ändern …“ setzen**, nie in den Code schreiben (das Projekt ist öffentlich). Ohne PIN sind alle Bewohner-Funktionen gesperrt. |
 | `CALENDAR_ID` | `abc…@group.calendar.google.com` | Optional: Kalender für den Reinigungsplan (sonst Suche nach Name „WEG Wartenberger Dorfkrug“) |
-| `LOOKER_URL` | `https://lookerstudio.google.com/reporting/…` | Optional: Link auf den Looker-Studio-Bericht, erscheint im Cockpit unter „Werkzeuge“ |
 | `BEIRAT_EMAILS` | `a@x.de, b@y.de, c@z.de` | Empfänger des Monatsberichts (nach Ihrer Freigabe) |
 | `CLEANING_ICS_URL` | – (leer lassen) | Nur falls der Reinigungs-Kalender doch öffentlich sein soll: dessen iCal-Adresse → Abo-Knopf in der App. Empfehlung: **nicht** setzen |
 
@@ -118,12 +117,34 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
   kommt eine Mail an `NOTIFY_EMAIL` („Fehlende Nachweise“). Zeiträume (z. B. Winterdienst) werden nicht geprüft.
 - Die Bewohner sehen in der App die nächsten Termine (14 Tage) und die zuletzt erledigten Arbeiten (60 Tage) für ihren Aufgang.
 
-## Cockpit für Verwaltung (007 / 008) und Leitung (001)
+## Cockpit für Verwaltung (007 / 008) und Leitung (001 / 002)
 
-**Leitung des Hausmeisterdienstes (001, Rolle „Leitung“):** sieht im Cockpit nur die Aufträge mit
-Zuständigkeit „Hausmeister“, kann deren Status ändern (nicht Zuständigkeit/Notiz), sieht „Erledigte Arbeiten
-(14 Tage)“ und kann QR-Codes drucken. Keine Zählerstände, keine Fehlerprotokolle, kein Looker-Link. Die Rolle stellt
-`setup` bzw. „Mitarbeiter-Links ergänzen“ einmalig um; danach gilt die Auswahl in der Spalte „Rolle“.
+**Leitung des Hausmeisterdienstes (001 und 002, Rolle „Leitung“, gleiche Rechte):** sieht im Cockpit nur die
+Aufträge mit Zuständigkeit „Hausmeister“, kann deren Status ändern und sie **im Team verteilen** (nicht
+Zuständigkeit/Notiz), sieht „Erledigte Arbeiten (14 Tage)“ und kann QR-Codes drucken. Keine Zählerstände, keine
+Fehlerprotokolle. 002 legt `setup` bzw. „Mitarbeiter-Links ergänzen“ automatisch an; danach gilt die Auswahl in der
+Spalte „Rolle“.
+
+### Hausmeister-Aufträge in zwei Stufen
+
+1. **Stufe 1 – Leitung (001/002):** Alles mit Zuständigkeit „Hausmeister“ (Klingelschild, von der Verwaltung
+   übergebene Mängel) landet zuerst bei der Leitung – im Cockpit als **„📥 zu verteilen“** (eigener Filter) und in
+   der **Morgen-Übersicht um 8 Uhr** an `HAUSMEISTER_EMAIL` (Script-Eigenschaft, sonst `CONFIG.HAUSMEISTER_EMAIL`).
+   **Dringende** Aufträge kommen zusätzlich **sofort** per Mail (höchstens 10 je 6 Std.).
+2. **Stufe 2 – Team (Nr. ab 100):** Die Leitung gibt den Auftrag an einen Hausmeister – im Cockpit („Zuweisen“) oder
+   per Knopf **„→ Nr. …“** direkt in der Mail (mit Bestätigungsseite). Ab dann sehen **alle** Hausmeister im Team den
+   Auftrag in der App, beim Zugewiesenen mit „👷 für dich“; das Team bekommt eine Benachrichtigung.
+
+**Morgen-Übersicht (8 Uhr, nur wenn es etwas gibt):** 1. zu verteilende Aufträge mit Zuweisen-Knöpfen (neue
+markiert), 2. beim Team offene Aufträge, 3. vom Team gemeldete Mängel (zur Info – die **Verwaltung** entscheidet;
+diese Mängel gehen zuerst an 007/008), 4. **Bericht über den Vortag**: Nachweise per QR-Code mit Uhrzeit und laut
+Reinigungsplan geplante, aber nicht nachgewiesene Arbeiten (ohne Mitarbeiternummern). Menü zum Testen:
+**Mieter-App → Hausmeister-Übersicht jetzt senden**. Neue Spalten in *Tickets* / *Mängel Hausmeister*:
+„Zugewiesen an“, „Zugewiesen am“, „An Leitung gemeldet“.
+
+**Ansicht für das Team (Nr. ab 100):** nur noch die drei Bereiche **📷 Scannen, 📋 Aufträge (mit Zahl), 🛠️ Mangel** –
+große Schrift und Knöpfe, ohne die Bewohner-Reiter. Klingelschild-Aufträge gehen nicht mehr sofort per Mail an
+den Hausmeister, sondern über diesen Ablauf (alte Erledigt-Links aus früheren Mails funktionieren weiter).
 
 **Erledigte Arbeiten (14 Tage)** – für Verwaltung und Leitung: je Tag, was mit Uhrzeit nachgewiesen wurde, Abgleich
 mit dem Reinigungsplan (Plan x/y, „zusätzlich“, „nachgeholt am …“, „nicht nachgewiesen“). **Bewusst ohne
@@ -160,7 +181,7 @@ Wird ein erledigter Auftrag wieder geöffnet, wird „Erledigt am“ geleert.
 Bearbeiten als „⏳ Langläufer“ kennzeichnen und kurz begründen (ohne Namen – der Grund erscheint im Beiratsbericht).
 Sie zählen dann **nicht** in Ampel, „überfällig“, SLA-Quote, Ø-Zeiten und Morgen-Mail, werden aber **gesondert**
 geführt: Kennzahl und Filter im Cockpit, eigener Abschnitt im Monatsbericht und in der Mail an den Beirat, Spalte
-„Langläufer“ in der Auswertung (Looker). In der Tabelle: Spalten „Langläufer“ (ja) und „Langläufer-Grund“, Zeile lila.
+In der Tabelle: Spalten „Langläufer“ (ja) und „Langläufer-Grund“, Zeile lila.
 
 **Morgen-Mail um 7 Uhr** an `NOTIFY_EMAIL` – **nur**, wenn Aufträge überfällig oder bald fällig sind.
 
@@ -289,41 +310,6 @@ Datum). **Nur Zahlen – keine Namen, Wohnungen, Beschreibungen oder Mitarbeiter
    `CONFIG.REPORT_REPLY_TO` – sofern nicht schon gesendet oder angehalten. Die versendete Fassung wird im Drive-Ordner
    „Beiratsberichte Mieter-App“ abgelegt. Anschreiben und Signatur: `reportMail()` bzw. `CONFIG.REPORT_SIGNATURE`.
 4. Menü **Mieter-App → Monatsbericht: Vorschau an mich** zeigt Bericht und Mail jederzeit vorab (nur an Sie).
-
-## Statistik mit Looker Studio (kostenlos) 💻 am Computer
-
-Das Script baut jede Nacht (und per Menü **Mieter-App → Auswertung aktualisieren**) zwei Blätter, die sich direkt als
-Datenquelle eignen – **nicht von Hand bearbeiten**, sie werden überschrieben:
-
-- **Auswertung Aufträge**: eine Zeile je Meldung/Mangel mit Art, Aufgang, Zuständig, Status, Zeiten, Fristen,
-  Reaktionszeit (Std.), Durchlaufzeit (Tage), SLA eingehalten/verspätet/überfällig, Ampel, Monat – plus fertige
-  Zähler für Diagramme ohne Formeln: **Offen**, **Erledigt**, **Überfällig** (je 1/0, als Summe) und
-  **SLA eingehalten** (1/0 nur bei erledigten; als Durchschnitt und Typ „Prozent“ = SLA-Quote).
-  Enthält **keine Namen, Telefonnummern oder Beschreibungen** der Bewohner.
-- **Auswertung Reinigung**: je Tag und Plan-Eintrag Soll (1) und Ist (0/1) – Erfüllungsquote = Summe Ist / Summe Soll.
-
-Einrichten (einmalig, ca. 15 Minuten):
-
-1. Einmal **Mieter-App → Auswertung aktualisieren** ausführen, damit die Blätter existieren.
-2. <https://lookerstudio.google.com> mit dem Konto **willbrandtundkompagnon@gmail.com** öffnen → **Leerer Bericht**.
-3. Datenquelle **Google Sheets** → die Mieter-App-Tabelle → Blatt **Auswertung Aufträge** → „Erste Zeile als
-   Überschriften“ angehakt → **Hinzufügen**. Danach über **Ressource → Datenquellen verwalten → Datenquelle hinzufügen**
-   auch **Auswertung Reinigung** anbinden.
-4. Vorschläge für Diagramme:
-   - **Kurzübersichten** (Kennzahlen): „Offen“ (Summe), „Überfällig“ (Summe), „SLA eingehalten“ (Durchschnitt,
-     Feldtyp Prozent), „Reaktionszeit (Std.)“ (Durchschnitt).
-   - **Zeitreihe/Säulen**: Dimension „Monat“, Aufschlüsselung „Art“, Messwert Anzahl.
-   - **SLA-Quote**: Kreisdiagramm Dimension „SLA Erledigung“.
-   - **Reaktionszeit**: Balken Dimension „Art“, Messwert „Reaktionszeit (Std.)“ als Durchschnitt.
-   - **Aufgänge**: Balken Dimension „Aufgang“, Messwert Anzahl.
-   - **Reinigung**: Tabelle Dimension „Ort“/„Tätigkeit“, Messwerte SUM(Ist) und SUM(Soll), berechnetes Feld
-     `SUM(Ist)/SUM(Soll)` als Prozent; Zeitreihe nach „Monat“.
-   - Oben einen **Zeitraum-Filter** (Feld „Eingang“ bzw. „Datum“) und Auswahlfilter für Aufgang und Art.
-5. **Freigabe**: Bericht nur für eure beiden Google-Konten freigeben (Teilen → Personen). Für den Beirat ggf. einen
-   Link „Nur ansehen“; die Auswertung enthält keine Namen, trotzdem bewusst entscheiden.
-6. Bericht-Adresse kopieren und als Script-Eigenschaft `LOOKER_URL` eintragen → erscheint im Cockpit.
-
-Looker liest die Tabelle live; die Blätter werden nachts um 3 Uhr neu berechnet.
 
 ## Löschkonzept und Überwachung (automatisch, täglich 3 Uhr)
 

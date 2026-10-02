@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=83">
+  <link rel="stylesheet" href="css/style.css?v=85">
 </head>
 <body>
   <header class="app-header">
@@ -143,7 +143,7 @@
     </section>
 
     <!-- ============ EPIC 3: Hausmeister-Portal (nur mit persönlichem Link) ============ -->
-    <section class="view" data-view="hausmeister" data-title="Hausmeister-Tools" hidden>
+    <section class="view" data-view="hausmeister" data-title="Hausmeister" hidden>
       <div data-no-i18n>
       <div class="staff-pending" id="staffPending" hidden>
         <div id="staffPendingWait">
@@ -180,9 +180,9 @@
         </div>
 
         <div class="segmented segmented--tabs" role="tablist" id="staffTabs">
-          <label><input type="radio" name="staffTab" value="scan" checked><span>Scannen</span></label>
-          <label><input type="radio" name="staffTab" value="tasks"><span>Aufträge</span></label>
-          <label><input type="radio" name="staffTab" value="defect"><span>Mangel</span></label>
+          <label><input type="radio" name="staffTab" value="scan" checked><span><i class="seg-ico" aria-hidden="true">📷</i>Scannen</span></label>
+          <label><input type="radio" name="staffTab" value="tasks"><span><i class="seg-ico" aria-hidden="true">📋</i>Aufträge <b class="seg-count" id="taskCount" hidden></b></span></label>
+          <label><input type="radio" name="staffTab" value="defect"><span><i class="seg-ico" aria-hidden="true">🛠️</i>Mangel</span></label>
         </div>
 
         <!-- Scannen -->
@@ -356,6 +356,7 @@
           <button type="button" class="chip" data-filter="red" aria-pressed="false">🔴 Überfällig</button>
           <button type="button" class="chip" data-filter="yellow" aria-pressed="false">🟡 Bald fällig</button>
           <button type="button" class="chip" data-filter="long" aria-pressed="false">⏳ Langläufer</button>
+          <button type="button" class="chip" data-filter="assign" aria-pressed="false">📥 Zu verteilen</button>
           <button type="button" class="chip" data-filter="Hausmeister" aria-pressed="false">Hausmeister</button>
           <button type="button" class="chip" data-filter="Verwaltung" aria-pressed="false">Verwaltung</button>
           <button type="button" class="chip" data-filter="done" aria-pressed="false">Erledigt (30 Tage)</button>
@@ -373,7 +374,6 @@
         <a class="btn btn--ghost btn--block" href="#hausmeister">🧹 Hausmeister-Tools (Scannen, Mangel erfassen)</a>
         <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
         <a class="btn btn--ghost btn--block" href="#fitness" data-fit-link hidden>💪 Fitnessraum</a>
-        <a class="btn btn--ghost btn--block" id="cockpitLooker" href="#" target="_blank" rel="noopener" hidden>📈 Auswertung in Looker Studio</a>
         <div class="push-box" data-push-box="staff" data-no-i18n hidden></div>
         <div class="push-box ntfy-box" data-ntfy-box data-no-i18n hidden></div>
         <p class="muted small">SLA-Ziele: Dringend – Reaktion 1 Tag, erledigt 3 Tage · Mangel – Reaktion 3 Werktage, erledigt
@@ -878,7 +878,7 @@
     <div class="app-footer__site" id="siteName"></div>
     <div>Ein Service von <a id="providerLink" href="#" target="_blank" rel="noopener"></a></div>
     <nav class="app-footer__legal" aria-label="Rechtliches">
-      <a href="#impressum">Impressum</a> · <a href="#datenschutz">Datenschutz</a> · <a href="#" id="introOpen">Kurze Einführung</a>
+      <a href="#impressum">Impressum</a> · <a href="#datenschutz">Datenschutz</a><span class="intro-link"> · <a href="#" id="introOpen">Kurze Einführung</a></span>
     </nav>
   </footer>
 
@@ -888,6 +888,13 @@
     <a class="tabbar__item" href="#infos" data-tab="infos"><span aria-hidden="true">📄</span>Infos</a>
     <a class="tabbar__item" href="#meldungen" data-tab="meldungen"><span aria-hidden="true">📋</span>Meldungen</a>
     <a class="tabbar__item" href="#hausmeister" data-tab="hausmeister" id="staffTab" hidden><span aria-hidden="true">🧹</span>Hausmeister</a>
+  </nav>
+
+  <!-- Hausmeister-Team (Nr. ab 100): nur diese drei Knöpfe unten -->
+  <nav class="tabbar tabbar--hm" id="hmTabbar" aria-label="Hausmeister" data-no-i18n hidden>
+    <button class="tabbar__item" type="button" data-hm-pane="scan"><span aria-hidden="true">📷</span>Scannen</button>
+    <button class="tabbar__item" type="button" data-hm-pane="tasks"><span aria-hidden="true">📋</span>Aufträge <b class="seg-count" id="hmTaskCount" hidden></b></button>
+    <button class="tabbar__item" type="button" data-hm-pane="defect"><span aria-hidden="true">🛠️</span>Mangel</button>
   </nav>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -966,8 +973,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=83"></script>
-  <script src="js/i18n.js?v=83"></script>
-  <script src="js/app.js?v=83"></script>
+  <script src="js/config.js?v=85"></script>
+  <script src="js/i18n.js?v=85"></script>
+  <script src="js/app.js?v=85"></script>
 </body>
 </html>

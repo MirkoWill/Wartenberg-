@@ -89,12 +89,10 @@ check('Alte App (Einzelzähler) funktioniert weiter', post({ ...base, action: 's
 mails.length = 0;
 r = post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '04', name: 'Müller', details: 'Müller / Schmidt', kontakt: '0170 123' });
 check('Klingelschild ok', r.ok, r);
-const hm = mails.find((m) => m.to === 'info@gs-schreier.de');
-check('Mail an GS Schreier', !!hm, mails.map((m) => m.to));
-console.log('---- Mailtext ----\n' + hm.body + '\n------------------');
+check('Klingelschild: keine Sofort-Mail an den Hausmeister (kommt in die Morgen-Übersicht der Leitung)', !mails.some((m) => m.to === 'info@gs-schreier.de') && mails.some((m) => /Morgen|morgen um 8 Uhr/.test(m.body)), mails.map((m) => m.to));
 const t = sheets['Tickets'].grid.find((x) => x[0] === r.id);
 const code = t[16];
-check('Erledigt-Code gespeichert, Link in Mail', code && hm.body.includes(`action=done&id=${r.id}&t=${code}`));
+check('Erledigt-Code gespeichert (alte Mail-Links bleiben gültig)', !!code);
 let page = ctx.doGet({ parameter: { action: 'done', id: r.id, t: 'falsch' } });
 check('Falscher Code → ungültig', page.html.includes('Link ungültig'));
 page = ctx.doGet({ parameter: { action: 'done', id: r.id, t: code } });
@@ -105,7 +103,7 @@ check('Nach Bestätigung: erledigt + Datum', t2[3] === 'erledigt' && t2[14] inst
 page = ctx.doGet({ parameter: { action: 'done', id: r.id, t: code, confirm: '1' } });
 check('Zweiter Klick → bereits erledigt', page.html.includes('Bereits erledigt'));
 check('Mangel sendet keine Hausmeister-Mail', (() => { mails.length = 0; post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'Licht kaputt', ort: 'Keller' }); return !mails.some((m) => m.to === 'info@gs-schreier.de'); })());
-check('XSS in Mail-HTML entschärft', (() => { mails.length = 0; post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: '<b>x</b>', details: '<script>' }); return !mails[0].htmlBody.includes('<script>'); })());
+check('XSS in Mail-HTML entschärft', (() => { mails.length = 0; const x = post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: '<b>x</b>', details: '<script>' }); ctx.hmUrgentMail(x.id); ctx.hausmeisterDigest(); return mails.every((m) => !m.htmlBody || !m.htmlBody.includes('<script>')) && mails.some((m) => m.to === 'info@gs-schreier.de' && /&lt;script&gt;/.test(m.htmlBody)); })());
 // ---------- Sicherheit ----------
 check('POST ohne PIN abgelehnt (code pin)', (() => { const x = post({ ...base, pin: '', action: 'submitTicket', type: 'Mangel', details: 'x' }); return !x.ok && x.code === 'pin'; })());
 check('POST falsche PIN abgelehnt', post({ ...base, pin: '12345', action: 'submitTicket', type: 'Mangel', details: 'x' }).code === 'pin');
@@ -131,7 +129,7 @@ check('Meldungen pro Stunde begrenzt', limited);
 Object.keys(cache).forEach((k) => delete cache[k]);
 mails.length = 0;
 for (let i = 0; i < 12; i++) post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: 'A', details: 'B' });
-check('Hausmeister-Mails begrenzt (10 je 6 Std.), Tickets trotzdem gespeichert', mails.filter((m) => m.to === 'info@gs-schreier.de').length === 10);
+check('Klingelschild-Flut: keine einzige Sofort-Mail an den Hausmeister', mails.filter((m) => m.to === 'info@gs-schreier.de').length === 0);
 check('Übergroße Anfrage abgelehnt', ctx.doPost({ postData: { contents: 'x'.repeat(26 * 1024 * 1024) } }).error === 'Anfrage zu groß');
 
 console.log(fails ? `${fails} FEHLER` : 'Alle Backend-Tests bestanden');
@@ -182,11 +180,12 @@ check('Unbekannte Art abgelehnt', !post({ ...base, action: 'submitMeterReadings'
 // ================= Epic 3 – Hausmeister-Portal =================
 ctx.setup();
 const staff = sheets['Mitarbeiter'].grid;
-check('Mitarbeiter: 007, 008, 001, 010, 011, 100–119 ohne Namen', staff.length === 26 && staff[1][0] === '007' && staff[1][1] === 'Verwaltung' && staff[2][0] === '008' && staff[2][1] === 'Verwaltung' && staff[3][0] === '001' && staff[4][0] === '010' && staff[5][0] === '011' && staff[6][0] === '100' && staff[25][0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
-check('Links mit Token', /^https:\/\/app\.willbrandt-kompagnon\.de\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(staff[6][4]), staff[6][4]);
-check('010/011: Rolle Fitness, aktiv, Link öffnet den Fitnessraum', staff[4][1] === 'Fitness' && staff[5][1] === 'Fitness' && staff[4][2] === true && /#fitness$/.test(staff[4][4]) && /#fitness$/.test(staff[5][4]));
+const S = (nr) => staff.find((r) => r[0] === nr) || [];
+check('Mitarbeiter: 007, 008, 001, 002, 010, 011, 100–119 ohne Namen', staff.length === 27 && S('002')[1] === 'Leitung' && S('002')[2] === true && S('007')[0] === '007' && S('007')[1] === 'Verwaltung' && S('008')[0] === '008' && S('008')[1] === 'Verwaltung' && S('001')[0] === '001' && S('010')[0] === '010' && S('011')[0] === '011' && S('100')[0] === '100' && S('119')[0] === '119' && staff[0].indexOf('Name') === -1, staff.map((r) => r[0]).join(','));
+check('Links mit Token', /^https:\/\/app\.willbrandt-kompagnon\.de\/\?hm=[a-f0-9]{16,}#hausmeister$/.test(S('100')[4]), S('100')[4]);
+check('010/011: Rolle Fitness, aktiv, Link öffnet den Fitnessraum', S('010')[1] === 'Fitness' && S('011')[1] === 'Fitness' && S('010')[2] === true && /#fitness$/.test(S('010')[4]) && /#fitness$/.test(S('011')[4]));
 ctx.setup();
-check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 26);
+check('setup erneut: keine doppelten Links', sheets['Mitarbeiter'].grid.length === 27);
 sheets['Mitarbeiter'].grid[3][1] = 'Hausmeister'; delete props.ROLE_001_LEITUNG; ctx.ensureStaffLinks();
 check('Bestehendes Blatt: 001 wird einmalig auf Leitung umgestellt', sheets['Mitarbeiter'].grid[3][1] === 'Leitung' && props.ROLE_001_LEITUNG === '1');
 sheets['Mitarbeiter'].grid[3][1] = 'Hausmeister'; ctx.ensureStaffLinks();
@@ -197,7 +196,7 @@ sheets['Mitarbeiter'].grid[3][1] = 'Leitung';
   const i8 = g.findIndex((r) => r[0] === '008'); g.splice(i8, 1);
   while (g.length < 40) g.push(['', '', false, '', '']);
   ctx.ensureStaffLinks();
-  check('008 wird direkt unter die letzte Nummer geschrieben (nicht hinter leere Kästchen)', g[25][0] === '008' && g[25][1] === 'Verwaltung' && g[25][2] === true && /hm=/.test(g[25][4]), g.slice(24, 27).map((r) => r[0]));
+  check('008 wird direkt unter die letzte Nummer geschrieben (nicht hinter leere Kästchen)', g[26][0] === '008' && g[26][1] === 'Verwaltung' && g[26][2] === true && /hm=/.test(g[26][4]), g.slice(25, 28).map((r) => r[0]));
   g.length = 0; saved.forEach((r) => g.push(r));
 }
 check('QR-Orte vorbelegt (21)', sheets['QR-Orte'].grid.length === 22 && sheets['QR-Orte'].grid.some((r) => r[1] === 'Raum Hebeanlage Lindenberger Str. 8'));
@@ -205,18 +204,18 @@ check('Kein Keller Lind 8', !sheets['QR-Orte'].grid.some((r) => r[0] === 'KE_LIN
 check('Tätigkeiten inkl. Fensterreinigung', sheets['Tätigkeiten'].grid.some((r) => r[0] === 'Fensterreinigung Aufgang'));
 check('Tages-Trigger angelegt (einmal)', triggers.filter((t) => t.getHandlerFunction() === 'checkPlanFulfilment').length === 1);
 
-const fitTok = staff[4][3], fit2Tok = staff[5][3];
-const hmTok = staff[6][3], admTok = staff[1][3], adm2Tok = staff[2][3], leadTok = staff[3][3];
-check('Vorrats-Nummern gesperrt, 007/008/001 aktiv', staff[1][2] === true && staff[2][2] === true && staff[3][2] === true && staff[6][2] === false && staff[25][2] === false);
+const fitTok = S('010')[3], fit2Tok = S('011')[3];
+const hmTok = S('100')[3], admTok = S('007')[3], adm2Tok = S('008')[3], leadTok = S('001')[3];
+check('Vorrats-Nummern gesperrt, 007/008/001 aktiv', S('007')[2] === true && S('008')[2] === true && S('001')[2] === true && S('100')[2] === false && S('119')[2] === false);
 delete cache.staff;
 check('Gesperrte Vorrats-Nummer kommt nicht rein', post({ action: 'hmLogin', token: hmTok }).code === 'staff');
-staff[6][2] = true; delete cache.staff; // Nr. 100 vergeben
+S('100')[2] = true; delete cache.staff; // Nr. 100 vergeben
 let lg = post({ action: 'hmLogin', token: hmTok });
 check('Login Hausmeister ohne PIN', lg.ok && lg.user.name === 'Nr. 100' && lg.user.role === 'Hausmeister' && lg.areas.length === 21 && lg.activities.length === 10, lg.user);
 check('Login Verwaltung', post({ action: 'hmLogin', token: admTok }).user.role === 'Verwaltung');
 check('Falscher Token abgelehnt', post({ action: 'hmLogin', token: 'abc' }).code === 'staff' && post({ action: 'hmLogin', token: 'f'.repeat(40) }).code === 'staff');
-sheets['Mitarbeiter'].grid[7][2] = false; delete cache.staff;
-check('Deaktivierter Zugang abgelehnt', post({ action: 'hmLogin', token: staff[7][3] }).code === 'staff');
+S('101')[2] = false; delete cache.staff;
+check('Deaktivierter Zugang abgelehnt', post({ action: 'hmLogin', token: S('101')[3] }).code === 'staff');
 
 const nowIso = new Date().toISOString();
 let sc = post({ action: 'logCleaning', token: hmTok, areaToken: 'th_lind6', activity: 'Treppenhausreinigung', timestamp: nowIso });
@@ -237,17 +236,26 @@ const mrow = sheets['Mängel Hausmeister'].grid[1];
 check('Mangel intern gespeichert + Mail', md.ok && /^M-/.test(md.id) && mrow[2] === 'Nr. 100' && mrow[7] === true && mrow[9] === 'offen' && mails.some((m) => /DRINGEND/.test(m.subject)), mrow);
 let tk = post({ action: 'getTasks', token: hmTok });
 let ta = post({ action: 'getTasks', token: admTok });
-check('Hausmeister sieht nur Hausmeister-Aufträge (Klingelschild), kein Elektroraum/Mangel/intern', tk.ok && tk.tasks.length > 0 && tk.tasks.every((t) => t.owner === 'Hausmeister' && t.type === 'Klingelschild'), tk.tasks.map((t) => t.type + '/' + t.owner));
+check('Team (100+) sieht noch nichts: Aufträge liegen erst bei der Leitung (Stufe 1)', tk.ok && tk.tasks.length === 0, tk.tasks.map((t) => t.type + '/' + t.owner));
+let tl = post({ action: 'getTasks', token: leadTok });
+check('Leitung sieht die Hausmeister-Aufträge (Klingelschild), kein Elektroraum/Mangel/intern', tl.ok && tl.tasks.length > 0 && tl.tasks.every((t) => t.owner === 'Hausmeister' && t.type === 'Klingelschild' && t.assignee === ''), tl.tasks.map((t) => t.type + '/' + t.owner));
 check('Verwaltung sieht alle, intern dringend zuerst', ta.tasks[0].id === md.id && ta.tasks.some((t) => t.type === 'Mangel') && ta.tasks.some((t) => t.owner === 'Hausmeister'), ta.tasks.map((t) => t.type + '/' + t.owner).slice(0, 5));
 const mangelT = ta.tasks.find((t) => t.type === 'Mangel');
 check('Hausmeister darf fremden Auftrag nicht erledigen', !post({ action: 'completeTask', token: hmTok, id: mangelT.id }).ok);
 const trow = sheets['Tickets'].grid.find((r) => r[0] === mangelT.id); trow[17] = 'Hausmeister';
-check('Umstellen auf Hausmeister → sichtbar', post({ action: 'getTasks', token: hmTok }).tasks.some((t) => t.id === mangelT.id));
+check('Umstellen auf Hausmeister → Leitung sieht ihn, Team noch nicht', post({ action: 'getTasks', token: leadTok }).tasks.some((t) => t.id === mangelT.id) && !post({ action: 'getTasks', token: hmTok }).tasks.some((t) => t.id === mangelT.id));
 const oldRow = sheets['Tickets'].grid.find((r) => r[2] === 'Klingelschild' && r[3] !== 'erledigt'); const keep = oldRow[17]; oldRow[17] = '';
-check('Alte Zeile ohne Zuständig → Standard je Typ', post({ action: 'getTasks', token: hmTok }).tasks.some((t) => t.id === oldRow[0])); oldRow[17] = keep;
-const openT = post({ action: 'getTasks', token: hmTok }).tasks.find((t) => t.source === 'Bewohner');
-check('Auftrag erledigen (Ticket)', post({ action: 'completeTask', token: hmTok, id: openT.id }).ok && sheets['Tickets'].grid.find((r) => r[0] === openT.id)[3] === 'erledigt');
-check('Auftrag erledigen (intern, Verwaltung)', post({ action: 'completeTask', token: admTok, id: md.id }).ok && sheets['Mängel Hausmeister'].grid[1][9] === 'erledigt');
+check('Alte Zeile ohne Zuständig → Standard je Typ', post({ action: 'getTasks', token: leadTok }).tasks.some((t) => t.id === oldRow[0])); oldRow[17] = keep;
+// Stufe 2: Leitung verteilt an Nr. 100 → ganzes Team sieht es, „für dich“ bei 100
+check('Hausmeister (100) darf nicht verteilen', !post({ action: 'adminUpdateTask', token: hmTok, id: oldRow[0], assignee: '100' }).ok);
+check('Verteilen an unbekannte/gesperrte Nummer abgelehnt', !post({ action: 'adminUpdateTask', token: leadTok, id: oldRow[0], assignee: '101' }).ok && !post({ action: 'adminUpdateTask', token: leadTok, id: oldRow[0], assignee: '007' }).ok);
+check('Elektroraum/Verwaltungs-Auftrag kann nicht im Team verteilt werden', (() => { const v = ta.tasks.find((t) => t.owner === 'Verwaltung' && t.kind !== 'defect' && t.type !== 'Mangel'); return !v || !post({ action: 'adminUpdateTask', token: admTok, id: v.id, assignee: '100' }).ok; })());
+const as = post({ action: 'adminUpdateTask', token: leadTok, id: oldRow[0], assignee: '100' });
+const tk2 = post({ action: 'getTasks', token: hmTok });
+check('Leitung verteilt an Nr. 100 → Team sieht den Auftrag, „für dich“, gespeichert mit Datum', as.ok && tk2.tasks.length === 1 && tk2.tasks[0].id === oldRow[0] && tk2.tasks[0].mine === true && tk2.tasks[0].assignee === '100'
+  && oldRow[23] === '100' && oldRow[24] instanceof Date, [as, tk2.tasks, oldRow.slice(23)]);
+const openT = tk2.tasks[0];
+check('Team erledigt den verteilten Auftrag', post({ action: 'completeTask', token: hmTok, id: openT.id }).ok && sheets['Tickets'].grid.find((r) => r[0] === openT.id)[3] === 'erledigt');check('Auftrag erledigen (intern, Verwaltung)', post({ action: 'completeTask', token: admTok, id: md.id }).ok && sheets['Mängel Hausmeister'].grid[1][9] === 'erledigt');
 check('Erledigte nicht mehr in Liste', !post({ action: 'getTasks', token: admTok }).tasks.some((t) => t.id === md.id || t.id === openT.id));
 
 // Plan + Kalender
@@ -292,7 +300,7 @@ let cov = post({ action: 'adminOverview', token: admTok });
 check('Cockpit: Überfälliges oben und rot', cov.ok && cov.tasks[0].sla.light === 'red' && cov.tasks.some((x) => x.id === 'T-LATE' && x.sla.light === 'red') && cov.kpi.overdue >= 1 && cov.kpi.open >= 2, cov.tasks.slice(0, 3).map((x) => x.id + ':' + x.sla.light));
 check('Cockpit: 12 Monate Statistik, Reinigungsquote, keine Namen der Mitarbeiter', cov.months.length === 12 && 'Nachweise' in cov.months[11] && typeof cov.kpi.errors24 === 'number' && !JSON.stringify(cov).includes('Schreier'));
 check('Cockpit: Hausmeister hat keinen Zugriff', post({ action: 'adminOverview', token: hmTok }).code === 'staff');
-check('001 hat Rolle Leitung', staff[3][0] === '001' && staff[3][1] === 'Leitung' && post({ action: 'hmLogin', token: leadTok }).user.role === 'Leitung');
+check('001 hat Rolle Leitung', S('001')[0] === '001' && S('001')[1] === 'Leitung' && post({ action: 'hmLogin', token: leadTok }).user.role === 'Leitung');
 {
   const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
   sheets['Reinigungsplan'].grid.push([dd(-2), '', 'Fensterreinigung Aufgang', 'Treppenhaus Lindenberger Str. 6', '', '']);
@@ -302,7 +310,7 @@ check('001 hat Rolle Leitung', staff[3][0] === '001' && staff[3][1] === 'Leitung
   const d2 = w.days.find((x) => x.date === ymd(dd(-2))), d1 = w.days.find((x) => x.date === ymd(dd(-1)));
   check('Erledigte Arbeiten: Plan-Tag ohne Nachweis → „nachgeholt am“ Folgetag', d2 && d2.missed.some((m) => /Fensterreinigung/.test(m.activity) && m.lateOn === ymd(dd(-1))), d2);
   check('Erledigte Arbeiten: Nachweis mit Uhrzeit, außerplanmäßig markiert', d1 && d1.done.some((x) => /Fensterreinigung/.test(x.activity) && x.time === '10:15' && x.planned === false), d1);
-  check('Erledigte Arbeiten: keine Mitarbeiternummern', !/"nr"|Mitarbeiter/.test(JSON.stringify(w)) && !('team' in post({ action: 'adminOverview', token: admTok })));
+  check('Erledigte Arbeiten: keine Mitarbeiternummern', !/"nr"|Mitarbeiter/.test(JSON.stringify(w)) && post({ action: 'adminOverview', token: admTok }).team.every((nr) => /^\d+$/.test(nr)));
   sheets['Reinigungsplan'].grid.pop(); sheets['Reinigung'].grid.pop();
 }
 const dd24 = post({ action: 'submitStaffDefect', token: hmTok, ort: 'Treppenhaus Dorfstr. 24', beschreibung: 'Licht defekt' });
@@ -331,13 +339,6 @@ check('Tabelle bearbeitet: Zeitstempel per onEdit', late[tcol('In Arbeit seit')]
 ctx.onEdit({ range: { getSheet: () => sheets['Reinigung'], getColumn: () => 1, getLastColumn: () => 1, getRow: () => 2, getLastRow: () => 2 } });
 check('onEdit auf anderen Blättern ohne Wirkung', true);
 late[tcol('Status')] = 'offen'; late[tcol('In Arbeit seit')] = '';
-const ra = ctx.rebuildAnalytics();
-const an = sheets['Auswertung Aufträge'].grid;
-check('Auswertung Aufträge für Looker Studio', ra.tasks === an.length - 1 && an[0][0] === 'ID' && an.some((r) => r[0] === 'T-LATE' && r[16] === 'rot' && r[15] === 'überfällig'), an.slice(0, 2));
-const ah = an[0], lateRow = an.find((r) => r[0] === 'T-LATE');
-check('Auswertung: fertige Zähler Offen/Erledigt/Überfällig/SLA eingehalten', lateRow[ah.indexOf('Offen')] === 1 && lateRow[ah.indexOf('Erledigt')] === 0 && lateRow[ah.indexOf('Überfällig')] === 1 && lateRow[ah.indexOf('SLA eingehalten')] === ''
-  && an.slice(1).filter((r) => r[ah.indexOf('Status')] === 'erledigt').every((r) => r[ah.indexOf('SLA eingehalten')] === 0 || r[ah.indexOf('SLA eingehalten')] === 1), lateRow);
-check('Auswertung Reinigung (365 Tage Soll/Ist)', sheets['Auswertung Reinigung'].grid[0][3] === 'Soll' && ra.cleaning === sheets['Auswertung Reinigung'].grid.length - 1);
 mails.length = 0;
 let dg = ctx.morningDigest();
 check('Morgen-Mail bei Überfälligen', dg.red >= 1 && mails.some((m) => /überfällig/.test(m.subject) && /T-LATE/.test(m.body)), mails.map((m) => m.subject));
@@ -394,7 +395,7 @@ wx.fail = false; delete cache.weather;
 {
   const TH2 = vm.runInContext('CONFIG', ctx).SHEETS.tickets.headers;
   const r = TH2.map(() => ''); r[TH2.indexOf('ID')] = 'T-FOTO'; r[TH2.indexOf('Typ')] = 'Klingelschild'; r[TH2.indexOf('Status')] = 'offen'; r[TH2.indexOf('Eingang')] = new Date();
-  r[TH2.indexOf('Foto')] = 'https://drive.google.com/file/d/vorher'; r[TH2.indexOf('Zuständig')] = 'Hausmeister';
+  r[TH2.indexOf('Foto')] = 'https://drive.google.com/file/d/vorher'; r[TH2.indexOf('Zuständig')] = 'Hausmeister'; r[TH2.indexOf('Zugewiesen an')] = '100';
   sheets['Tickets'].grid.push(r);
   const res = post({ action: 'completeTask', token: hmTok, id: 'T-FOTO', photo });
   check('Erledigen mit Nachher-Foto: Foto gespeichert, Status erledigt', res.ok && /drive\.google\.com/.test(r[TH2.indexOf('Foto erledigt')]) && r[TH2.indexOf('Status')] === 'erledigt', r);
@@ -470,9 +471,6 @@ wx.fail = false; delete cache.weather;
   check('Leitung darf Langläufer nicht setzen', !post({ action: 'adminUpdateTask', token: leadTok, id: 'T-LONG', longRunner: false }).ok);
   mails.length = 0; ctx.morningDigest();
   check('Morgen-Mail nennt Langläufer nicht als überfällig', !mails.some((m) => /T-LONG/.test(m.body)));
-  ctx.rebuildAnalytics();
-  const an = sheets['Auswertung Aufträge'].grid, ah = an[0], ar = an.find((x) => x[0] === 'T-LONG');
-  check('Auswertung: Spalte Langläufer = 1, SLA „Langläufer“, nicht überfällig', ar[ah.indexOf('Langläufer')] === 1 && ar[ah.indexOf('SLA Erledigung')] === 'Langläufer' && ar[ah.indexOf('Überfällig')] === 0, ar);
   const now = new Date();
   const rd = ctx.reportData(now.getFullYear(), now.getMonth());
   check('Monatsbericht: Langläufer gesondert mit Grund, nicht bei „überfällig“', rd.longRunners.some((x) => /Dachdecker/.test(x.reason) && x.entrance === 'Dorfstr. 24') && !rd.overdue.some((x) => x.since && x.entrance === 'Dorfstr. 24' && x.type === 'Mangel' && false)
@@ -557,9 +555,7 @@ console.log(fails ? fails + ' FEHLER' : 'ALLE OK');
 Object.keys(cache).forEach((k) => delete cache[k]); mails.length = 0;
 post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '4', name: 'Test', details: 'Test neu' });
 const info = mails.find((m) => /Neuer Antrag: Klingelschild/.test(m.subject));
-check('Info-Mail: an Hausmeister gesendet + Text', info && /✔ Auftrag per E-Mail an den Hausmeister gesendet \(info@gs-schreier\.de\)/.test(info.body) && /Liebes Hausmeister-Team/.test(info.body), info && info.body);
-for (let i = 0; i < 12; i++) post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '4', name: 'T', details: 'x' });
-check('Info-Mail bei Limit: KEINE Mail', mails.some((m) => /✘ KEINE Mail an den Hausmeister: Limit/.test(m.body)));
+check('Info-Mail an die Verwaltung: geht an die Leitung des Hausmeisterdienstes', info && /Leitung des Hausmeisterdienstes/.test(info.body), info && info.body);
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (2)');
 // Sicherheit: Betreff einzeilig, Limit je Zugang
 Object.keys(cache).forEach((k) => delete cache[k]); mails.length = 0;
@@ -699,6 +695,7 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   const fake = sub({ pin: '13059', endpoint: EP(7), obj: 'constructor', token: 'f'.repeat(40) });
   check('Push: falscher Token → Bewohner ohne Aufgang (keine Rechte erschlichen)', fake.group === 'Bewohner' && pg()[pg().length - 1][4] === '');
   post({ action: 'pushUnsubscribe', pin: '13059', id: fake.id });
+  const rL = sub({ token: leadTok, endpoint: EP(8) }); // Leitung 001
 
   const inbox = (id) => ctx.doGet({ parameter: { action: 'pushInbox', id } });
   const sent = () => pushLog.splice(0).map((x) => x.url);
@@ -720,21 +717,24 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
 
   post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '3', name: 'Max Muster', details: 'Neues Schild' });
   const s2 = sent();
-  const vw = inbox(rA.id).item, hmi = inbox(rH.id).item;
-  check('Push: neue Meldung → Verwaltung (007+008), Klingelschild auch Hausmeister, nicht Bewohner/Fitness', s2.length === 3 && [EP(3), EP(6), EP(4)].every((e) => s2.includes(e)), s2);
+  const vw = inbox(rA.id).item, hmi = inbox(rL.id).item;
+  check('Push: neue Meldung → Verwaltung (007+008), Klingelschild an die Leitung (Stufe 1), nicht Team/Bewohner/Fitness', s2.length === 3 && [EP(3), EP(6), EP(8)].every((e) => s2.includes(e)) && !s2.includes(EP(4)), s2);
   check('Push: neue Meldung/Auftrag = Art „meldung“, Hinweis = „info“', vw.kind === 'meldung' && hmi.kind === 'meldung' && it.item.kind === 'info', [vw.kind, hmi.kind, it.item.kind]);
-  check('Push: ohne Namen/Wohnung auf dem Sperrbildschirm', vw.title === 'Neue Meldung: Klingelschild' && vw.body === 'Lindenberger Str. 6' && vw.url === '#cockpit' && hmi.url === '#hausmeister' && !JSON.stringify([vw, hmi]).includes('Muster'), [vw, hmi]);
+  check('Push: ohne Namen/Wohnung auf dem Sperrbildschirm', vw.title === 'Neue Meldung: Klingelschild' && vw.body === 'Lindenberger Str. 6' && vw.url === '#cockpit' && hmi.url === '#cockpit' && !JSON.stringify([vw, hmi]).includes('Muster'), [vw, hmi]);
   post({ action: 'submitStaffDefect', token: hmTok, ort: 'Tiefgarage', beschreibung: 'Tor', dringend: true });
   const s3 = sent();
   const dm = inbox(rA.id).item;
   check('Push: dringender Mangel vom Hausmeister → Verwaltung, Art „dringend“', s3.length === 2 && dm.title === 'DRINGEND – Mangel vom Hausmeister' && dm.kind === 'urgent', [s3, dm]);
   const vd = post({ action: 'submitStaffDefect', token: admTok, ort: 'Haustür Lindenberger Str. 6', beschreibung: 'Schließt nicht', dringend: true, owner: 'Hausmeister' });
   const s3b = sent();
-  const hmv = inbox(rH.id).item; let colleague = null; for (let i = 0; i < 5; i++) { const x = inbox(r8.id).item; if (x && /Mangel erfasst/.test(x.title)) colleague = x; } // ältere Nachrichten zuerst abholen
+  const hmv = inbox(rL.id).item; let colleague = null; for (let i = 0; i < 5; i++) { const x = inbox(r8.id).item; if (x && /Mangel erfasst/.test(x.title)) colleague = x; } // ältere Nachrichten zuerst abholen
   const vrow = sheets['Mängel Hausmeister'].grid.find((r) => r[0] === vd.id);
   check('Verwaltung erfasst Mangel → Zuständig Hausmeister gespeichert', vd.ok && vd.owner === 'Hausmeister' && vrow[12] === 'Hausmeister' && vrow[7] === true && vrow[3] === 'Verwaltung', vrow);
-  check('Verwaltung → Hausmeister: dringender Auftrag an Hausmeister, Info an Kollegin, nicht an sich selbst', s3b.includes(EP(4)) && s3b.includes(EP(6)) && !s3b.includes(EP(3))
-    && hmv.kind === 'urgent' && /Neuer Auftrag: Mangel/.test(hmv.title) && hmv.url === '#hausmeister' && colleague && /→ Hausmeister/.test(colleague.title), [s3b, hmv, colleague]);
+  check('Verwaltung → Hausmeister: dringender Auftrag an die Leitung, Info an Kollegin, nicht an sich selbst, noch nicht ans Team', s3b.includes(EP(8)) && s3b.includes(EP(6)) && !s3b.includes(EP(3)) && !s3b.includes(EP(4))
+    && hmv.kind === 'urgent' && /Neuer Auftrag: Mangel/.test(hmv.title) && hmv.url === '#cockpit' && colleague && /→ Hausmeister/.test(colleague.title), [s3b, hmv, colleague]);
+  const asg = post({ action: 'adminUpdateTask', token: leadTok, id: vd.id, assignee: '100' });
+  const s3c = sent(); let tm = null; for (let i = 0; i < 6; i++) { const x = inbox(rH.id).item; if (x && /für Nr\. 100/.test(x.title)) tm = x; }
+  check('Leitung verteilt → Benachrichtigung ans Team (dringend), nicht an Verwaltung', asg.ok && s3c.includes(EP(4)) && !s3c.includes(EP(3)) && tm && tm.kind === 'urgent' && tm.url === '#hausmeister', [asg, s3c, tm]);
   // Alarm-App ntfy: eigener geheimer Kanal je Nummer (nur Verwaltung/Leitung)
   const la = post({ action: 'hmLogin', token: admTok }), lb = post({ action: 'hmLogin', token: adm2Tok }), lh = post({ action: 'hmLogin', token: hmTok }), ll = post({ action: 'hmLogin', token: leadTok });
   check('ntfy: Kanal für Verwaltung/Leitung (geheim, stabil), keiner für Hausmeister', /^wk007-[a-f0-9]{32}$/.test(la.ntfy) && /^wk008-/.test(lb.ntfy) && /^wk001-/.test(ll.ntfy) && lh.ntfy === '' && post({ action: 'hmLogin', token: admTok }).ntfy === la.ntfy, [la.ntfy, lb.ntfy, ll.ntfy, lh.ntfy]);
@@ -772,10 +772,10 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   check('Push: Bucher storniert → beide Partner, nicht er selbst', s6.length === 2 && s6.includes(EP(5)) && s6.includes(EP(6)) && !s6.includes(EP(3)), s6);
   [r1, r2, rA, rH, rF, r8].forEach((r) => { while (inbox(r.id).item); });
 
-  staff[6][2] = false; delete cache.staff;
+  S('100')[2] = false; delete cache.staff;
   post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '3', name: 'x', details: 'x' });
   check('Push: gesperrter Mitarbeiter-Link bekommt nichts mehr', !sent().includes(EP(4)));
-  staff[6][2] = true; delete cache.staff;
+  S('100')[2] = true; delete cache.staff;
 
   pushCodes[EP(2)] = 410; pushCodes[EP(1)] = 500;
   post({ action: 'adminNewsSave', token: admTok, title: 'Test', text: 'x' });
@@ -824,15 +824,15 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   check('PIN ändern: zu kurz / Zahlenfolge / gleiche Ziffern / Buchstaben abgelehnt', props.APP_PIN === '48151623');
   props.APP_PIN = savedPin;
 
-  const oldTok = staff[6][3];
+  const oldTok = S('100')[3];
   delete cache.staff;
   prompts.push({ ok: true, text: '100' });
   ctx.resetStaffLinkPrompt();
-  const newTok = staff[6][3];
+  const newTok = S('100')[3];
   check('Link neu erzeugen: alter Link sofort ungültig, neuer funktioniert, Link-Spalte aktualisiert', newTok !== oldTok && /^[a-f0-9]{40}$/.test(newTok)
-    && post({ action: 'hmLogin', token: oldTok }).code === 'staff' && post({ action: 'hmLogin', token: newTok }).ok && staff[6][4].includes(newTok) && /#hausmeister$/.test(staff[6][4]));
-  check('Link neu erzeugen: unbekannte Nummer / Unsinn → Hinweis, nichts geändert', !ctx.resetStaffLink('999').ok && !ctx.resetStaffLink('abc').ok && !ctx.resetStaffLink('constructor').ok && staff[6][3] === newTok);
-  check('Link neu erzeugen: „10“ wird zu 010 (Fitness-Link bleibt #fitness)', ctx.resetStaffLink('10').nr === '010' && /#fitness$/.test(staff[4][4]));
+    && post({ action: 'hmLogin', token: oldTok }).code === 'staff' && post({ action: 'hmLogin', token: newTok }).ok && S('100')[4].includes(newTok) && /#hausmeister$/.test(S('100')[4]));
+  check('Link neu erzeugen: unbekannte Nummer / Unsinn → Hinweis, nichts geändert', !ctx.resetStaffLink('999').ok && !ctx.resetStaffLink('abc').ok && !ctx.resetStaffLink('constructor').ok && S('100')[3] === newTok);
+  check('Link neu erzeugen: „10“ wird zu 010 (Fitness-Link bleibt #fitness)', ctx.resetStaffLink('10').nr === '010' && /#fitness$/.test(S('010')[4]));
 
   mails.length = 0;
   ctx.limitAlarm('submit'); ctx.limitAlarm('submit'); ctx.limitAlarm('staff_100');
@@ -954,6 +954,55 @@ props.NOTIFY_EMAIL = nm;
   ctx.gtasksOff();
   check('Google Tasks: ausschalten entfernt Auslöser', props.GTASKS_ON === '0' && !triggers.some((t) => t.getHandlerFunction() === 'gtasksSync') && ctx.gtasksSync().skipped === 'aus');
   sheets['Fehlerprotokoll'].grid.splice(1);
+}
+
+// Hausmeister-Workflow: Morgen-Übersicht an die Leitung, Zuweisen-Knöpfe, dringend sofort
+{
+  Object.keys(cache).forEach((k) => delete cache[k]);
+  const hmRow = sheets['Mitarbeiter'].grid.find((r) => r[0] === '100'); hmRow[2] = true; const hmT = hmRow[3]; // Token kann oben neu erzeugt worden sein
+  check('Trigger für die Morgen-Übersicht angelegt', triggers.some((t) => t.getHandlerFunction() === 'hausmeisterDigest'));
+  const kt = post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '7', name: 'Neumann', details: 'Schild neu' });
+  const hd = post({ action: 'submitStaffDefect', token: hmT, ort: 'Keller', beschreibung: 'Licht defekt im Keller' });
+  const y = new Date(); y.setDate(y.getDate() - 1); y.setHours(0, 0, 0, 0);
+  sheets['Reinigungsplan'].grid.push([y, '', 'Treppenhausreinigung', 'Treppenhaus Lindenberger Str. 6', '', '']);
+  sheets['Reinigungsplan'].grid.push([y, '', 'Müllplatzreinigung', 'Müllplatz (außen)', '', '']);
+  sheets['Reinigung'].grid.push([new Date(y.getTime() + 9 * 3600000), 'TH_LIND6', '100', new Date(), 'Treppenhaus Lindenberger Str. 6', 'Treppenhausreinigung', '', '', 'lind6', 'QR-Scan']);
+  mails.length = 0;
+  const d1 = ctx.hausmeisterDigest();
+  const m1 = mails.find((m) => m.to === 'info@gs-schreier.de');
+  check('Morgen-Übersicht an die Leitung (eine Mail)', d1.sent && m1 && mails.filter((m) => m.to === 'info@gs-schreier.de').length === 1, d1);
+  check('Übersicht: zu verteilender Klingelschild-Auftrag mit Zuweisen-Knopf für Nr. 100', m1 && m1.body.includes(kt.id) && new RegExp(`action=assign&id=${kt.id}&nr=100&s=[a-f0-9]{32}`).test(m1.body) && /→ Nr\. 100/.test(m1.htmlBody), m1 && m1.body.slice(0, 600));
+  check('Übersicht: Mangel vom Team zur Info (Verwaltung entscheidet)', m1 && /Licht defekt im Keller/.test(m1.body) && /Hausverwaltung entscheidet/.test(m1.body), [hd, m1 && m1.body]);
+  check('Übersicht: Bericht Vortag – erledigt per QR-Code und geplant, aber offen', m1 && /✓ 09:00 Treppenhausreinigung – Treppenhaus Lindenberger Str\. 6/.test(m1.body) && /✗ OFFEN: Müllplatzreinigung – Müllplatz \(außen\)/.test(m1.body) && /1 von 2 geplanten/.test(m1.body), m1 && m1.body.slice(-800));
+  check('Übersicht: Bericht ohne Mitarbeiternummern', m1 && !/Nr\. 100:|Mitarbeiter/.test(m1.body.split('4. BERICHT')[1] || ''));
+  check('Übersicht: Link in die App', m1 && /app\.willbrandt-kompagnon\.de\/#cockpit/.test(m1.htmlBody));
+  mails.length = 0;
+  ctx.hausmeisterDigest();
+  const m2 = mails.find((m) => m.to === 'info@gs-schreier.de');
+  check('Zweite Übersicht: Auftrag weiter zu verteilen (nicht mehr „neu“), Mangel nicht doppelt', m2 && m2.body.includes(kt.id) && !/davon \d+ neu/.test(m2.subject + m2.body.split('\n').slice(0, 6).join(' ')) && !/Licht defekt im Keller/.test(m2.body), m2 && m2.body.slice(0, 400));
+  // Zuweisen per Knopf: erst Bestätigung, dann gespeichert
+  const sig = new RegExp(`action=assign&id=${kt.id}&nr=100&s=([a-f0-9]{32})`).exec(m1.body)[1];
+  const row = () => sheets['Tickets'].grid.find((r) => r[0] === kt.id);
+  let pg = ctx.doGet({ parameter: { action: 'assign', id: kt.id, nr: '100', s: sig } });
+  check('Zuweisen-Knopf: erst Bestätigungsseite, noch nichts geändert', /An Nr\. 100 geben\?/.test(pg.html) && !row()[23]);
+  check('Zuweisen-Knopf: falsche Signatur / fremde Nummer → ungültig', /Link ungültig/.test(ctx.doGet({ parameter: { action: 'assign', id: kt.id, nr: '100', s: 'a'.repeat(32) } }).html)
+    && /Link ungültig/.test(ctx.doGet({ parameter: { action: 'assign', id: kt.id, nr: '101', s: sig } }).html) && /Link ungültig/.test(ctx.doGet({ parameter: { action: 'assign', id: '<script>', nr: '100', s: sig } }).html));
+  pg = ctx.doGet({ parameter: { action: 'assign', id: kt.id, nr: '100', s: sig, confirm: '1' } });
+  check('Zuweisen-Knopf: Auftrag an Nr. 100, Team sieht ihn', /jetzt Nr\. 100 zugewiesen/.test(pg.html) && row()[23] === '100' && post({ action: 'getTasks', token: hmT }).tasks.some((t) => t.id === kt.id && t.mine));
+  check('Zuweisen-Knopf: zweiter Klick → schon zugewiesen', /bereits Nr\. 100/.test(ctx.doGet({ parameter: { action: 'assign', id: kt.id, nr: '100', s: sig, confirm: '1' } }).html));
+  check('Zuweisen-Knopf: Seite escaped Eingaben', !/<script>|<img/.test(ctx.doGet({ parameter: { action: 'assign', id: 'T-<img src=x>', nr: '100', s: sig } }).html));
+  // Dringend: sofort, nicht erst um 8 Uhr
+  mails.length = 0;
+  const du = post({ action: 'submitStaffDefect', token: admTok, ort: 'Dach Dorfstr. 24', beschreibung: 'Ziegel lose', dringend: true, owner: 'Hausmeister' });
+  const um = mails.find((m) => m.to === 'info@gs-schreier.de');
+  check('Dringender Hausmeister-Auftrag: sofort Mail an die Leitung mit Zuweisen-Knopf', um && /^DRINGEND/.test(um.subject) && new RegExp(`action=assign&id=${du.id}&nr=100`).test(um.body), um && um.subject);
+  mails.length = 0; ctx.hausmeisterDigest();
+  const m3 = mails.find((m) => m.to === 'info@gs-schreier.de');
+  check('Nach der Sofort-Mail: in der Übersicht weiter zu verteilen, aber nicht als „neu“ gezählt', m3 && m3.body.includes(du.id) && !/davon 1 neu/.test(m3.body));
+  check('Nicht dringender Verwaltungs-Mangel → keine Sofort-Mail', (() => { mails.length = 0; post({ action: 'submitStaffDefect', token: admTok, ort: 'Keller', beschreibung: 'x', owner: 'Hausmeister' }); return !mails.some((m) => m.to === 'info@gs-schreier.de'); })());
+  check('002 ist Leitung wie 001', (() => { const t2 = sheets['Mitarbeiter'].grid.find((r) => r[0] === '002')[3]; const l = post({ action: 'hmLogin', token: t2 }); const ov = post({ action: 'adminOverview', token: t2 }); return l.user.role === 'Leitung' && ov.ok && ov.role === 'Leitung' && ov.tasks.every((t) => t.owner === 'Hausmeister') && Array.isArray(ov.team); })());
+  check('Leitung (002) darf verteilen, aber keine Zuständigkeit/Notiz ändern', (() => { const t2 = sheets['Mitarbeiter'].grid.find((r) => r[0] === '002')[3]; return post({ action: 'adminUpdateTask', token: t2, id: du.id, assignee: '100' }).ok && !post({ action: 'adminUpdateTask', token: t2, id: du.id, owner: 'Verwaltung' }).ok; })());
+  check('Zurück an die Verwaltung → Zuweisung gelöscht, Team sieht ihn nicht mehr', post({ action: 'adminUpdateTask', token: admTok, id: du.id, owner: 'Verwaltung' }).ok && !post({ action: 'getTasks', token: hmT }).tasks.some((t) => t.id === du.id));
 }
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (Löschkonzept/Überwachung)');
 process.exitCode = fails ? 1 : 0;

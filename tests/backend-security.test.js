@@ -72,12 +72,11 @@ check('Alte App (Einzelzähler) funktioniert weiter', post({ ...base, action: 's
 mails.length = 0;
 r = post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '04', name: 'Müller', details: 'Müller / Schmidt', kontakt: '0170 123' });
 check('Klingelschild ok', r.ok, r);
-const hm = mails.find((m) => m.to === 'info@gs-schreier.de');
-check('Mail an GS Schreier', !!hm, mails.map((m) => m.to));
+check('Klingelschild: keine Sofort-Mail an den Hausmeister (Morgen-Übersicht der Leitung)', !mails.some((m) => m.to === 'info@gs-schreier.de'), mails.map((m) => m.to));
 
 const t = sheets['Tickets'].grid.find((x) => x[0] === r.id);
 const code = t[16];
-check('Erledigt-Code gespeichert, Link in Mail', code && hm.body.includes(`action=done&id=${r.id}&t=${code}`));
+check('Erledigt-Code gespeichert (alte Mail-Links bleiben gültig)', !!code);
 let page = ctx.doGet({ parameter: { action: 'done', id: r.id, t: 'falsch' } });
 check('Falscher Code → ungültig', page.html.includes('Link ungültig'));
 page = ctx.doGet({ parameter: { action: 'done', id: r.id, t: code } });
@@ -88,7 +87,7 @@ check('Nach Bestätigung: erledigt + Datum', t2[3] === 'erledigt' && t2[14] inst
 page = ctx.doGet({ parameter: { action: 'done', id: r.id, t: code, confirm: '1' } });
 check('Zweiter Klick → bereits erledigt', page.html.includes('Bereits erledigt'));
 check('Mangel sendet keine Hausmeister-Mail', (() => { mails.length = 0; post({ ...base, action: 'submitTicket', type: 'Mangel', details: 'Licht kaputt', ort: 'Keller' }); return !mails.some((m) => m.to === 'info@gs-schreier.de'); })());
-check('XSS in Mail-HTML entschärft', (() => { mails.length = 0; post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: '<b>x</b>', details: '<script>' }); return !mails[0].htmlBody.includes('<script>'); })());
+check('XSS in Mail-HTML entschärft', (() => { mails.length = 0; const x = post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: '<b>x</b>', details: '<script>' }); ctx.hmUrgentMail(x.id); ctx.hausmeisterDigest(); return mails.every((m) => !m.htmlBody || !m.htmlBody.includes('<script>')) && mails.some((m) => m.to === 'info@gs-schreier.de' && /&lt;script&gt;/.test(m.htmlBody)); })());
 // ---------- Sicherheit ----------
 check('POST ohne PIN abgelehnt (code pin)', (() => { const x = post({ ...base, pin: '', action: 'submitTicket', type: 'Mangel', details: 'x' }); return !x.ok && x.code === 'pin'; })());
 check('POST falsche PIN abgelehnt', post({ ...base, pin: '12345', action: 'submitTicket', type: 'Mangel', details: 'x' }).code === 'pin');
@@ -114,7 +113,7 @@ check('Meldungen pro Stunde begrenzt', limited);
 Object.keys(cache).forEach((k) => delete cache[k]);
 mails.length = 0;
 for (let i = 0; i < 12; i++) post({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: 'A', details: 'B' });
-check('Hausmeister-Mails begrenzt (10 je 6 Std.), Tickets trotzdem gespeichert', mails.filter((m) => m.to === 'info@gs-schreier.de').length === 10);
+check('Klingelschild-Flut: keine Sofort-Mails an den Hausmeister', mails.filter((m) => m.to === 'info@gs-schreier.de').length === 0);
 check('Übergroße Anfrage abgelehnt', ctx.doPost({ postData: { contents: 'x'.repeat(26 * 1024 * 1024) } }).error === 'Anfrage zu groß');
 
 console.log(fails ? `${fails} FEHLER` : 'Alle Backend-Tests bestanden');
@@ -179,8 +178,8 @@ check('A0 Cockpit nicht für Hausmeister/ohne Token', ['adminOverview', 'adminUp
   P({ action, token: HM, id: 'x', status: 'erledigt' }).code === 'staff' && !P({ action, pin: '13059', id: 'x' }).ok));
 {
   const lo = P({ action: 'adminOverview', token: LEAD });
-  check('A0 Leitung (001): nur Hausmeister-Aufträge, keine Zähler/Fehler/Looker', lo.ok && lo.role === 'Leitung' && lo.tasks.every((t) => t.owner === 'Hausmeister')
-    && lo.kpi.errors24 === null && lo.lookerUrl === '' && lo.months.every((m) => m['Zähler'] === 0) && Array.isArray(lo.work.days) && !/"nr"/.test(JSON.stringify(lo.work)), lo.tasks.map((t) => t.owner));
+  check('A0 Leitung (001): nur Hausmeister-Aufträge, keine Zähler/Fehler', lo.ok && lo.role === 'Leitung' && lo.tasks.every((t) => t.owner === 'Hausmeister')
+    && lo.kpi.errors24 === null && lo.months.every((m) => m['Zähler'] === 0) && Array.isArray(lo.work.days) && !/"nr"/.test(JSON.stringify(lo.work)), lo.tasks.map((t) => t.owner));
   check('A0 Leitung darf Zuständigkeit/Notiz nicht ändern', !P({ action: 'adminUpdateTask', token: LEAD, id: 'x', owner: 'Verwaltung' }).ok);
 }
 check('A0 Cockpit für 007 und 008', P({ action: 'adminOverview', token: ADM }).ok && P({ action: 'adminOverview', token: ADM2 }).ok);
@@ -260,13 +259,16 @@ reset(); mails.length = 0;
 let blockedAt = 0;
 for (let i = 1; i <= 60; i++) { const r = P({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: 'X', details: 'spam' }); if (!r.ok) { blockedAt = i; break; } }
 check('F1 Meldungen je Stunde begrenzt', blockedAt > 0 && blockedAt <= 41, blockedAt);
-check('F2 Hausmeister-Mails begrenzt (10)', mails.filter((m) => m.to === 'info@gs-schreier.de').length === 10);
+check('F2 Klingelschild-Flut: keine Sofort-Mails an den Hausmeister', mails.filter((m) => m.to === 'info@gs-schreier.de').length === 0);
+reset(); mails.length = 0;
+for (let i = 0; i < 12; i++) P({ action: 'submitStaffDefect', token: ADM, ort: 'Keller', beschreibung: 'x' + i, dringend: true, owner: 'Hausmeister' });
+check('F2b Dringend-Mails an die Leitung begrenzt (10 je 6 Std.)', mails.filter((m) => m.to === 'info@gs-schreier.de').length === 10);
 reset(); let pinBlock = 0;
 for (let i = 1; i <= 320; i++) { if (P({ ...base, pin: '0000' + i, action: 'submitTicket', type: 'Mangel', details: 'x' }).code === 'pin_locked') { pinBlock = i; break; } }
 check('F3 PIN-Durchprobieren gebremst', pinBlock > 290, pinBlock);
 check('F4 Hausmeister trotz PIN-Sperre arbeitsfähig', P({ action: 'logCleaning', token: HM, areaToken: 'TG', activity: 'Reinigung' }).ok);
 reset();
-check('F5 Mail-Kontingent bleibt für Hausmeister-Aufträge reserviert', (() => { ctx.MailApp.getRemainingDailyQuota = () => 10; mails.length = 0; P({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }); const skipped = mails.length === 0; mails.length = 0; P({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '1', name: 'X', details: 'y' }); const hmOk = mails.some((m) => m.to === 'info@gs-schreier.de'); ctx.MailApp.getRemainingDailyQuota = () => 1500; return skipped && hmOk; })());
+check('F5 Mail-Kontingent bleibt für Hausmeister-Aufträge reserviert', (() => { ctx.MailApp.getRemainingDailyQuota = () => 10; mails.length = 0; P({ ...base, action: 'submitTicket', type: 'Mangel', details: 'x' }); const skipped = mails.length === 0; mails.length = 0; P({ action: 'submitStaffDefect', token: ADM, ort: 'Dach', beschreibung: 'y', dringend: true, owner: 'Hausmeister' }); const hmOk = mails.some((m) => m.to === 'info@gs-schreier.de'); ctx.MailApp.getRemainingDailyQuota = () => 1500; return skipped && hmOk; })());
 
 console.log('--- G. Erledigt-Link (E-Mail des Hausmeisters)');
 reset();
@@ -277,6 +279,7 @@ check('G1 Bestätigungsseite: Eingaben escaped', !/<script>alert|<img src=x/.tes
 pg = G({ action: 'done', id: '<script>alert(1)</script>', t: '"><svg onload=alert(1)>' });
 check('G2 Ungültiger Link: nichts gespiegelt', !/<script>|<svg/.test(pg.html));
 check('G3 Falscher/leerer Code', !/Vielen Dank/.test(G({ action: 'done', id: kt.id, t: '' }).html) && !/Vielen Dank/.test(G({ action: 'done', id: kt.id }).html));
+mails.length = 0; ctx.hausmeisterDigest();
 const hmMail = mails.filter((m) => m.to === 'info@gs-schreier.de').pop();
 check('G4 Hausmeister-Mail HTML escaped', hmMail && !/<script>|<img src=x/.test(hmMail.htmlBody));
 
@@ -292,8 +295,8 @@ for (const obj of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
   P({ pin: '13059', action: 'submitTicket', type: 'Mangel', details: 'x', entrance: '', object: obj, house: '' });
 }
 let i1ok = true, i1err = '';
-try { ctx.rebuildAnalytics(); } catch (e) { i1ok = false; i1err = e.message; }
-check('I1 Manipulierte Aufgang-ID (constructor/__proto__) legt Auswertung nicht lahm', i1ok, i1err);
+try { ctx.morningDigest(); ctx.hausmeisterDigest(); } catch (e) { i1ok = false; i1err = e.message; }
+check('I1 Manipulierte Aufgang-ID (constructor/__proto__) legt Morgen-Mails nicht lahm', i1ok, i1err);
 const ov2 = P({ action: 'adminOverview', token: ADM });
 check('I2 Cockpit bleibt nutzbar, Aufgang immer Text', ov2.ok && ov2.tasks.every((t) => typeof t.entrance === 'string'), ov2.error);
 check('I3 Leerer Auftrags-ID wird abgelehnt (erledigen/ändern)', !P({ action: 'completeTask', token: HM, id: '' }).ok && !P({ action: 'adminUpdateTask', token: ADM, id: '', status: 'erledigt' }).ok);
