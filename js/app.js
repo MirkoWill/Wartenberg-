@@ -238,6 +238,8 @@
   function showView(name) {
     // Ansicht per Vergleich suchen, nicht per Selektor: Die Adresse (#…) kann beliebigen Text enthalten.
     const byName = (n) => $$(".view").find((v) => v.dataset.view === n);
+    // Hausmeister-Team: nur der eigene Bereich (und Impressum/Datenschutz)
+    if (document.body.classList.contains("hm-simple") && !["hausmeister", ...LEGAL_VIEWS].includes(name)) name = "hausmeister";
     const view = byName(name) || byName(DEFAULT_VIEW);
     const viewName = view.dataset.view;
     if (viewName === currentView) return;
@@ -1642,6 +1644,16 @@
     if (pendingScan) { const code = pendingScan; pendingScan = null; handleScanCode(code, false); }
   }
 
+  /**
+   * Hausmeister im Team (Nr. ab 100): nur noch Scannen, Aufträge, Mangel – große Schrift und Knöpfe,
+   * keine Bewohner-Reiter. Gilt nur für diese Rolle; Leitung/Verwaltung sehen alles wie bisher.
+   */
+  function setHmSimple(on) {
+    if (document.body.classList.contains("hm-simple") === on) return;
+    document.body.classList.toggle("hm-simple", on);
+    if (on && !["hausmeister", ...LEGAL_VIEWS].includes(currentView)) location.hash = "hausmeister";
+  }
+
   function renderStaff() {
     const s = staff();
     const loggedIn = !!(s && s.token);
@@ -1682,6 +1694,7 @@
     if (!loggedIn || !s.user) return;
 
     $("#staffName").textContent = s.user.role === "Hausmeister" ? s.user.name : `${s.user.name} · ${s.user.role}`;
+    setHmSimple(s.user.role === "Hausmeister");
     $("#staffAdmin").hidden = !admin;
     const opts = (list, sel) => list.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
     $("#scanActivity").innerHTML = opts(s.activities || []);
@@ -1949,8 +1962,17 @@
   }
 
   function renderTasks(tasks) {
-    const admin = ((staff() || {}).user || {}).role === "Verwaltung";
+    const role = ((staff() || {}).user || {}).role;
+    const admin = role === "Verwaltung";
+    const count = $("#taskCount");
+    count.hidden = !tasks.length;
+    count.textContent = String(tasks.length);
+    // Team: eigene Aufträge zuerst
+    if (role === "Hausmeister") tasks = tasks.slice().sort((a, b) => (b.mine === true) - (a.mine === true));
     $("#taskList").innerHTML = tasks.length ? tasks.map((t) => {
+      const who = t.owner !== "Hausmeister" ? "" : t.mine ? '<span class="badge badge--mine">👷 für dich</span>'
+        : t.assignee ? `<span class="badge badge--team">👷 Nr. ${esc(t.assignee)}</span>`
+        : role === "Leitung" || admin ? '<span class="badge badge--assign">📥 noch nicht verteilt</span>' : "";
       const where = [t.entrance, t.wohnung ? whgLabel(t.wohnung) : "", t.ort].filter(Boolean).join(" · ");
       const phone = String(t.contact || "").replace(/[^\d+]/g, "");
       return `
@@ -1960,6 +1982,7 @@
             ${t.urgent ? '<span class="badge badge--dringend">dringend</span>' : ""}
             ${t.status === "in Arbeit" ? '<span class="badge badge--in-Arbeit">in Arbeit</span>' : ""}
             ${admin && t.owner ? `<span class="badge badge--owner">${esc(t.owner)}</span>` : ""}
+            ${who}
           </div>
           ${where ? `<div class="task__where">${esc(where)}</div>` : ""}
           ${t.date ? `<div class="task__date">Termin: <strong>${esc(formatDateLong(parseIsoDate(t.date)))}</strong></div>` : ""}
@@ -1967,7 +1990,7 @@
           ${t.name || t.contact ? `<div class="task__contact">${esc(t.name || "")}${t.contact ? " · " + (phone.length >= 6
             ? `<a href="tel:${esc(phone)}">${esc(t.contact)}</a>` : esc(t.contact)) : ""}</div>` : ""}
           <div class="task__meta muted small">${esc(t.id)} · ${esc(t.source)}${t.created ? " · " + esc(formatDate(parseIsoDate(t.created))) : ""}</div>
-          <button class="btn btn--primary btn--small" type="button" data-done="${esc(t.id)}">✓ Erledigt</button>
+          <button class="btn btn--primary btn--small task__done-btn" type="button" data-done="${esc(t.id)}">✓ Erledigt</button>
           <div class="task__complete" data-panel="${esc(t.id)}" hidden>
             <label class="field"><span class="field__label">Foto nachher (optional)</span>
               <input type="file" accept="image/*" capture="environment" data-photo></label>
@@ -1977,7 +2000,7 @@
             </div>
           </div>
         </li>`;
-    }).join("") : '<li class="muted">Keine offenen Aufträge. 👍</li>';
+    }).join("") : `<li class="muted">${role === "Hausmeister" ? "Zurzeit keine Aufträge. 👍" : "Keine offenen Aufträge. 👍"}</li>`;
   }
 
   function whgLabel(v) {
@@ -2075,6 +2098,7 @@
   const COCKPIT_KEY = "mieterapp.cockpit";
   let cockpitLoading = null;
   let cockpitFilter = "open";
+  let cockpitTeam = []; // Hausmeister-Nummern im Team (zum Verteilen)
 
   function isAdmin() { const r = ((staff() || {}).user || {}).role; return r === "Verwaltung" || r === "Leitung"; }
 
@@ -2127,12 +2151,9 @@
     renderWork(d.work);
     renderNewsAdmin(d);
     renderPollAdmin(d);
+    cockpitTeam = Array.isArray(d.team) ? d.team.filter((nr) => /^\d{1,4}$/.test(String(nr))).map(String) : [];
     renderCockpitList(Array.isArray(d.tasks) ? d.tasks : []);
     renderCockpitCharts(d);
-    const looker = $("#cockpitLooker");
-    const okUrl = /^https:\/\/lookerstudio\.google\.com\//.test(d.lookerUrl || "");
-    looker.hidden = !okUrl;
-    if (okUrl) looker.href = d.lookerUrl;
   }
 
   function dueText(t) {
@@ -2149,8 +2170,11 @@
   function renderCockpitList(tasks) {
     const f = cockpitFilter;
     tasks.forEach((t) => { t.sla = t.sla && typeof t.sla === "object" ? t.sla : {}; t.status = String(t.status || ""); });
+    const toAssign = (t) => t.owner === "Hausmeister" && !t.assignee;
     const list = tasks.filter((t) => (f === "done" ? t.status === "erledigt"
-      : t.status !== "erledigt" && (f === "open" || t.sla.light === f || (t.owner === f && t.sla.light !== "long"))));
+      : t.status !== "erledigt" && (f === "open" || t.sla.light === f || (f === "assign" && toAssign(t)) || (t.owner === f && t.sla.light !== "long"))));
+    const teamOpts = (sel) => `<option value="">– noch nicht verteilt –</option>`
+      + cockpitTeam.map((nr) => `<option value="${esc(nr)}"${nr === sel ? " selected" : ""}>Nr. ${esc(nr)}</option>`).join("");
     const opt = (vals, sel) => vals.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
     const lead = ((staff() || {}).user || {}).role === "Leitung";
     const light = { red: "Überfällig", yellow: "Bald fällig", green: "Im Plan", done: "Erledigt", long: "Langläufer" };
@@ -2165,6 +2189,7 @@
             ${t.urgent ? '<span class="badge badge--dringend">dringend</span>' : ""}
             <span class="badge badge--${esc(t.status.replace(" ", "-"))}">${esc(t.status)}</span>
             <span class="badge badge--owner">${esc(t.owner)}</span>
+            ${t.owner === "Hausmeister" ? (t.assignee ? `<span class="badge badge--team">👷 Nr. ${esc(t.assignee)}</span>` : '<span class="badge badge--assign">📥 zu verteilen</span>') : ""}
           </div>
           <div class="task__due">${esc(dueText(t))}</div>
           ${where ? `<div class="task__where">${esc(where)}</div>` : ""}
@@ -2175,11 +2200,18 @@
           ${photoLinks(t)}
           <div class="task__meta muted small">${esc(t.id)} · ${esc(t.source === "Bewohner" ? "Bewohner" : "intern " + t.source)}`
             + `${t.created ? " · Eingang " + esc(formatDate(new Date(t.created))) : ""}${t.by ? " · zuletzt: " + esc(t.by) : ""}</div>
+          ${toAssign(t) && t.status !== "erledigt" ? `<form class="task__assign" data-assign="${esc(t.id)}">
+            <label class="field"><span class="field__label">An Hausmeister geben</span>
+              <select name="assignee" required>${cockpitTeam.length ? `<option value="">Nr. wählen …</option>` + cockpitTeam.map((nr) => `<option value="${esc(nr)}">Nr. ${esc(nr)}</option>`).join("") : '<option value="">Kein Hausmeister freigeschaltet</option>'}</select></label>
+            <button class="btn btn--primary btn--small" type="submit"${cockpitTeam.length ? "" : " disabled"}>Zuweisen</button>
+          </form>` : ""}
           <details class="task__edit">
             <summary>Bearbeiten</summary>
             <form class="form" data-edit="${esc(t.id)}">
               <label class="field"><span class="field__label">Status</span>
                 <select name="status">${opt(["offen", "in Arbeit", "erledigt"], t.status)}</select></label>
+              ${t.owner === "Hausmeister" ? `<label class="field"><span class="field__label">Hausmeister im Team</span>
+                <select name="assignee">${teamOpts(t.assignee || "")}</select></label>` : ""}
               ${lead ? "" : `<label class="field"><span class="field__label">Zuständig</span>
                 <select name="owner">${opt(["Hausmeister", "Verwaltung"], t.owner)}</select></label>
               <label class="field"><span class="field__label">Notiz (nur intern)</span>
@@ -2194,6 +2226,32 @@
     }).join("") : `<li class="muted">${f === "open" ? "Keine offenen Aufträge. 👍" : "Keine Aufträge in dieser Auswahl."}</li>`;
   }
 
+  /** Schnell verteilen (Leitung/Verwaltung): Auftrag an einen Hausmeister im Team geben. */
+  async function quickAssign(form) {
+    const id = form.dataset.assign;
+    const nr = form.elements.assignee.value;
+    if (!nr) { form.elements.assignee.focus(); return; }
+    const btn = form.querySelector('[type="submit"]');
+    btn.disabled = true;
+    try {
+      await staffPost({ action: "adminUpdateTask", id, assignee: nr }, 30000);
+      toast(`${id} an Nr. ${nr} gegeben – das Team sieht den Auftrag jetzt in der App.`, "ok", 6000);
+      const c = readJson(COCKPIT_KEY);
+      if (c) {
+        const t = (c.data.tasks || []).find((x) => x.id === id);
+        if (t) t.assignee = nr;
+        writeJson(COCKPIT_KEY, c);
+        renderCockpitList(c.data.tasks || []);
+      }
+      localRemove(TASKS_KEY);
+      loadCockpit();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.name === "AbortError" ? "Der Server antwortet gerade sehr langsam – bitte gleich „Aktualisieren“ prüfen."
+        : err.userMessage || "Zuweisen fehlgeschlagen – bitte erneut versuchen.", "error", 7000);
+    }
+  }
+
   /** Vorher/Nachher-Fotos (Google Drive, nur mit Zugriff auf das Konto der Verwaltung sichtbar). */
   function photoLinks(t) {
     const ok = (u) => /^https:\/\/(drive|docs)\.google\.com\//.test(String(u || ""));
@@ -2203,6 +2261,8 @@
   }
 
   async function saveCockpitTask(e) {
+    const assign = e.target.closest("[data-assign]");
+    if (assign) { e.preventDefault(); quickAssign(assign); return; }
     const form = e.target.closest("[data-edit]");
     if (!form) return;
     e.preventDefault();
@@ -2211,6 +2271,8 @@
     if (form.elements.owner) change.owner = form.elements.owner.value; // Leitung: nur Status
     if (form.elements.note) change.note = form.elements.note.value;
     if (form.elements.longRunner) { change.longRunner = form.elements.longRunner.checked; change.longReason = form.elements.longReason.value.trim(); }
+    if (form.elements.assignee) change.assignee = change.owner === "Verwaltung" ? "" : form.elements.assignee.value;
+    else if (change.owner === "Hausmeister") change.assignee = ""; // gerade erst an den Hausmeister gegeben: Leitung verteilt
     const btn = form.querySelector('[type="submit"]');
     btn.disabled = true;
     try {

@@ -8,7 +8,8 @@
  *
  * Script-Eigenschaften (Projekteinstellungen → Script-Eigenschaften):
  *   NOTIFY_EMAIL        optional, E-Mail(s) für Benachrichtigungen, kommagetrennt
- *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Aufträge an den Hausmeister)
+ *   HAUSMEISTER_EMAIL   optional, überschreibt CONFIG.HAUSMEISTER_EMAIL (Morgen-Übersicht/dringende Aufträge an die Leitung 001/002)
+ *   ASSIGN_SECRET       legt das Script selbst an (Zuweisen-Knöpfe in Mails) – nicht ändern
  *   CALENDAR_ID         optional, Kalender für den Reinigungsplan (sonst Suche nach CONFIG.CALENDAR_NAME)
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
  *   NTFY_TOPICS         geheime Alarm-Kanäle (ntfy) je Nummer – legt das Script selbst an, nicht löschen
@@ -23,7 +24,8 @@ const CONFIG = {
       name: "Tickets",
       headers: ["ID", "Eingang", "Typ", "Status", "Haus", "Aufgang", "Aufgang-ID", "Wohnung", "Name",
         "Termin", "Details", "Ort", "Telefon/Kontakt", "Foto", "Erledigt am", "Notiz Verwaltung",
-        "Erledigt-Code", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt", "Langläufer", "Langläufer-Grund"],
+        "Erledigt-Code", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt", "Langläufer", "Langläufer-Grund",
+        "Zugewiesen an", "Zugewiesen am", "An Leitung gemeldet"],
     },
     meter: {
       name: "Zählerstände",
@@ -63,18 +65,8 @@ const CONFIG = {
     staffDefects: {
       name: "Mängel Hausmeister",
       headers: ["ID", "Eingang", "Erfasst von (Nr)", "Rolle", "Ort", "Aufgang-ID", "Beschreibung", "Dringend", "Foto",
-        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt", "Langläufer", "Langläufer-Grund"],
-    },
-    // Für Looker Studio / Auswertungen – werden nachts und per Menü neu aufgebaut (nicht von Hand bearbeiten)
-    analytics: {
-      name: "Auswertung Aufträge",
-      headers: ["ID", "Quelle", "Art", "Aufgang", "Zuständig", "Status", "Dringend", "Eingang", "In Arbeit seit",
-        "Erledigt am", "Reaktion fällig", "Erledigung fällig", "Reaktionszeit (Std.)", "Durchlaufzeit (Tage)",
-        "SLA Reaktion", "SLA Erledigung", "Ampel", "Monat", "Offen", "Erledigt", "Überfällig", "SLA eingehalten", "Langläufer"],
-    },
-    analyticsCleaning: {
-      name: "Auswertung Reinigung",
-      headers: ["Datum", "Tätigkeit", "Ort", "Soll", "Ist", "Erfüllt", "Monat"],
+        "Status", "Erledigt am", "Notiz Verwaltung", "Zuständig", "In Arbeit seit", "Bearbeitet von", "Foto erledigt", "Langläufer", "Langläufer-Grund",
+        "Zugewiesen an", "Zugewiesen am", "An Leitung gemeldet"],
     },
     // Fehlerüberwachung: Serverfehler und von der App gemeldete Fehler (90 Tage)
     polls: {
@@ -142,7 +134,7 @@ const CONFIG = {
   // Google-Kalender für den Reinigungsplan (Script-Eigenschaft CALENDAR_ID hat Vorrang).
   CALENDAR_NAME: "WEG Wartenberger Dorfkrug",
   // Mitarbeiternummern: feste Nummern plus STAFF_LINKS Nummern ab STAFF_FIRST_NR.
-  STAFF_FIXED: [["007", "Verwaltung"], ["008", "Verwaltung"], ["001", "Leitung"], ["010", "Fitness"], ["011", "Fitness"]], // 007/008 Verwaltung, 001 Leitung Hausmeisterdienst
+  STAFF_FIXED: [["007", "Verwaltung"], ["008", "Verwaltung"], ["001", "Leitung"], ["002", "Leitung"], ["010", "Fitness"], ["011", "Fitness"]], // 007/008 Verwaltung, 001/002 Leitung Hausmeisterdienst
   // Service-Ziele (SLA): Reaktion = Status „in Arbeit“ (oder erledigt), Erledigung = Status „erledigt“.
   // days = Kalendertage, workdays = Mo–Fr. Elektroraum: bestätigt 1 Werktag vor dem Termin, erledigt am Termin.
   SLA: {
@@ -180,8 +172,10 @@ const CONFIG = {
     fitnessYears: 2,          // Fitnessraum-Buchungen
     pushYears: 1,             // Geräte für Benachrichtigungen (ab letzter Nutzung der App)
   },
-  // Aufträge an den Hausmeister (z. B. Klingelschild) gehen an diese Adresse.
+  // Leitung des Hausmeisterdienstes (001/002 lesen dieses Postfach): Morgen-Übersicht um HM_DIGEST_HOUR Uhr,
+  // dringende Aufträge sofort. Script-Eigenschaft HAUSMEISTER_EMAIL hat Vorrang.
   HAUSMEISTER_EMAIL: "info@gs-schreier.de",
+  HM_DIGEST_HOUR: 8,
   // Adresse dieser Web-App (für den Erledigt-Link in E-Mails). Leer = automatisch ermitteln.
   // Zugangs-PIN: NICHT hier eintragen (der Code ist öffentlich), sondern über das Menü
   // „Mieter-App → Zugangs-PIN ändern …“ (speichert sie als Script-Eigenschaft APP_PIN).
@@ -197,7 +191,7 @@ const CONFIG = {
     staffActionsPerHour: 150, // je persönlichem Zugang (Schutz, falls ein Link in falsche Hände gerät)
     mailReserve: 20,          // so viele Mails pro Tag bleiben für Hausmeister-Aufträge reserviert
     submitsPerHour: 40,       // Meldungen insgesamt pro Stunde
-    hausmeisterMailsPer6h: 10, // Klingelschild-Aufträge per E-Mail je 6 Stunden
+    hmUrgentMailsPer6h: 10,    // dringende Aufträge sofort per Mail an die Leitung (sonst Morgen-Übersicht)
     maxRequestBytes: 25 * 1024 * 1024,
   },
   WEBAPP_URL: "https://script.google.com/macros/s/AKfycbzhN3ZvHKkXgBEyHddQNgCMd7rGNDpnvLdrS82Q8XO-MC8r4UFhDQnJWVnGtTygYcrd/exec",
@@ -237,6 +231,9 @@ function setup() {
     props.setProperty("PHOTO_FOLDER_ID", folder.getId());
   }
 
+  // Looker Studio wird nicht mehr genutzt: alte, automatisch erzeugte Auswertungsblätter entfernen
+  ["Auswertung Aufträge", "Auswertung Reinigung"].forEach((n) => { const sh = ss.getSheetByName(n); if (sh && ss.getSheets().length > 1) ss.deleteSheet(sh); });
+
   const leer = ss.getSheetByName("Tabellenblatt1") || ss.getSheetByName("Sheet1");
   if (leer && leer.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(leer);
 
@@ -261,8 +258,8 @@ function onOpen() {
     .addItem("Mitarbeiter-Link neu erzeugen …", "resetStaffLinkPrompt")
     .addItem("Zugangs-PIN ändern …", "setAppPinPrompt")
     .addSeparator()
-    .addItem("Auswertung aktualisieren", "rebuildAnalyticsNow")
     .addItem("Monatsbericht: Vorschau an mich", "reportPreviewNow")
+    .addItem("Hausmeister-Übersicht jetzt senden", "hausmeisterDigestNow")
     .addItem("Systemprüfung jetzt", "healthCheckNow")
     .addItem("Benachrichtigung testen (an Verwaltung)", "pushTest")
     .addItem("Google Tasks: einrichten / jetzt abgleichen", "gtasksSetupNow")
@@ -329,6 +326,7 @@ function doGet(e) {
     }
     if (q.action === "pushInbox") { rateLimit("inbox", 3000, 3600); return json(pushInbox(q.id)); } // Service Worker, ohne PIN
     if (q.action === "done") return completeTicketPage(q);
+    if (q.action === "assign") return assignTaskPage(q);
     if (q.action === "releaseReport") return releaseReportPage(q);
     if (q.action === "status") { requirePin(q.pin, q.token); return json(getStatus(q.ids)); }
     if (q.action === "news") { requirePin(q.pin, q.token); return json(cachedNews(q.obj)); }
@@ -372,13 +370,6 @@ function submitTicket(p) {
     str(p.ort, 60), str(p.telefon || p.kontakt, 120), photoUrl, "", "", doneCode, defaultOwner(type),
   ]);
 
-  // Klingelschild: Auftrag per Mail an den Hausmeister; das Ergebnis steht in der Info-Mail an die Verwaltung.
-  let bell = null;
-  if (type === "Klingelschild") {
-    if (withinLimit("hausmeisterMail", CONFIG.LIMITS.hausmeisterMailsPer6h, 21600)) bell = sendBellOrder(id, doneCode, p);
-    else bell = { sent: false, reason: "Limit für Hausmeister-Mails erreicht – Auftrag bitte selbst weitergeben" };
-  }
-
   notify(`Neuer Antrag: ${type} (${id})`, [
     `Typ: ${type}`,
     `Aufgang: ${str(p.house)} · ${str(p.entrance)}`,
@@ -388,16 +379,14 @@ function submitTicket(p) {
     str(p.ort) ? `Ort: ${str(p.ort)}` : "",
     `Details: ${details}`,
     photoUrl ? `Foto: ${photoUrl}` : "",
-    ...(bell ? ["", bell.sent
-      ? `✔ Auftrag per E-Mail an den Hausmeister gesendet (${bell.to}). Gesendeter Text:`
-      : `✘ KEINE Mail an den Hausmeister: ${bell.reason}`,
-    bell.sent ? "------------------------------\n" + bell.body + "\n------------------------------" : ""] : []),
+    defaultOwner(type) === "Hausmeister" ? `\nGeht an die Leitung des Hausmeisterdienstes (Übersicht morgen um ${CONFIG.HM_DIGEST_HOUR} Uhr) – sie verteilt den Auftrag im Team.` : "",
   ]);
 
   // Benachrichtigungen: nur Art und Aufgang – keine Namen oder Wohnungen auf dem Sperrbildschirm
   const where = entranceName(objectId(p.object)) || plain(p.entrance, 60);
   pushSend({ roles: ["Verwaltung"] }, { title: `Neue Meldung: ${type}`, body: where, url: "#cockpit", tag: id, kind: "meldung" });
-  if (defaultOwner(type) === "Hausmeister") pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `Neuer Auftrag: ${type}`, body: where, url: "#hausmeister", tag: id, kind: "meldung" });
+  // Stufe 1: nur die Leitung (001/002) – sie verteilt im Team; das Team sieht den Auftrag erst nach der Zuweisung
+  if (defaultOwner(type) === "Hausmeister") pushSend({ roles: ["Leitung"] }, { title: `Neuer Auftrag: ${type}`, body: where, url: "#cockpit", tag: id, kind: "meldung" });
 
   return { ok: true, id };
 }
@@ -952,64 +941,6 @@ function doneUrl(id, code) {
   return `${base}?action=done&id=${encodeURIComponent(id)}&t=${encodeURIComponent(code)}`;
 }
 
-/** E-Mail an den Hausmeister: Klingelschild aktualisieren. Fehler blockieren den Antrag nicht. */
-/** Gibt { sent, to, body } bzw. { sent: false, reason } zurück. */
-function sendBellOrder(id, code, p) {
-  const to = (PropertiesService.getScriptProperties().getProperty("HAUSMEISTER_EMAIL") || CONFIG.HAUSMEISTER_EMAIL || "").trim();
-  if (!to) return { sent: false, reason: "keine Hausmeister-Adresse eingetragen" };
-  const link = doneUrl(id, code);
-  const facts = [
-    ["Adresse", [plain(p.entrance, 60), plain(p.house, 60)].filter(Boolean).join(" · ")],
-    ["Wohnung", plain(p.wohnung, 60)],
-    ["Name", plain(p.name, 80)],
-    ["Neue Beschriftung", plain(p.details, 200)],
-    ["Kontakt", plain(p.kontakt || p.telefon, 120)],
-  ].filter((f) => f[1]);
-
-  const body = [
-    "Liebes Hausmeister-Team,",
-    "",
-    `bitte aktualisieren Sie folgendes Klingelschild in der ${CONFIG.SITE_NAME}:`,
-    "",
-    ...facts.map(([k, v]) => `${k}: ${v}`),
-    "",
-    `Ticketnummer: ${id}`,
-    "",
-    "Nach Erledigung bitte hier bestätigen:",
-    link,
-    "",
-    "Vielen Dank!",
-    CONFIG.SENDER_NAME,
-  ].join("\n");
-
-  const htmlBody = `
-    <p>Liebes Hausmeister-Team,</p>
-    <p>bitte aktualisieren Sie folgendes Klingelschild in der ${escHtml(CONFIG.SITE_NAME)}:</p>
-    <table cellpadding="4" style="border-collapse:collapse">
-      ${facts.map(([k, v]) => `<tr><td style="color:#555">${escHtml(k)}:</td><td><strong>${escHtml(v)}</strong></td></tr>`).join("")}
-    </table>
-    <p>Ticketnummer: <strong>${escHtml(id)}</strong></p>
-    <p><a href="${escHtml(link)}" style="display:inline-block;padding:12px 20px;background:#6d7454;color:#fff;
-      text-decoration:none;border-radius:8px;font-weight:bold">Als erledigt melden</a></p>
-    <p>Vielen Dank!<br>${escHtml(CONFIG.SENDER_NAME)}</p>`;
-
-  try {
-    const replyTo = PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "";
-    MailApp.sendEmail({
-      to,
-      subject: oneLine(`Klingelschild aktualisieren – ${plain(p.entrance, 60)}, ${whg(plain(p.wohnung, 60))} (${id})`),
-      body,
-      htmlBody,
-      name: CONFIG.SENDER_NAME,
-      replyTo: replyTo.split(",")[0].trim() || undefined,
-    });
-    return { sent: true, to, body };
-  } catch (err) {
-    console.error("Hausmeister-Mail fehlgeschlagen:", err);
-    return { sent: false, reason: `Versand fehlgeschlagen (${err.message || err})` };
-  }
-}
-
 /**
  * Erledigt-Link aus der E-Mail. Erst eine Bestätigungsseite, dann (confirm=1) Status setzen –
  * so lösen automatische Link-Prüfungen von E-Mail-Programmen nichts aus.
@@ -1156,6 +1087,7 @@ function setupPortalSheets() {
   ensureMorningTrigger();
   ensureReportTrigger();
   ensureFitnessReminderTrigger();
+  ensureHausmeisterDigestTrigger();
   CacheService.getScriptCache().removeAll(["areas", "staff"]);
 }
 
@@ -1323,8 +1255,33 @@ function ownerOf(r, type) {
   return CONFIG.OWNERS.indexOf(v) !== -1 ? v : defaultOwner(type);
 }
 
-function mayHandle(user, owner) {
-  return user.role === "Verwaltung" || owner === "Hausmeister";
+/**
+ * Wer darf einen Auftrag sehen/erledigen? Verwaltung alles; Leitung (001/002) alle Hausmeister-Aufträge;
+ * Team (Hausmeister ab 100) nur Hausmeister-Aufträge, die die Leitung schon verteilt hat (Stufe 2).
+ */
+function mayHandle(user, owner, assignee) {
+  if (user.role === "Verwaltung") return true;
+  if (owner !== "Hausmeister") return false;
+  return user.role === "Leitung" || !!assignee;
+}
+
+/** Zugewiesene Nummer („101“) aus der Zelle – Sheets macht aus „101“ gern die Zahl 101. */
+function assigneeOf(r) {
+  const v = String(r["Zugewiesen an"] == null ? "" : r["Zugewiesen an"]).replace(/^'/, "").trim();
+  return /^\d{1,4}$/.test(v) ? fitnessNr(v) : "";
+}
+
+/** Aktive Hausmeister im Team (Rolle „Hausmeister“), z. B. ["100", "101"]. */
+function hmTeam() {
+  const roles = activeStaffRoles();
+  return Object.keys(roles).filter((nr) => roles[nr] === "Hausmeister").sort((a, b) => Number(a) - Number(b));
+}
+
+/** Spalte nach Überschrift; fehlt die Überschrift (setup noch nicht gelaufen), wird sie ergänzt. */
+function wfCol(sheet, def, name) {
+  const c = def.headers.indexOf(name) + 1;
+  if (c > 0 && String(sheet.getRange(1, c).getValue() || "") !== name) sheet.getRange(1, c).setValue(name).setFontWeight("bold");
+  return c;
 }
 
 function getTasks(p, user) {
@@ -1333,17 +1290,18 @@ function getTasks(p, user) {
   const tickets = sheetObjects(CONFIG.SHEETS.tickets).filter(open).map((r) => ({
     id: r.ID, source: "Bewohner", type: r.Typ, status: r.Status, entrance: r.Aufgang, wohnung: r.Wohnung,
     name: r.Name, contact: r["Telefon/Kontakt"], date: iso(r.Termin), details: r.Details, ort: r.Ort,
-    created: iso(r.Eingang), owner: ownerOf(r, r.Typ),
+    created: iso(r.Eingang), owner: ownerOf(r, r.Typ), assignee: assigneeOf(r),
   }));
   const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter(open).map((r) => ({
     id: r.ID, source: r["Erfasst von (Nr)"], type: "Mangel (intern)", status: r.Status, entrance: "", wohnung: "",
     name: "", contact: "", date: "", details: r.Beschreibung, ort: r.Ort, urgent: r.Dringend === true,
-    created: iso(r.Eingang), owner: ownerOf(r, "Mangel (intern)"),
+    created: iso(r.Eingang), owner: ownerOf(r, "Mangel (intern)"), assignee: assigneeOf(r),
   }));
-  const tasks = tickets.concat(defects).filter((t) => mayHandle(user, t.owner)).sort((a, b) =>
+  const tasks = tickets.concat(defects).filter((t) => mayHandle(user, t.owner, t.assignee)).sort((a, b) =>
     (b.urgent === true) - (a.urgent === true) || (a.date || "9999").localeCompare(b.date || "9999")
     || String(a.created).localeCompare(String(b.created)));
-  return { ok: true, tasks };
+  tasks.forEach((t) => { t.mine = !!t.assignee && t.assignee === user.nr; });
+  return { ok: true, tasks, me: user.nr };
 }
 
 /** Auftrag im Portal als erledigt melden. */
@@ -1357,7 +1315,7 @@ function completeTask(p, user) {
   let row;
   try {
     row = sheetObjects(def).find((r) => r.ID === id);
-    if (!row || !mayHandle(user, ownerOf(row, row.Typ || "Mangel (intern)"))) throw userError("Auftrag nicht gefunden");
+    if (!row || !mayHandle(user, ownerOf(row, row.Typ || "Mangel (intern)"), assigneeOf(row))) throw userError("Auftrag nicht gefunden");
     if (p.photo && !row["Foto erledigt"]) {
       // Nachher-Foto (optional) – Nachweis für Verwaltung und Beirat
       const url = savePhoto(p.photo, `${id}_erledigt`);
@@ -1400,8 +1358,9 @@ function submitStaffDefect(p, user) {
   ]);
   const prefix = urgent ? "DRINGEND – " : "";
   if (owner === "Hausmeister") {
-    pushSend({ roles: ["Hausmeister", "Leitung"] }, { title: `${prefix}Neuer Auftrag: Mangel`, body: plain(ort, 80),
-      url: "#hausmeister", tag: id, urgent, kind: "meldung" });
+    pushSend({ roles: ["Leitung"] }, { title: `${prefix}Neuer Auftrag: Mangel`, body: plain(ort, 80),
+      url: "#cockpit", tag: id, urgent, kind: "meldung" });
+    if (urgent) hmUrgentMail(id);
   }
   // Verwaltung: Mängel vom Hausmeister an alle; selbst erfasste nur an die Kollegin/den Kollegen
   pushSend({ roles: ["Verwaltung"], exceptNr: verw ? user.nr : undefined },
@@ -1673,7 +1632,6 @@ function ensureMaintenanceTrigger() {
 function dailyMaintenance() {
   let removed = null;
   try { removed = cleanupOldData(); } catch (err) { logServerError(err, "Löschkonzept"); }
-  try { rebuildAnalytics(); } catch (err) { logServerError(err, "Auswertung"); }
   healthCheck({ removed });
 }
 
@@ -1788,7 +1746,7 @@ function healthCheck(extra) {
     if (!ss.getSheetByName(CONFIG.SHEETS[k].name)) issues.push(`Blatt „${CONFIG.SHEETS[k].name}“ fehlt – setup ausführen.`);
   });
   const handlers = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
-  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest", "monthlyReport", "monthlyReportSend"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
+  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest", "monthlyReport", "monthlyReportSend", "hausmeisterDigest"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
   if (planRows().length) { try { findCalendar(); } catch (e) { issues.push(e.userMessage || e.message); } }
   if (!activeAreas().length) issues.push("Keine aktiven QR-Orte.");
 
@@ -1820,7 +1778,7 @@ function healthCheckNow() {
 
 /* ==========================================================================
    Cockpit für die Verwaltung (007/008): SLA-Ampel, Aufträge steuern, Kennzahlen,
-   Auswertungsblätter für Looker Studio, Morgen-Mail bei Überfälligen
+   Morgen-Mail bei Überfälligen
    ========================================================================== */
 
 function requireAdmin(user) {
@@ -1874,6 +1832,7 @@ function allTasks() {
     details: String(r.Details || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
     by: String(r["Bearbeitet von"] || ""), _row: r._row, photo: driveUrl(r.Foto), photoDone: driveUrl(r["Foto erledigt"]),
     longRunner: isYes(r["Langläufer"]), longReason: String(r["Langläufer-Grund"] || "").replace(/^'/, ""),
+    assignee: assigneeOf(r), reported: r["An Leitung gemeldet"] instanceof Date ? r["An Leitung gemeldet"] : null, role: "",
   }));
   const defects = sheetObjects(CONFIG.SHEETS.staffDefects).filter((r) => r.ID).map((r) => ({
     id: String(r.ID), kind: "defect", source: String(r["Erfasst von (Nr)"] || ""), type: "Mangel (intern)",
@@ -1883,6 +1842,7 @@ function allTasks() {
     details: String(r.Beschreibung || ""), ort: String(r.Ort || ""), note: String(r["Notiz Verwaltung"] || ""),
     by: String(r["Bearbeitet von"] || ""), _row: r._row, photo: driveUrl(r.Foto), photoDone: driveUrl(r["Foto erledigt"]),
     longRunner: isYes(r["Langläufer"]), longReason: String(r["Langläufer-Grund"] || "").replace(/^'/, ""),
+    assignee: assigneeOf(r), reported: r["An Leitung gemeldet"] instanceof Date ? r["An Leitung gemeldet"] : null, role: String(r.Rolle || ""),
   }));
   return tickets.concat(defects);
 }
@@ -1980,7 +1940,7 @@ function adminOverview(p, user) {
     id: t.id, kind: t.kind, source: t.source, type: t.type, status: t.status, owner: t.owner, urgent: t.urgent,
     created: isoOrEmpty(t.created), inWork: isoOrEmpty(t.inWork), done: isoOrEmpty(t.done), termin: isoOrEmpty(t.termin),
     entrance: t.entrance, wohnung: t.wohnung, name: t.name, contact: t.contact, details: t.details, ort: t.ort,
-    note: t.note, by: t.by, photo: t.photo, photoDone: t.photoDone, longRunner: t.longRunner, longReason: t.longReason,
+    note: t.note, by: t.by, photo: t.photo, photoDone: t.photoDone, longRunner: t.longRunner, longReason: t.longReason, assignee: t.assignee,
     sla: { light: t.sla.light, react: t.sla.react, done: t.sla.done, reactDue: isoOrEmpty(t.sla.reactDue), doneDue: isoOrEmpty(t.sla.doneDue) },
   }));
   const rank = { red: 0, yellow: 1, green: 2, long: 3, done: 4 };
@@ -2003,8 +1963,8 @@ function adminOverview(p, user) {
     months: months.map((m) => Object.assign({ month: m }, perMonth[m])),
     perEntrance,
     tasks: list,
-    lookerUrl: lead ? "" : PropertiesService.getScriptProperties().getProperty("LOOKER_URL") || "",
     role: user.role,
+    team: hmTeam(),
     work: workLog(scans, areas, plan, now),
     news: lead ? [] : adminNewsList(),
     polls: lead ? [] : adminPollList(),
@@ -2057,6 +2017,8 @@ function adminUpdateTask(p, user) {
   const sheet = getSpreadsheet().getSheetByName(def.name);
   const col = (h) => def.headers.indexOf(h) + 1;
   let handover = null; // Benachrichtigung erst nach dem Speichern senden (Sperre kurz halten)
+  let assigned = null;
+  let urgentHandover = false;
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -2077,8 +2039,23 @@ function adminUpdateTask(p, user) {
       if (CONFIG.OWNERS.indexOf(p.owner) === -1) throw userError("Ungültige Zuständigkeit");
       sheet.getRange(row._row, col("Zuständig")).setValue(p.owner);
       if (p.owner === "Hausmeister" && ownerOf(row, row.Typ || "Mangel (intern)") !== "Hausmeister") {
-        handover = { title: `Neuer Auftrag: ${plain(row.Typ || "Mangel", 40)}`,
-          body: entranceName(row["Aufgang-ID"]) || plain(row.Ort, 80), url: "#hausmeister", tag: id, kind: "meldung" };
+        // Stufe 1: an die Leitung (001/002); dringende sofort per Mail, sonst in der Morgen-Übersicht
+        handover = { title: `${row.Dringend === true ? "DRINGEND – " : ""}Neuer Auftrag: ${plain(row.Typ || "Mangel", 40)}`,
+          body: entranceName(row["Aufgang-ID"]) || plain(row.Ort, 80), url: "#cockpit", tag: id, kind: "meldung", urgent: row.Dringend === true };
+        urgentHandover = row.Dringend === true;
+      }
+      if (p.owner !== "Hausmeister" && assigneeOf(row)) sheet.getRange(row._row, wfCol(sheet, def, "Zugewiesen an")).setValue("");
+    }
+    if (p.assignee !== undefined) {
+      // Stufe 2: Leitung (oder Verwaltung) gibt den Auftrag an einen Hausmeister aus dem Team
+      const nr = String(p.assignee || "").trim();
+      const owner = p.owner !== undefined ? p.owner : ownerOf(row, row.Typ || "Mangel (intern)");
+      if (nr && owner !== "Hausmeister") throw userError("Nur Hausmeister-Aufträge können im Team verteilt werden.");
+      if (nr && hmTeam().indexOf(nr) === -1) throw userError("Diese Nummer gehört nicht (mehr) zum Hausmeister-Team.");
+      if (nr !== assigneeOf(row)) {
+        sheet.getRange(row._row, wfCol(sheet, def, "Zugewiesen an")).setNumberFormat("@").setValue(nr);
+        sheet.getRange(row._row, wfCol(sheet, def, "Zugewiesen am")).setValue(nr ? new Date() : "");
+        if (nr) assigned = { nr, row };
       }
     }
     if (p.note !== undefined) sheet.getRange(row._row, col("Notiz Verwaltung")).setValue(protectCell(str(p.note, 1000)));
@@ -2088,7 +2065,9 @@ function adminUpdateTask(p, user) {
   } finally {
     lock.releaseLock();
   }
-  if (handover) pushSend({ roles: ["Hausmeister", "Leitung"] }, handover);
+  if (handover) pushSend({ roles: ["Leitung"] }, handover);
+  if (urgentHandover) hmUrgentMail(id);
+  if (assigned) hmAssignedPush(id, assigned.nr, assigned.row);
   return { ok: true };
 }
 
@@ -2120,50 +2099,6 @@ function onEdit(e) {
       sheet.getRange(r, def.headers.indexOf("Bearbeitet von") + 1).setValue("Tabelle");
     }
   } catch (err) { console.error("onEdit:", err); }
-}
-
-/** Blätter „Auswertung Aufträge“ und „Auswertung Reinigung“ für Looker Studio neu aufbauen. */
-function rebuildAnalytics() {
-  const now = new Date();
-  const ss = getSpreadsheet();
-  const monthKey = (d) => (d ? Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM") : "");
-  const round = (x, n) => (x === null || x === undefined ? "" : Math.round(x * Math.pow(10, n)) / Math.pow(10, n));
-  const label = { ok: "eingehalten", late: "verspätet", overdue: "überfällig", open: "offen", long: "Langläufer" };
-  const ampel = { red: "rot", yellow: "gelb", green: "grün", done: "erledigt", long: "Langläufer" };
-  const rows = allTasks().map((t) => {
-    const s = slaInfo(t, now);
-    return [t.id, t.source === "Bewohner" ? "Bewohner" : "Hausmeister", t.type, t.entrance || t.object, t.owner, t.status,
-      t.urgent, t.created || "", t.inWork || "", t.done || "", s.reactDue, s.doneDue, round(s.reactHours, 1),
-      round(s.leadDays, 1), label[s.react], label[s.done], ampel[s.light], monthKey(t.created),
-      // Fertige Zähler für Looker Studio (keine Formeln nötig): Summe bzw. Durchschnitt (= Quote)
-      t.status === "erledigt" ? 0 : 1, t.status === "erledigt" ? 1 : 0, s.light === "red" ? 1 : 0,
-      t.status === "erledigt" && !t.longRunner ? (s.react === "ok" && s.done === "ok" ? 1 : 0) : "", t.longRunner ? 1 : 0].map(protectCell);
-  });
-  writeTable(ss, CONFIG.SHEETS.analytics, rows);
-
-  const areas = activeAreas();
-  const plan = planRows();
-  const scans = sheetObjects(CONFIG.SHEETS.cleaning);
-  const cleanRows = [];
-  for (let i = 365; i >= 1; i--) {
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    planStatusForDay(day, areas, scans, plan).forEach((x) => cleanRows.push([day, x.activity, x.ort, 1, x.done ? 1 : 0, x.done, monthKey(day)].map(protectCell)));
-  }
-  writeTable(ss, CONFIG.SHEETS.analyticsCleaning, cleanRows);
-  return { tasks: rows.length, cleaning: cleanRows.length };
-}
-
-function writeTable(ss, def, rows) {
-  const sheet = ss.getSheetByName(def.name) || ss.insertSheet(def.name);
-  sheet.clear();
-  sheet.getRange(1, 1, 1, def.headers.length).setValues([def.headers]).setFontWeight("bold").setBackground("#eef0e6");
-  sheet.setFrozenRows(1);
-  if (rows.length) sheet.getRange(2, 1, rows.length, def.headers.length).setValues(rows);
-}
-
-function rebuildAnalyticsNow() {
-  const r = rebuildAnalytics();
-  showResult("Auswertung", `Aktualisiert: ${r.tasks} Aufträge, ${r.cleaning} Reinigungs-Soll-Einträge (365 Tage).`);
 }
 
 function ensureMorningTrigger() {
@@ -2770,7 +2705,7 @@ const SHEET_GROUPS = [
   ["Tickets", "arbeit"], ["Mängel Hausmeister", "arbeit"], ["Aktuelles", "arbeit"], ["Umfragen", "arbeit"],
   ["Reinigungsplan", "arbeit"], ["Übersicht Zähler", "auswertung"], ["Zählerstände", "daten"], ["Reinigung", "daten"],
   ["Mitarbeiter", "einstellung"], ["QR-Orte", "einstellung"], ["Tätigkeiten", "einstellung"],
-  ["Auswertung Aufträge", "auswertung"], ["Auswertung Reinigung", "auswertung"], ["Umfrage-Stimmen", "daten"], ["Fitness-Buchungen", "daten"], ["Benachrichtigungen", "daten"], ["Fehlerprotokoll", "daten"],
+  ["Umfrage-Stimmen", "daten"], ["Fitness-Buchungen", "daten"], ["Benachrichtigungen", "daten"], ["Fehlerprotokoll", "daten"],
 ];
 const GROUP_COLORS = { start: "#151515", arbeit: "#6d7454", auswertung: "#3a6ea5", daten: "#9aa0a6", einstellung: "#b36b00" };
 const GROUP_TEXT = {
@@ -2790,10 +2725,10 @@ function formatSpreadsheet() {
   const ss = getSpreadsheet();
   const defs = Object.keys(CONFIG.SHEETS).map((k) => CONFIG.SHEETS[k]);
   const WIDE = /Details|Beschreibung|Text|Notiz|Frage|Antworten|Meldung|Persönlicher Link|Ort$|^Ort|Tätigkeit|Anmerkung/;
-  const DATETIME = /^(Eingang|Zeit|Zeitpunkt \(Scan\)|Eingang Server|Erledigt am|In Arbeit seit|Erstellt|Reaktion fällig|Erledigung fällig)$/;
+  const DATETIME = /^(Eingang|Zeit|Zeitpunkt \(Scan\)|Eingang Server|Erledigt am|In Arbeit seit|Erstellt|Zugewiesen am|An Leitung gemeldet)$/;
   const DATE = /^(Von|Bis|Termin|Ablesedatum|Datum)$/;
   const HIDE = { "Tickets": ["Erledigt-Code"], "Mitarbeiter": ["Token"], "Umfrage-Stimmen": ["Stimm-Kennung"] };
-  const REBUILT = ["Übersicht Zähler", "Auswertung Aufträge", "Auswertung Reinigung"]; // werden neu aufgebaut – nur Reiter/Breiten
+  const REBUILT = ["Übersicht Zähler"]; // werden neu aufgebaut – nur Reiter/Breiten
   const done = [];
   defs.forEach((def) => {
     const sheet = ss.getSheetByName(def.name);
@@ -2907,11 +2842,9 @@ function sheetPurpose(name) {
     "Übersicht Zähler": "Zählerstände je Wohnung, übersichtlich (wird neu aufgebaut).",
     "Zählerstände": "Alle gemeldeten Zählerstände mit Foto.",
     "Reinigung": "Tätigkeitsnachweise per QR-Scan.",
-    "Mitarbeiter": "Persönliche Links (007/008 Verwaltung, 001 Leitung, 010/011 Fitnessraum, 100+ Hausmeister). „Aktiv“ = freigeschaltet.",
+    "Mitarbeiter": "Persönliche Links (007/008 Verwaltung, 001/002 Leitung, 010/011 Fitnessraum, 100+ Hausmeister). „Aktiv“ = freigeschaltet.",
     "QR-Orte": "Orte mit QR-Code für die Nachweise.",
     "Tätigkeiten": "Auswahl der Tätigkeiten beim Scannen.",
-    "Auswertung Aufträge": "Für Looker Studio – nachts neu berechnet.",
-    "Auswertung Reinigung": "Für Looker Studio – nachts neu berechnet.",
     "Umfrage-Stimmen": "Anonyme Stimmen (nur Antwort, Aufgang, Zeit).",
     "Fehlerprotokoll": "Technische Fehler (90 Tage).",
   }[name] || "";
@@ -3693,4 +3626,241 @@ function ntfyTest(user) {
   const code = UrlFetchApp.fetch(NTFY.server, ntfyRequest(topic, { title: "Test-Alarm Mieter-App", body: "So klingt eine dringende Meldung.", url: "#cockpit", urgent: true })).getResponseCode();
   if (code >= 400) throw userError("Test-Alarm konnte nicht gesendet werden. Bitte später erneut versuchen.");
   return { ok: true };
+}
+
+/* ==========================================================================
+   Hausmeister-Workflow in zwei Stufen
+   Stufe 1: Hausmeister-Auftrag (Zuständig = Hausmeister) liegt bei der Leitung (001/002). Sie bekommt ihn
+            in der Morgen-Übersicht um CONFIG.HM_DIGEST_HOUR Uhr (dringende sofort) und verteilt ihn – in der
+            App (Cockpit) oder per Knopf in der Mail – an einen Hausmeister aus dem Team (Nr. ab 100).
+   Stufe 2: Ab dann sehen alle Hausmeister im Team den Auftrag in der App („für Nr. …“).
+   Die Morgen-Übersicht enthält außerdem Mängel, die das Team erfasst hat (zur Info – die Verwaltung entscheidet),
+   und den Bericht über die Reinigungsnachweise des Vortags (erledigt / geplant, aber offen).
+   ========================================================================== */
+
+function hmLeadEmail() {
+  return (PropertiesService.getScriptProperties().getProperty("HAUSMEISTER_EMAIL") || CONFIG.HAUSMEISTER_EMAIL || "").trim();
+}
+
+/** Geheimer Schlüssel für die Zuweisen-Knöpfe in Mails (legt das Script selbst an). */
+function assignSecret() {
+  const props = PropertiesService.getScriptProperties();
+  let k = props.getProperty("ASSIGN_SECRET");
+  if (!k) { k = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, ""); props.setProperty("ASSIGN_SECRET", k); }
+  return k;
+}
+
+function assignSig(id, nr) {
+  return bytesToHex(sha256Bytes(`${assignSecret()}|assign|${id}|${nr}`)).slice(0, 32);
+}
+
+function assignUrl(id, nr) {
+  const base = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
+  return `${base}?action=assign&id=${encodeURIComponent(id)}&nr=${encodeURIComponent(nr)}&s=${assignSig(id, nr)}`;
+}
+
+function hmTaskById(id) {
+  return allTasks().find((t) => t.id === id) || null;
+}
+
+function hmWhere(t) {
+  return [t.entrance || entranceName(t.object), t.wohnung ? whg(t.wohnung) : "", t.ort].filter(Boolean).join(" · ");
+}
+
+/** Benachrichtigung an das ganze Team, sobald die Leitung einen Auftrag verteilt hat. */
+function hmAssignedPush(id, nr, row) {
+  const t = hmTaskById(id);
+  pushSend({ roles: ["Hausmeister"] }, { title: `${t && t.urgent ? "DRINGEND – " : ""}Neuer Auftrag für Nr. ${nr}: ${plain((t && t.type) || (row && row.Typ) || "Mangel", 40)}`,
+    body: t ? plain(t.entrance || t.ort, 80) : "", url: "#hausmeister", tag: id, urgent: !!(t && t.urgent), kind: "meldung" });
+}
+
+/** Knopf in der Mail: erst Bestätigungsseite (Link-Prüfer der Mailprogramme lösen nichts aus), dann zuweisen. */
+function assignTaskPage(q) {
+  const id = String(q.id || "").slice(0, 40);
+  const nr = String(q.nr || "").slice(0, 4);
+  const valid = /^[TM]-[\w-]{4,30}$/.test(id) && /^\d{1,4}$/.test(nr) && typeof q.s === "string" && q.s === assignSig(id, nr);
+  if (!valid) return donePage("Link ungültig", "Dieser Link ist ungültig. Bitte den Auftrag in der App verteilen.");
+  const t = hmTaskById(id);
+  if (!t || t.owner !== "Hausmeister") return donePage("Nicht mehr möglich", "Dieser Auftrag liegt nicht mehr beim Hausmeisterdienst.");
+  if (t.status === "erledigt") return donePage("Bereits erledigt", `${t.type} · ${hmWhere(t)} ist schon erledigt.`);
+  if (hmTeam().indexOf(nr) === -1) return donePage("Nicht möglich", `Nr. ${nr} ist nicht (mehr) im Hausmeister-Team freigeschaltet.`);
+  const what = `${t.type} · ${hmWhere(t)} (${t.id})`;
+  if (t.assignee === nr) return donePage("Schon zugewiesen", `${what} ist bereits Nr. ${nr} zugewiesen.`);
+  if (q.confirm !== "1") {
+    return donePage(`An Nr. ${nr} geben?`, `${what}${t.assignee ? ` – bisher Nr. ${t.assignee}` : ""}`,
+      `<a class="btn" href="${escHtml(assignUrl(id, nr) + "&confirm=1")}" target="_top">Ja, an Nr. ${escHtml(nr)} geben</a>`);
+  }
+  const def = /^M-/.test(id) ? CONFIG.SHEETS.staffDefects : CONFIG.SHEETS.tickets;
+  const sheet = getSpreadsheet().getSheetByName(def.name);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let row;
+  try {
+    row = sheetObjects(def).find((r) => r.ID === id);
+    if (!row) return donePage("Nicht gefunden", "Der Auftrag wurde nicht gefunden.");
+    sheet.getRange(row._row, wfCol(sheet, def, "Zugewiesen an")).setNumberFormat("@").setValue(nr);
+    sheet.getRange(row._row, wfCol(sheet, def, "Zugewiesen am")).setValue(new Date());
+    sheet.getRange(row._row, def.headers.indexOf("Bearbeitet von") + 1).setValue("Mail-Knopf Leitung");
+  } finally {
+    lock.releaseLock();
+  }
+  hmAssignedPush(id, nr, row);
+  return donePage("Erledigt", `${what} ist jetzt Nr. ${nr} zugewiesen und steht beim Team in der App.`);
+}
+
+/** Ein Auftrag als Mail-Baustein (Text + HTML) mit Zuweisen-Knöpfen für jedes Team-Mitglied. */
+function hmTaskBlock(t, team, withButtons) {
+  const fmt = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "dd.MM.yyyy");
+  const facts = [
+    ["Ort", hmWhere(t)],
+    t.type === "Klingelschild" ? ["Name", plain(t.name, 80)] : null, // für das Schild nötig
+    t.termin ? ["Termin", fmt(t.termin)] : null,
+    ["Was", plain(t.details, 400)],
+    ["Eingang", t.created ? fmt(t.created) : ""],
+  ].filter((f) => f && f[1]);
+  const head = `${t.urgent ? "DRINGEND – " : ""}${t.type} (${t.id})${t.assignee ? ` – Nr. ${t.assignee}` : ""}`;
+  const text = [head, ...facts.map(([k, v]) => `  ${k}: ${v}`),
+    ...(withButtons ? team.map((nr) => `  → an Nr. ${nr} geben: ${assignUrl(t.id, nr)}`) : [])].join("\n");
+  const btn = (nr) => `<a href="${escHtml(assignUrl(t.id, nr))}" style="display:inline-block;margin:4px 6px 0 0;padding:10px 14px;background:#6d7454;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">→ Nr. ${escHtml(nr)}</a>`;
+  const html = `<div style="border:1px solid #e2e3dc;border-left:5px solid ${t.urgent ? "#b3261e" : "#6d7454"};border-radius:8px;padding:10px 14px;margin:10px 0">
+    <div style="font-weight:bold;font-size:16px">${t.urgent ? '<span style="color:#b3261e">DRINGEND – </span>' : ""}${escHtml(t.type)} <span style="color:#5f625a;font-weight:normal">(${escHtml(t.id)})</span>${t.assignee ? ` – Nr. ${escHtml(t.assignee)}` : ""}</div>
+    <table cellpadding="2" style="border-collapse:collapse;font-size:15px">${facts.map(([k, v]) => `<tr><td style="color:#5f625a;vertical-align:top;padding-right:8px">${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`).join("")}</table>
+    ${withButtons ? (team.length ? `<div style="margin-top:6px">Zuweisen an: ${team.map(btn).join("")}</div>` : '<div style="color:#b3261e">Kein Hausmeister im Team freigeschaltet (Blatt „Mitarbeiter“, Haken bei „Aktiv“).</div>') : ""}
+  </div>`;
+  return { text, html };
+}
+
+function hmMarkReported(ids) {
+  if (!ids.length) return;
+  const now = new Date();
+  [CONFIG.SHEETS.tickets, CONFIG.SHEETS.staffDefects].forEach((def) => {
+    const sheet = getSpreadsheet().getSheetByName(def.name);
+    if (!sheet) return;
+    const c = wfCol(sheet, def, "An Leitung gemeldet");
+    sheetObjects(def).forEach((r) => { if (ids.indexOf(String(r.ID)) !== -1) sheet.getRange(r._row, c).setValue(now); });
+  });
+}
+
+function hmSendMail(subject, text, html) {
+  const to = hmLeadEmail();
+  if (!to) return false;
+  const replyTo = (PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").split(",")[0].trim();
+  MailApp.sendEmail({ to, subject: oneLine(subject), body: text, name: CONFIG.SENDER_NAME, replyTo: replyTo || undefined,
+    htmlBody: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.45;color:#151515;max-width:640px">${html}
+      <p style="margin-top:18px"><a href="${escHtml(CONFIG.APP_URL)}#cockpit" style="display:inline-block;padding:12px 18px;border:2px solid #6d7454;color:#6d7454;text-decoration:none;border-radius:8px;font-weight:bold">In der App öffnen</a></p>
+      <p style="color:#5f625a;font-size:13px">${escHtml(CONFIG.SENDER_NAME)} · Mieter-App ${escHtml(CONFIG.SITE_NAME)}</p></div>` });
+  return true;
+}
+
+/** Dringender Auftrag für den Hausmeisterdienst: sofort an die Leitung (nicht erst um 8 Uhr). */
+function hmUrgentMail(id) {
+  try {
+    const t = hmTaskById(id);
+    if (!t || t.status === "erledigt" || t.owner !== "Hausmeister" || !hmLeadEmail()) return false;
+    if (!withinLimit("hmUrgentMail", CONFIG.LIMITS.hmUrgentMailsPer6h, 21600)) return false; // Rest kommt in die Morgen-Übersicht
+    const b = hmTaskBlock(t, hmTeam(), true);
+    const sent = hmSendMail(`DRINGEND: ${t.type} – ${hmWhere(t)} (${t.id})`,
+      `Guten Tag,\n\nein dringender Auftrag für den Hausmeisterdienst:\n\n${b.text}\n\nBitte gleich an einen Hausmeister aus dem Team geben (Knopf) oder in der App: ${CONFIG.APP_URL}#cockpit`,
+      `<p>Guten Tag,</p><p><strong>ein dringender Auftrag für den Hausmeisterdienst:</strong></p>${b.html}<p>Bitte gleich an einen Hausmeister aus dem Team geben.</p>`);
+    if (sent) hmMarkReported([t.id]);
+    return sent;
+  } catch (err) {
+    logServerError(err, "Dringend-Mail Hausmeister");
+    return false;
+  }
+}
+
+/** Bericht über einen Tag: Nachweise per QR-Code und geplant, aber ohne Nachweis (keine Mitarbeiternummern). */
+function hmDayReport(day) {
+  const key = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+  const k = key(day);
+  const scans = sheetObjects(CONFIG.SHEETS.cleaning);
+  const status = planStatusForDay(day, activeAreas(), scans, planRows());
+  const done = scans.filter((s) => s["Zeitpunkt (Scan)"] instanceof Date && key(s["Zeitpunkt (Scan)"]) === k)
+    .sort((a, b) => a["Zeitpunkt (Scan)"] - b["Zeitpunkt (Scan)"])
+    .map((s) => ({ time: Utilities.formatDate(s["Zeitpunkt (Scan)"], CONFIG.TIMEZONE, "HH:mm"), activity: plain(s["Tätigkeit"], 60), ort: plain(s.Ort, 80) }));
+  const open = status.filter((x) => !x.done).map((x) => ({ activity: plain(x.activity, 60), ort: plain(x.ort, 80) }));
+  return { day, done, open, planned: status.length, plannedDone: status.length - open.length };
+}
+
+/**
+ * Morgen-Übersicht an die Leitung (täglich CONFIG.HM_DIGEST_HOUR Uhr, nur wenn es etwas zu berichten gibt):
+ * zu verteilende Aufträge mit Zuweisen-Knöpfen, beim Team offene Aufträge, neue Mängel vom Team (zur Info)
+ * und der Bericht über den Vortag.
+ */
+function hausmeisterDigest() {
+  const now = new Date();
+  const fmtDay = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "EEEE, dd.MM.").replace(/^Monday/, "Montag").replace(/^Tuesday/, "Dienstag")
+    .replace(/^Wednesday/, "Mittwoch").replace(/^Thursday/, "Donnerstag").replace(/^Friday/, "Freitag").replace(/^Saturday/, "Samstag").replace(/^Sunday/, "Sonntag");
+  const tasks = allTasks().filter((t) => t.status !== "erledigt");
+  const team = hmTeam();
+  const toAssign = tasks.filter((t) => t.owner === "Hausmeister" && !t.assignee)
+    .sort((a, b) => (b.urgent === true) - (a.urgent === true) || (a.created || 0) - (b.created || 0));
+  const atTeam = tasks.filter((t) => t.owner === "Hausmeister" && t.assignee);
+  const teamDefects = tasks.filter((t) => t.kind === "defect" && t.role === "Hausmeister" && !t.reported);
+  const today = berlinToday();
+  const y = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12);
+  const rep = hmDayReport(y);
+  const hasReport = rep.planned > 0 || rep.done.length > 0;
+  if (!toAssign.length && !teamDefects.length && !hasReport) return { sent: false, reason: "nichts zu berichten" };
+  if (!hmLeadEmail()) return { sent: false, reason: "keine Adresse" };
+
+  const T = [`Guten Morgen,`, ``, `hier die Übersicht für den Hausmeisterdienst in der ${CONFIG.SITE_NAME}.`, ``];
+  const H = [`<p>Guten Morgen,</p><p>hier die Übersicht für den Hausmeisterdienst in der ${escHtml(CONFIG.SITE_NAME)}.</p>`];
+  const h2 = (x) => `<h2 style="font-size:18px;color:#6d7454;margin:22px 0 6px">${escHtml(x)}</h2>`;
+
+  if (toAssign.length) {
+    const fresh = toAssign.filter((t) => !t.reported).length;
+    T.push(`1. BITTE VERTEILEN (${toAssign.length}${fresh ? `, davon ${fresh} neu` : ""})`, "");
+    H.push(h2(`1. Bitte im Team verteilen (${toAssign.length}${fresh ? `, davon ${fresh} neu` : ""})`),
+      `<p style="margin:0;color:#5f625a">Ein Tipp auf „→ Nr. …“ gibt den Auftrag an diesen Hausmeister – dann sieht ihn das Team in der App.</p>`);
+    toAssign.forEach((t) => { const b = hmTaskBlock(t, team, true); T.push(b.text, ""); H.push(b.html); });
+  } else {
+    T.push("1. Keine neuen Aufträge zu verteilen.", "");
+    H.push(h2("1. Keine neuen Aufträge zu verteilen"));
+  }
+
+  if (atTeam.length) {
+    T.push(`2. BEIM TEAM IN ARBEIT (${atTeam.length})`, ...atTeam.map((t) => `  • Nr. ${t.assignee}: ${t.type} – ${hmWhere(t)} (${t.status})`), "");
+    H.push(h2(`2. Beim Team offen (${atTeam.length})`), `<ul style="margin:0;padding-left:20px">${atTeam.map((t) =>
+      `<li><strong>Nr. ${escHtml(t.assignee)}</strong>: ${escHtml(t.type)} – ${escHtml(hmWhere(t))} <span style="color:#5f625a">(${escHtml(t.status)})</span></li>`).join("")}</ul>`);
+  }
+
+  if (teamDefects.length) {
+    T.push(`3. VOM TEAM GEMELDETE MÄNGEL (zur Info – die Hausverwaltung entscheidet, was zu tun ist)`,
+      ...teamDefects.map((t) => `  • ${t.urgent ? "DRINGEND – " : ""}${hmWhere(t)}: ${plain(t.details, 200)}`), "");
+    H.push(h2(`3. Vom Team gemeldete Mängel (${teamDefects.length})`),
+      `<p style="margin:0;color:#5f625a">Zur Info – die Hausverwaltung entscheidet, was zu tun ist, und meldet sich.</p>`,
+      `<ul style="margin:6px 0 0;padding-left:20px">${teamDefects.map((t) => `<li>${t.urgent ? '<strong style="color:#b3261e">DRINGEND – </strong>' : ""}<strong>${escHtml(hmWhere(t))}</strong>: ${escHtml(plain(t.details, 200))}</li>`).join("")}</ul>`);
+  }
+
+  if (hasReport) {
+    const title = `Bericht ${fmtDay(y)}`;
+    T.push(`4. ${title.toUpperCase()}${rep.planned ? ` – ${rep.plannedDone} von ${rep.planned} geplanten Arbeiten nachgewiesen` : ""}`,
+      ...(rep.done.length ? rep.done.map((x) => `  ✓ ${x.time} ${x.activity} – ${x.ort}`) : ["  (keine Nachweise per QR-Code)"]),
+      ...rep.open.map((x) => `  ✗ OFFEN: ${x.activity} – ${x.ort}`), "");
+    H.push(h2(`4. ${title}${rep.planned ? ` – ${rep.plannedDone} von ${rep.planned} geplanten Arbeiten nachgewiesen` : ""}`),
+      `<ul style="margin:0;padding-left:20px;list-style:none">${rep.done.length ? rep.done.map((x) => `<li>✅ ${escHtml(x.time)} ${escHtml(x.activity)} – ${escHtml(x.ort)}</li>`).join("") : '<li style="color:#5f625a">Keine Nachweise per QR-Code.</li>'}
+      ${rep.open.map((x) => `<li>❌ <strong>Offen:</strong> ${escHtml(x.activity)} – ${escHtml(x.ort)}</li>`).join("")}</ul>`);
+  }
+
+  T.push(`In der App: ${CONFIG.APP_URL}#cockpit`, "", "Viele Grüße", CONFIG.SENDER_NAME);
+  H.push(`<p>Viele Grüße<br>${escHtml(CONFIG.SENDER_NAME)}</p>`);
+  const subject = `Hausmeister-Übersicht ${Utilities.formatDate(now, CONFIG.TIMEZONE, "dd.MM.")}: ${toAssign.length} zu verteilen`
+    + `${teamDefects.length ? `, ${teamDefects.length} Mängel` : ""}${rep.open.length ? `, ${rep.open.length} gestern offen` : ""}`;
+  hmSendMail(subject, T.join("\n"), H.join("\n"));
+  hmMarkReported(toAssign.filter((t) => !t.reported).map((t) => t.id).concat(teamDefects.map((t) => t.id)));
+  return { sent: true, toAssign: toAssign.length, atTeam: atTeam.length, defects: teamDefects.length, done: rep.done.length, open: rep.open.length };
+}
+
+function ensureHausmeisterDigestTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "hausmeisterDigest");
+  if (!exists) ScriptApp.newTrigger("hausmeisterDigest").timeBased().everyDays(1).atHour(CONFIG.HM_DIGEST_HOUR).inTimezone(CONFIG.TIMEZONE).create();
+}
+
+/** Menü: Morgen-Übersicht jetzt senden (zum Testen). */
+function hausmeisterDigestNow() {
+  const r = hausmeisterDigest();
+  showResult("Hausmeister-Übersicht", r.sent ? `Gesendet an ${hmLeadEmail()}: ${r.toAssign} zu verteilen, ${r.defects} Mängel, Vortag ${r.done} Nachweise / ${r.open} offen.`
+    : `Nicht gesendet: ${r.reason}.`);
 }

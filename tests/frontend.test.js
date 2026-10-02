@@ -41,7 +41,7 @@ function fakeBackend(state = {}) {
         if (staff.role === "Hausmeister") return { ok: false, error: "Nur für Verwaltung und Leitung.", code: "staff" };
         if (staff.role === "Leitung" && state.leadOverview && d.action === "adminOverview") return state.leadOverview;
         if (["adminUpdateTask", "adminNewsSave", "adminNewsEnd", "adminPollSave", "adminPollEnd"].includes(d.action)) { (state.updates = state.updates || []).push(d); return { ok: true }; }
-        return state.overview || { ok: true, kpi: { open: 0, overdue: 0, dueSoon: 0, avgReactHours: null, avgLeadDays: null, slaQuote: null, closed90: 0, cleaningQuote: null, errors24: 0 }, months: [], perEntrance: {}, tasks: [], lookerUrl: "" };
+        return state.overview || { ok: true, kpi: { open: 0, overdue: 0, dueSoon: 0, avgReactHours: null, avgLeadDays: null, slaQuote: null, closed90: 0, cleaningQuote: null, errors24: 0 }, months: [], perEntrance: {}, tasks: [] };
       }
       return { ok: true };
     }
@@ -236,7 +236,12 @@ function makeQrVideo(text) {
       check("Persönlicher Link: Token aus der Adresse entfernt", !p.url().includes("hm="));
       check("Hausmeister ohne PIN-Feld", !(await p.isVisible("#pinInput")));
       await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])");
-      check("Angemeldet als Nr. 100, Tab sichtbar", (await p.textContent("#staffName")) === "Nr. 100" && await p.isVisible("#staffTab"));
+      check("Angemeldet als Nr. 100, einfache Ansicht: keine Bewohner-Reiter, große Bereiche Scannen/Aufträge/Mangel", (await p.textContent("#staffName")) === "Nr. 100" && !(await p.isVisible(".tabbar")) && await p.evaluate(() => document.body.classList.contains("hm-simple")) && (await p.$$eval("#staffTabs span", (x) => x.map((e) => e.textContent.trim()))).join("|").replace(/\s+/g, " ").includes("Scannen"));
+      await p.goto(`${base}#services`); await p.waitForTimeout(200);
+      check("Team: andere Bereiche (z. B. Services) führen zurück zum Hausmeister-Bereich", await p.isVisible('[data-view="hausmeister"]') && !(await p.isVisible('[data-view="services"]')));
+      await p.goto(`${base}#impressum`); await p.waitForTimeout(200);
+      check("Team: Impressum bleibt erreichbar", await p.isVisible('[data-view="impressum"]'));
+      await p.goto(`${base}#hausmeister`); await p.waitForTimeout(200);
       check("Manifest der Hausmeister-App aktiv", (await p.getAttribute("#appManifest", "href")) === "manifest-hausmeister.json");
       await p.click("#scanBtn"); await p.waitForSelector("#scanForm:not([hidden])", { timeout: 40000 }); // JS-QR-Erkennung auf langsamen CI-Rechnern braucht mitunter > 15 s
       check("Kamera-Scan erkennt den QR-Code", (await p.textContent("#scanPlace")) === AREAS[0].ort && (await p.inputValue("#scanActivity")) === "Treppenhausreinigung");
@@ -250,7 +255,7 @@ function makeQrVideo(text) {
       const sentScans = ctx.requests.filter((r) => r.action === "logCleaning");
       check("Nachgesendet mit Scan-Zeit, manuell gekennzeichnet", !(await p.isVisible("#staffQueue")) && sentScans.some((r) => r.areaToken === "MUELL" && r.manual === true && r.timestamp));
       await p.waitForTimeout(3000);
-      await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForSelector(".task");
+      await p.evaluate(() => window.scrollTo(0, 0)); await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForSelector(".task");
       check("Aufträge: dringend zuerst, Telefon als Link", (await p.$$eval(".task__type", (t) => t.map((x) => x.textContent))).join() === "Mangel (intern),Klingelschild" && (await p.getAttribute(".task a[href^=tel]", "href")) === "tel:01701234567");
       check("Hausmeister: keine Auswahl „Wer kümmert sich?“ beim Mangel", await p.$eval("#defectOwnerWrap", (e) => e.hidden));
       check("Hausmeister: kein Kasten für die Alarm-App", !(await p.isVisible("[data-ntfy-box]")));
@@ -261,7 +266,7 @@ function makeQrVideo(text) {
       check("Nachher-Foto wird mitgesendet", ctx.requests.some((r) => r.action === "completeTask" && r.id === "M-1" && r.photo && r.photo.data && /^image\//.test(r.photo.mimeType)));
       check("Erledigt verschwindet sofort", !(await p.$('[data-done="M-1"]')));
       state.hangTasks = true;
-      await p.goto(`${base}#notfall`); await p.goto(`${base}#hausmeister`); await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(300);
+      await p.evaluate(() => window.scrollTo(0, 0)); await p.check("#staffTabs input[value=scan]", { force: true }); await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(300);
       check("Hängendes Backend: gespeicherte Liste sofort sichtbar", await p.isVisible(".task") && /wird aktualisiert/.test(await p.textContent("#tasksStatus")));
       state.hangTasks = false;
       p.once("dialog", (dlg) => dlg.accept()); await p.click("#staffLogout"); await p.waitForTimeout(300);
@@ -301,7 +306,7 @@ function makeQrVideo(text) {
         sla: { light, react: light === "red" ? "overdue" : "open", done: "open", reactDue: iso(light === "red" ? -5 : 10), doneDue: iso(100) }, ...extra });
       const state = { overview: { ok: true, kpi: { open: 2, overdue: 1, dueSoon: 1, avgReactHours: 5.5, avgLeadDays: 2.25, slaQuote: 0.8, closed90: 10, cleaningQuote: 0.95, cleaningIst: 19, cleaningSoll: 20, errors24: 0 },
         months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, Mangel: i % 3, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 2, Nachweise: 20 })),
-        perEntrance: { "Dorfstr. 24": 5, "Lindenberger Str. 6": 2 }, lookerUrl: "https://lookerstudio.google.com/reporting/abc", role: "Verwaltung",
+        perEntrance: { "Dorfstr. 24": 5, "Lindenberger Str. 6": 2 }, role: "Verwaltung", team: ["100", "101"],
         work: { days: [
           { date: "2026-09-24", planned: 2, plannedDone: 1, done: [{ time: "08:10", activity: "Treppenhausreinigung", ort: "Treppenhaus Dorfstr. 24", planned: true, manual: false },
             { time: "09:00", activity: "Kontrollgang", ort: "Tiefgarage", planned: false, manual: true }], missed: [], open: [{ activity: "Müllplatzreinigung", ort: "Müllplatz" }] },
@@ -349,10 +354,15 @@ function makeQrVideo(text) {
       await p.click('.task--sla-red .task__edit summary');
       await p.selectOption('.task--sla-red select[name="status"]', "in Arbeit");
       await p.fill('.task--sla-red textarea[name="note"]', "Schild bestellt");
-      await p.click('.task--sla-red [type="submit"]'); await p.waitForTimeout(400);
+      await p.click('.task--sla-red .task__edit [type="submit"]'); await p.waitForTimeout(400);
       check("Bearbeiten sendet Status + Notiz", (state.updates || []).some((u) => u.id === "T-1" && u.status === "in Arbeit" && u.note === "Schild bestellt" && u.owner === "Hausmeister" && u.token === ADMIN), state.updates);
+      await p.click('#cockpitFilter [data-filter="assign"]');
+      check("Filter „Zu verteilen“: nur Hausmeister-Aufträge ohne Hausmeister", (await p.$$("#cockpitList .task")).length >= 1 && (await p.$$eval("#cockpitList .task", (x) => x.every((e) => /zu verteilen/.test(e.textContent)))));
+      await p.selectOption('#cockpitList [data-assign] select[name="assignee"]', "101");
+      await p.click('#cockpitList [data-assign] [type="submit"]'); await p.waitForTimeout(500);
+      check("Zuweisen im Cockpit sendet die Nummer an das Backend", (state.updates || []).some((u) => u.action === "adminUpdateTask" && u.assignee === "101" && u.token === ADMIN), state.updates);
+      await p.click('#cockpitFilter [data-filter="open"]');
       check("Diagramme (3 Monats-Charts + Aufgänge)", (await p.$$("#cockpitCharts svg")).length === 3 && (await p.$$(".hbars li")).length === 2);
-      check("Looker-Link", (await p.getAttribute("#cockpitLooker", "href")) === "https://lookerstudio.google.com/reporting/abc" && await p.isVisible("#cockpitLooker"));
       {
         const txt = await p.textContent("#cockpitTeam");
         check("Erledigte Arbeiten je Tag: Plan-Abgleich, zusätzlich, nachgeholt, nicht nachgewiesen – ohne Nummern",
@@ -364,7 +374,7 @@ function makeQrVideo(text) {
     {
       const iso = (h) => new Date(Date.now() + h * 3600000).toISOString();
       const state = { leadOverview: { ok: true, role: "Leitung", kpi: { open: 1, overdue: 0, dueSoon: 0, avgReactHours: 3, avgLeadDays: 1, slaQuote: 1, closed90: 2, cleaningQuote: 0.9, cleaningIst: 9, cleaningSoll: 10, errors24: null },
-        months: [{ month: "2026-09", Mangel: 1, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 5 }], perEntrance: { "Dorfstr. 24": 1 }, lookerUrl: "",
+        months: [{ month: "2026-09", Mangel: 1, Klingelschild: 1, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 5 }], perEntrance: { "Dorfstr. 24": 1 },
         work: { days: [{ date: "2026-09-24", planned: 1, plannedDone: 1, done: [{ time: "07:30", activity: "Müllplatzreinigung", ort: "Müllplatz", planned: true, manual: false }], missed: [], open: [] }] },
         tasks: [{ id: "T-9", source: "Bewohner", type: "Klingelschild", status: "offen", owner: "Hausmeister", created: iso(-5), entrance: "Dorfstr. 24", wohnung: "3", details: "x", note: "", by: "",
           sla: { light: "green", react: "open", done: "open", reactDue: iso(20), doneDue: iso(200) } }] } };
@@ -373,7 +383,7 @@ function makeQrVideo(text) {
       await p.goto(`${base}?hm=${LEAD}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
       check("Leitung (001): Tab Cockpit + Werkzeuge", /Cockpit/.test(await p.textContent("#staffTab")) && await p.isVisible("#staffAdmin") && /Leitung/.test(await p.textContent("#staffName")));
       await p.click("#staffTab"); await p.waitForSelector("#cockpitList .task");
-      check("Leitung: keine Filter nach Zuständigkeit, kein App-Fehler-/Zähler-Bereich, kein Looker", !(await p.isVisible('#cockpitFilter [data-filter="Verwaltung"]')) && (await p.$$(".kpi")).length === 8 && (await p.$$("#cockpitCharts svg")).length === 2 && !(await p.isVisible("#cockpitLooker")));
+      check("Leitung: keine Filter nach Zuständigkeit, kein App-Fehler-/Zähler-Bereich", !(await p.isVisible('#cockpitFilter [data-filter="Verwaltung"]')) && (await p.$$(".kpi")).length === 8 && (await p.$$("#cockpitCharts svg")).length === 2);
       await p.click(".task__edit summary");
       check("Leitung: nur Status bearbeitbar", await p.isVisible('.task__edit select[name="status"]') && !(await p.$('.task__edit select[name="owner"]')) && !(await p.$('.task__edit textarea[name="note"]')));
       await p.selectOption('.task__edit select[name="status"]', "erledigt"); await p.click('.task__edit [type="submit"]'); await p.waitForTimeout(400);
@@ -388,7 +398,7 @@ function makeQrVideo(text) {
       await p.goto(`${base}?hm=${STAFF}#hausmeister`); await p.waitForSelector("#staffArea:not([hidden])");
       check("Hausmeister: Tab heißt Hausmeister, kein Cockpit", /Hausmeister/.test(await p.textContent("#staffTab")) && !(await p.isVisible("#staffAdmin")));
       await p.goto(`${base}#cockpit`); await p.waitForTimeout(500);
-      check("Hausmeister sieht Cockpit nicht", await p.isVisible("#cockpitNone") && !(await p.isVisible("#cockpitArea")) && !ctx.requests.some((r) => r.action === "adminOverview"));
+      check("Hausmeister sieht Cockpit nicht (bleibt im Hausmeister-Bereich)", !(await p.isVisible("#cockpitArea")) && await p.isVisible('[data-view="hausmeister"]') && !ctx.requests.some((r) => r.action === "adminOverview"));
       await ctx.close();
     }
 
@@ -568,7 +578,7 @@ function makeQrVideo(text) {
       await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])", { timeout: 10000 });
       check("Hausmeister: kein Fitnessraum-Link", !(await p.isVisible("[data-fit-link]")));
       await p.goto(`${base}?obj=lind6#fitness`); await p.waitForTimeout(500);
-      check("Hausmeister: Fitnessraum gesperrt", await p.isVisible("#fitNone") && !(await p.isVisible("#fitArea")));
+      check("Hausmeister: Fitnessraum gesperrt (bleibt im Hausmeister-Bereich)", !(await p.isVisible("#fitArea")) && await p.isVisible('[data-view="hausmeister"]'));
       await ctx.close();
     }
     {
@@ -832,7 +842,7 @@ function makeQrVideo(text) {
       const X = `<img src=x class=pwn onerror="window.__xss=1"><svg class=pwn onload="window.__xss=1"></svg>"'><script class=pwn>window.__xss=1</script>`;
       const evil = (d) => {
         if (d.action === "hmLogin") return { ok: true, user: { name: X, role: "Verwaltung" }, areas: [{ code: "TG", ort: X, activity: X }], activities: [X] };
-        if (d.action === "adminOverview") return { ok: true, role: X, polls: [{ id: X, question: X, options: [X], open: true, to: X, only: X, counts: [X], total: X }], news: [{ row: X, title: X, text: X, only: X, from: X, to: X }], work: { days: [{ date: X, planned: X, plannedDone: X, done: [{ time: X, activity: X, ort: X, planned: false, manual: true }, X], missed: [{ activity: X, ort: X, lateOn: X }], open: [{ activity: X, ort: X }] }, X] }, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, lookerUrl: "javascript:window.__xss=1", tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, photo: "javascript:window.__xss=1", photoDone: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
+        if (d.action === "adminOverview") return { ok: true, role: X, polls: [{ id: X, question: X, options: [X], open: true, to: X, only: X, counts: [X], total: X }], news: [{ row: X, title: X, text: X, only: X, from: X, to: X }], work: { days: [{ date: X, planned: X, plannedDone: X, done: [{ time: X, activity: X, ort: X, planned: false, manual: true }, X], missed: [{ activity: X, ort: X, lateOn: X }], open: [{ activity: X, ort: X }] }, X] }, kpi: { open: X, overdue: X, dueSoon: X, avgReactHours: X, slaQuote: X }, months: [{ month: X, Mangel: X }, { month: 5 }], perEntrance: { [X]: X }, tasks: [{ id: X, source: X, type: X, status: X, owner: X, entrance: X, name: X, contact: "javascript:window.__xss=1", details: X, note: X, by: X, created: X, termin: X, photo: "javascript:window.__xss=1", photoDone: X, sla: { light: X, react: X, reactDue: X, doneDue: X } }, { id: "x", sla: X }] };
         if (d.action === "getTasks") return { ok: true, tasks: [{ id: X, source: X, type: X, status: "offen", entrance: X, wohnung: X, name: X, contact: "javascript:window.__xss=1", details: X, ort: X, created: X, owner: X }] };
         if (d.action === "news") return { ok: true, polls: [{ id: X, question: X, options: [X, X], to: X, results: [X, 1] }, X], weather: { at: new Date().toISOString(), days: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()), icon: X, min: X, max: 40 }, { date: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + 86400000)), icon: "__proto__", min: 1, max: 2 }, { date: X }], alerts: [{ event: X, headline: X, headlineEn: X, severity: X, expires: X }, X] }, items: [{ title: X, text: X, important: true, to: "2026-12-31" }], care: { last: [{ ort: X, activity: X, time: "2026-09-23T08:00:00Z" }], next: [{ activity: X, ort: X, from: "2026-10-01", to: "2026-10-02" }] } };
         if (d.action === "status") return { ok: true, items: [{ id: "T-260924-ABCD", type: X, status: X, created: X }] };
@@ -843,7 +853,7 @@ function makeQrVideo(text) {
       await p.addInitScript(() => { localStorage.setItem("mieterapp.tickets", JSON.stringify([{ id: "T-260924-ABCD", type: "<img src=x class=pwn>", date: new Date().toISOString() }])); });
       for (const v of ["notfall", "meldungen", "mangel"]) { await p.goto(`${base}?obj=lind6#${v}`); await p.waitForTimeout(700); }
       await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForTimeout(800);
-      await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(800);
+      await p.evaluate(() => window.scrollTo(0, 0)); await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(800);
       await p.goto(`${base}#qrdruck`); await p.waitForTimeout(800);
       await p.goto(`${base}#cockpit`); await p.waitForTimeout(1000);
       await p.click('#cockpitFilter [data-filter="done"]'); await p.click('#cockpitFilter [data-filter="open"]');

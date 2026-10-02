@@ -1160,3 +1160,26 @@ button.kpi { font: inherit; color: inherit; text-align: left; width: 100%; curso
 .install-card__close { border: 0; background: none; font-size: 18px; padding: 4px 8px; cursor: pointer; color: var(--c-muted); }
 .install-card__steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
 .install-card p { margin: 0; }
+
+/* Hausmeister-Team (Nr. ab 100): nur Scannen / Aufträge / Mangel – groß und übersichtlich */
+.seg-ico { font-style: normal; margin-right: 6px; }
+.seg-count { display: inline-grid; place-items: center; min-width: 24px; height: 24px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--c-danger); color: #fff; font-size: 14px; }
+.badge--mine { background: var(--c-ok); color: #fff; }
+.badge--team { background: var(--c-surface); border: 1px solid var(--c-border); font-weight: 600; }
+.badge--assign { background: #fff1c7; color: #6b4d00; }
+.task__assign { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin: 10px 0 4px; padding: 10px 12px; background: #fff8e1; border-radius: var(--radius); }
+.task__assign .field { flex: 1 1 160px; margin: 0; }
+body.hm-simple .tabbar, body.hm-simple .hero__eyebrow, body.hm-simple .intro-link, body.hm-simple .install-card { display: none !important; }
+body.hm-simple main { padding-bottom: 24px; }
+body.hm-simple [data-view="hausmeister"] { font-size: 19px; }
+body.hm-simple .segmented--tabs { grid-template-columns: 1fr; gap: 0; }
+body.hm-simple .segmented--tabs span { min-height: 64px; font-size: 21px; justify-content: start; grid-auto-flow: column; padding: 0 18px; place-items: center start; }
+body.hm-simple .segmented--tabs label + label span { border-top: 1.5px solid var(--c-border); }
+body.hm-simple .seg-ico { font-size: 26px; margin-right: 12px; }
+body.hm-simple [data-view="hausmeister"] .btn { min-height: 60px; font-size: 20px; }
+body.hm-simple .task { padding: 18px; }
+body.hm-simple .task__type { font-size: 21px; }
+body.hm-simple .task__where, body.hm-simple .task__details { font-size: 19px; }
+body.hm-simple .task__done-btn { width: 100%; margin-top: 12px; }
+body.hm-simple .badge { font-size: 16px; padding: 6px 12px; }
+.segmented--tabs span { grid-auto-flow: column; justify-content: center; align-items: center; }
