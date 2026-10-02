@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=84">
+  <link rel="stylesheet" href="css/style.css?v=85">
 </head>
 <body>
   <header class="app-header">
@@ -890,6 +890,13 @@
     <a class="tabbar__item" href="#hausmeister" data-tab="hausmeister" id="staffTab" hidden><span aria-hidden="true">🧹</span>Hausmeister</a>
   </nav>
 
+  <!-- Hausmeister-Team (Nr. ab 100): nur diese drei Knöpfe unten -->
+  <nav class="tabbar tabbar--hm" id="hmTabbar" aria-label="Hausmeister" data-no-i18n hidden>
+    <button class="tabbar__item" type="button" data-hm-pane="scan"><span aria-hidden="true">📷</span>Scannen</button>
+    <button class="tabbar__item" type="button" data-hm-pane="tasks"><span aria-hidden="true">📋</span>Aufträge <b class="seg-count" id="hmTaskCount" hidden></b></button>
+    <button class="tabbar__item" type="button" data-hm-pane="defect"><span aria-hidden="true">🛠️</span>Mangel</button>
+  </nav>
+
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- ============ Kurze Einführung (einmal nach der ersten Zustimmung) ============ -->
@@ -966,8 +973,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=84"></script>
-  <script src="js/i18n.js?v=84"></script>
-  <script src="js/app.js?v=84"></script>
+  <script src="js/config.js?v=85"></script>
+  <script src="js/i18n.js?v=85"></script>
+  <script src="js/app.js?v=85"></script>
 </body>
 </html>

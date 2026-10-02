@@ -1169,8 +1169,7 @@ button.kpi { font: inherit; color: inherit; text-align: left; width: 100%; curso
 .badge--assign { background: #fff1c7; color: #6b4d00; }
 .task__assign { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin: 10px 0 4px; padding: 10px 12px; background: #fff8e1; border-radius: var(--radius); }
 .task__assign .field { flex: 1 1 160px; margin: 0; }
-body.hm-simple .tabbar, body.hm-simple .hero__eyebrow, body.hm-simple .intro-link, body.hm-simple .install-card { display: none !important; }
-body.hm-simple main { padding-bottom: 24px; }
+body.hm-simple .tabbar:not(.tabbar--hm), body.hm-simple #staffTabs, body.hm-simple .hero__eyebrow, body.hm-simple .intro-link, body.hm-simple .install-card { display: none !important; }
 body.hm-simple [data-view="hausmeister"] { font-size: 19px; }
 body.hm-simple .segmented--tabs { grid-template-columns: 1fr; gap: 0; }
 body.hm-simple .segmented--tabs span { min-height: 64px; font-size: 21px; justify-content: start; grid-auto-flow: column; padding: 0 18px; place-items: center start; }
@@ -1183,3 +1182,11 @@ body.hm-simple .task__where, body.hm-simple .task__details { font-size: 19px; }
 body.hm-simple .task__done-btn { width: 100%; margin-top: 12px; }
 body.hm-simple .badge { font-size: 16px; padding: 6px 12px; }
 .segmented--tabs span { grid-auto-flow: column; justify-content: center; align-items: center; }
+.tabbar--hm { grid-template-columns: repeat(3, 1fr); height: calc(76px + var(--safe-bottom)); }
+.tabbar--hm[hidden] { display: none; }
+.tabbar--hm .tabbar__item { border: 0; background: none; font: inherit; font-size: 17px; font-weight: 700; color: var(--c-muted); cursor: pointer; position: relative; }
+.tabbar--hm .tabbar__item span { font-size: 30px; filter: none; opacity: .75; }
+.tabbar--hm .tabbar__item[aria-current="page"] { color: var(--c-primary-ink); background: var(--c-primary); }
+.tabbar--hm .tabbar__item[aria-current="page"] span { opacity: 1; }
+.tabbar--hm .seg-count { position: absolute; top: 6px; right: calc(50% - 34px); }
+body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }

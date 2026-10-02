@@ -80,7 +80,7 @@ function makeQrVideo(text) {
   const { server, base } = await startServer();
   const video = makeQrVideo(`${base}?scan=TH_LIND6#hausmeister`);
   const browser = await launch(["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${video}`]);
-  const tabs = async (p) => (await p.$$eval(".tabbar__item:not([hidden])", (t) => t.map((x) => x.textContent.trim() + (x.getAttribute("aria-current") ? "*" : "")))).join("|");
+  const tabs = async (p) => (await p.$$eval(".tabbar:not(.tabbar--hm) .tabbar__item:not([hidden])", (t) => t.map((x) => x.textContent.trim() + (x.getAttribute("aria-current") ? "*" : "")))).join("|");
 
   try {
     console.log("--- Zustimmung und PIN");
@@ -236,7 +236,8 @@ function makeQrVideo(text) {
       check("Persönlicher Link: Token aus der Adresse entfernt", !p.url().includes("hm="));
       check("Hausmeister ohne PIN-Feld", !(await p.isVisible("#pinInput")));
       await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])");
-      check("Angemeldet als Nr. 100, einfache Ansicht: keine Bewohner-Reiter, große Bereiche Scannen/Aufträge/Mangel", (await p.textContent("#staffName")) === "Nr. 100" && !(await p.isVisible(".tabbar")) && await p.evaluate(() => document.body.classList.contains("hm-simple")) && (await p.$$eval("#staffTabs span", (x) => x.map((e) => e.textContent.trim()))).join("|").replace(/\s+/g, " ").includes("Scannen"));
+      check("Angemeldet als Nr. 100, einfache Ansicht: unten nur Scannen / Aufträge / Mangel", (await p.textContent("#staffName")) === "Nr. 100" && !(await p.isVisible(".tabbar:not(.tabbar--hm)")) && !(await p.isVisible("#staffTabs")) && await p.evaluate(() => document.body.classList.contains("hm-simple"))
+        && JSON.stringify(await p.$$eval("#hmTabbar [data-hm-pane]", (x) => x.filter((e) => e.offsetParent).map((e) => e.textContent.replace(/[^A-Za-zäöü]/g, "")))) === '["Scannen","Aufträge","Mangel"]' && (await p.getAttribute('#hmTabbar [data-hm-pane="scan"]', "aria-current")) === "page");
       await p.goto(`${base}#services`); await p.waitForTimeout(200);
       check("Team: andere Bereiche (z. B. Services) führen zurück zum Hausmeister-Bereich", await p.isVisible('[data-view="hausmeister"]') && !(await p.isVisible('[data-view="services"]')));
       await p.goto(`${base}#impressum`); await p.waitForTimeout(200);
@@ -255,7 +256,7 @@ function makeQrVideo(text) {
       const sentScans = ctx.requests.filter((r) => r.action === "logCleaning");
       check("Nachgesendet mit Scan-Zeit, manuell gekennzeichnet", !(await p.isVisible("#staffQueue")) && sentScans.some((r) => r.areaToken === "MUELL" && r.manual === true && r.timestamp));
       await p.waitForTimeout(3000);
-      await p.evaluate(() => window.scrollTo(0, 0)); await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForSelector(".task");
+      await p.click('#hmTabbar [data-hm-pane="tasks"]'); await p.waitForSelector(".task");
       check("Aufträge: dringend zuerst, Telefon als Link", (await p.$$eval(".task__type", (t) => t.map((x) => x.textContent))).join() === "Mangel (intern),Klingelschild" && (await p.getAttribute(".task a[href^=tel]", "href")) === "tel:01701234567");
       check("Hausmeister: keine Auswahl „Wer kümmert sich?“ beim Mangel", await p.$eval("#defectOwnerWrap", (e) => e.hidden));
       check("Hausmeister: kein Kasten für die Alarm-App", !(await p.isVisible("[data-ntfy-box]")));
@@ -266,7 +267,7 @@ function makeQrVideo(text) {
       check("Nachher-Foto wird mitgesendet", ctx.requests.some((r) => r.action === "completeTask" && r.id === "M-1" && r.photo && r.photo.data && /^image\//.test(r.photo.mimeType)));
       check("Erledigt verschwindet sofort", !(await p.$('[data-done="M-1"]')));
       state.hangTasks = true;
-      await p.evaluate(() => window.scrollTo(0, 0)); await p.check("#staffTabs input[value=scan]", { force: true }); await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(300);
+      await p.click('#hmTabbar [data-hm-pane="scan"]'); await p.click('#hmTabbar [data-hm-pane="tasks"]'); await p.waitForTimeout(300);
       check("Hängendes Backend: gespeicherte Liste sofort sichtbar", await p.isVisible(".task") && /wird aktualisiert/.test(await p.textContent("#tasksStatus")));
       state.hangTasks = false;
       p.once("dialog", (dlg) => dlg.accept()); await p.click("#staffLogout"); await p.waitForTimeout(300);
@@ -853,7 +854,7 @@ function makeQrVideo(text) {
       await p.addInitScript(() => { localStorage.setItem("mieterapp.tickets", JSON.stringify([{ id: "T-260924-ABCD", type: "<img src=x class=pwn>", date: new Date().toISOString() }])); });
       for (const v of ["notfall", "meldungen", "mangel"]) { await p.goto(`${base}?obj=lind6#${v}`); await p.waitForTimeout(700); }
       await p.goto(`${base}?hm=${ADMIN}#hausmeister`); await p.waitForTimeout(800);
-      await p.evaluate(() => window.scrollTo(0, 0)); await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(800);
+      await p.check("#staffTabs input[value=tasks]", { force: true }); await p.waitForTimeout(800);
       await p.goto(`${base}#qrdruck`); await p.waitForTimeout(800);
       await p.goto(`${base}#cockpit`); await p.waitForTimeout(1000);
       await p.click('#cockpitFilter [data-filter="done"]'); await p.click('#cockpitFilter [data-filter="open"]');

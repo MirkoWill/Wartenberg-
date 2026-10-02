@@ -1651,6 +1651,8 @@
   function setHmSimple(on) {
     if (document.body.classList.contains("hm-simple") === on) return;
     document.body.classList.toggle("hm-simple", on);
+    $("#hmTabbar").hidden = !on;
+    if (on) selectStaffPane((($$("#staffTabs input").find((r) => r.checked)) || {}).value || "scan");
     if (on && !["hausmeister", ...LEGAL_VIEWS].includes(currentView)) location.hash = "hausmeister";
   }
 
@@ -1967,6 +1969,9 @@
     const count = $("#taskCount");
     count.hidden = !tasks.length;
     count.textContent = String(tasks.length);
+    const hmCount = $("#hmTaskCount");
+    hmCount.hidden = !tasks.length;
+    hmCount.textContent = String(tasks.length);
     // Team: eigene Aufträge zuerst
     if (role === "Hausmeister") tasks = tasks.slice().sort((a, b) => (b.mine === true) - (a.mine === true));
     $("#taskList").innerHTML = tasks.length ? tasks.map((t) => {
@@ -2513,6 +2518,9 @@
 
   function selectStaffPane(name) {
     $$("#staffTabs input").forEach((r) => { r.checked = r.value === name; });
+    $$("#hmTabbar [data-hm-pane]").forEach((b) => {
+      if (b.dataset.hmPane === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
     $$(".staff-pane").forEach((p) => { p.hidden = p.dataset.pane !== name; });
     if (name === "tasks") loadTasks();
   }
@@ -2549,6 +2557,13 @@
       setTimeout(() => handleScanCode(code, false), 0);
     }
     $$("#staffTabs input").forEach((r) => r.addEventListener("change", () => selectStaffPane(r.value)));
+    $("#hmTabbar").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-hm-pane]");
+      if (!b) return;
+      if (currentView !== "hausmeister") location.hash = "hausmeister";
+      selectStaffPane(b.dataset.hmPane);
+      window.scrollTo(0, 0);
+    });
     $("#scanBtn").addEventListener("click", startScan);
     $("#scanCancel").addEventListener("click", stopScan);
     $("#manualBtn").addEventListener("click", () => showScanForm(null, true));
