@@ -260,6 +260,8 @@ function onOpen() {
     .addSeparator()
     .addItem("Monatsbericht: Vorschau an mich", "reportPreviewNow")
     .addItem("Hausmeister-Übersicht jetzt senden", "hausmeisterDigestNow")
+    .addItem("Neuigkeiten: Vorschau an mich", "releaseNotesPreviewNow")
+    .addItem("Neuigkeiten an die Leitung (001/002) senden", "releaseNotesSendNow")
     .addItem("Systemprüfung jetzt", "healthCheckNow")
     .addItem("Benachrichtigung testen (an Verwaltung)", "pushTest")
     .addItem("Google Tasks: einrichten / jetzt abgleichen", "gtasksSetupNow")
@@ -3863,4 +3865,96 @@ function hausmeisterDigestNow() {
   const r = hausmeisterDigest();
   showResult("Hausmeister-Übersicht", r.sent ? `Gesendet an ${hmLeadEmail()}: ${r.toAssign} zu verteilen, ${r.defects} Mängel, Vortag ${r.done} Nachweise / ${r.open} offen.`
     : `Nicht gesendet: ${r.reason}.`);
+}
+
+/* ==========================================================================
+   Neuigkeiten (Release-Notes) für die Leitung des Hausmeisterdienstes (001/002)
+   Bei jeder neuen Funktion für den Hausmeisterdienst oben in RELEASES einen Eintrag ergänzen (neuester zuerst).
+   Versand nur von Hand über das Menü – erst „Vorschau an mich“, dann „an die Leitung senden“.
+   Jede Ausgabe geht nur einmal raus (Script-Eigenschaft RELEASE_SENT_<id>).
+   ========================================================================== */
+
+const RELEASES = [
+  {
+    id: "2026-10-team",
+    date: "Oktober 2026",
+    title: "Aufträge im Team verteilen",
+    intro: "die Mieter-App hat neue Funktionen für Ihren Hausmeisterdienst bekommen. Hier das Wichtigste auf einen Blick.",
+    items: [
+      { icon: "👥", title: "Zweiter Zugang für die Leitung", text: "Neben Nr. 001 gibt es jetzt Nr. 002 – mit denselben Rechten. Den persönlichen Link erhalten Sie von uns." },
+      { icon: "📥", title: "Aufträge kommen zuerst zu Ihnen", text: "Alles, was der Hausmeisterdienst erledigen soll (z. B. Klingelschilder oder Mängel, die wir Ihnen übergeben), landet zuerst bei Ihnen – in der App im Cockpit unter „📥 Zu verteilen“." },
+      { icon: "👷", title: "Mit einem Tipp an Ihr Team geben", text: "Im Cockpit die Nummer des Hausmeisters wählen und „Zuweisen“ tippen – oder direkt in der Mail auf „→ Nr. …“. Danach sehen alle Hausmeister im Team den Auftrag in ihrer App, der Zuständige mit „für dich“." },
+      { icon: "☀️", title: "Jeden Morgen um 8 Uhr eine Übersicht", text: "Per Mail: was zu verteilen ist, was beim Team noch offen ist, welche Mängel Ihr Team gemeldet hat (darüber entscheidet die Hausverwaltung) und ein Bericht über den Vortag – was per QR-Code erledigt wurde und was laut Plan noch fehlt. Die Mail kommt nur, wenn es etwas zu berichten gibt." },
+      { icon: "🚨", title: "Dringendes sofort", text: "Dringende Aufträge schicken wir Ihnen nicht erst morgens, sondern sofort per Mail – ebenfalls mit den Knöpfen zum Verteilen." },
+      { icon: "📱", title: "Ganz einfache App für Ihr Team", text: "Ihre Hausmeister (Nr. ab 100) sehen nur noch drei große Knöpfe: Scannen, Aufträge und Mangel – mit großer Schrift und einer kurzen Anleitung beim ersten Start." },
+      { icon: "✉️", title: "Weniger einzelne Mails", text: "Klingelschild-Aufträge kommen nicht mehr als einzelne Mail, sondern gesammelt in der Übersicht am Morgen." },
+    ],
+    team: [
+      "Jeder Hausmeister öffnet seinen persönlichen Link einmal auf dem Handy (den Link erhalten Sie von uns).",
+      "Am besten gleich auf den Startbildschirm legen – die App zeigt, wie das geht.",
+      "Beim ersten Start erklärt eine kurze Anleitung die drei Knöpfe. Sie ist jederzeit über „❓ Anleitung“ wieder abrufbar.",
+    ],
+  },
+];
+
+function releaseMail(rel) {
+  const e = escHtml;
+  const sig = CONFIG.REPORT_SIGNATURE;
+  const text = [
+    "Guten Tag,", "", rel.intro, "",
+    ...rel.items.map((x) => `${x.icon} ${x.title}\n   ${x.text}`), "",
+    rel.team && rel.team.length ? "So geben Sie es an Ihr Team weiter:" : "",
+    ...(rel.team || []).map((x, i) => `  ${i + 1}. ${x}`), "",
+    `Zur App: ${CONFIG.APP_URL}#cockpit`, "",
+    "Bei Fragen melden Sie sich gern.", "", "Viele Grüße", ...sig,
+  ].join("\n");
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#151515;max-width:640px">
+    <div style="background:#2b3033;color:#e3f2b3;padding:18px 20px;border-radius:10px 10px 0 0">
+      <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#cfd3c4">Neu in der Mieter-App · ${e(rel.date)}</div>
+      <div style="font-size:24px;font-family:Georgia,serif;margin-top:4px">${e(rel.title)}</div>
+    </div>
+    <div style="border:1px solid #e2e3dc;border-top:0;border-radius:0 0 10px 10px;padding:18px 20px">
+      <p>Guten Tag,</p><p>${e(rel.intro)}</p>
+      <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%">
+        ${rel.items.map((x) => `<tr><td style="vertical-align:top;font-size:26px;padding:10px 12px 10px 0;width:40px">${e(x.icon)}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #eef0e6"><strong style="font-size:16px">${e(x.title)}</strong><br>${e(x.text)}</td></tr>`).join("")}
+      </table>
+      ${rel.team && rel.team.length ? `<div style="margin-top:18px;padding:12px 16px;background:#eef0e6;border-left:4px solid #6d7454;border-radius:6px">
+        <strong>So geben Sie es an Ihr Team weiter</strong><ol style="margin:6px 0 0;padding-left:20px">${rel.team.map((x) => `<li>${e(x)}</li>`).join("")}</ol></div>` : ""}
+      <p style="margin-top:18px"><a href="${e(CONFIG.APP_URL)}#cockpit" style="display:inline-block;padding:12px 18px;background:#6d7454;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Zur App</a></p>
+      <p>Bei Fragen melden Sie sich gern.</p>
+      <p>Viele Grüße</p>
+      <p>${sig.map((l, i) => (i === 0 ? `<strong>${e(l)}</strong>` : i === 1 ? `<span style="color:#6d7454;font-weight:bold">${e(l)}</span>` : `<span style="color:#5f625a;font-size:13px">${e(l)}</span>`)).join("<br>")}</p>
+    </div></div>`;
+  return { subject: `Neu in der Mieter-App: ${rel.title}`, text, html };
+}
+
+/** Menü: neueste Ausgabe als Vorschau an NOTIFY_EMAIL. */
+function releaseNotesPreviewNow() {
+  const rel = RELEASES[0];
+  const to = ((PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAIL") || "").split(",")[0] || "").trim();
+  if (!rel || !to) { showResult("Neuigkeiten", !rel ? "Keine Neuigkeiten hinterlegt." : "NOTIFY_EMAIL fehlt – keine Vorschau möglich."); return { sent: false }; }
+  const m = releaseMail(rel);
+  MailApp.sendEmail({ to, subject: oneLine(`[VORSCHAU] ${m.subject}`), body: `VORSCHAU – so sieht die Mail an ${hmLeadEmail() || "(keine Adresse)"} aus:\n\n${m.text}`,
+    htmlBody: `<p style="background:#fff1c7;padding:8px;font-family:Arial"><strong>VORSCHAU</strong> – so sieht die Mail an ${escHtml(hmLeadEmail() || "(keine Adresse)")} aus</p>${m.html}`,
+    name: CONFIG.SENDER_NAME });
+  showResult("Neuigkeiten", `Vorschau „${rel.title}“ an ${to} gesendet.`);
+  return { sent: true, to };
+}
+
+/** Menü: neueste Ausgabe an die Leitung (HAUSMEISTER_EMAIL) – jede Ausgabe nur einmal. */
+function releaseNotesSendNow() {
+  const rel = RELEASES[0];
+  const props = PropertiesService.getScriptProperties();
+  const to = hmLeadEmail();
+  if (!rel || !to) { showResult("Neuigkeiten", !rel ? "Keine Neuigkeiten hinterlegt." : "Keine Adresse der Leitung (HAUSMEISTER_EMAIL)."); return { sent: false }; }
+  const key = `RELEASE_SENT_${rel.id}`;
+  const already = props.getProperty(key);
+  if (already) { showResult("Neuigkeiten", `„${rel.title}“ wurde bereits am ${already} an ${to} gesendet.`); return { sent: false, already }; }
+  const m = releaseMail(rel);
+  const replyTo = (props.getProperty("NOTIFY_EMAIL") || "").split(",")[0].trim();
+  MailApp.sendEmail({ to, subject: oneLine(m.subject), body: m.text, htmlBody: m.html, name: CONFIG.SENDER_NAME, replyTo: replyTo || undefined });
+  props.setProperty(key, Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd.MM.yyyy HH:mm"));
+  showResult("Neuigkeiten", `„${rel.title}“ an ${to} gesendet.`);
+  return { sent: true, to };
 }

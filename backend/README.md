@@ -226,6 +226,18 @@ In der Tabelle: Spalten „Langläufer“ (ja) und „Langläufer-Grund“, Zeil
   automatisch, unbenutzte nach einem Jahr.
 - Test: Menü **Mieter-App → „Benachrichtigung testen (an Verwaltung)“** schickt eine Testnachricht an alle Handys der Verwaltung.
 
+## Neuigkeiten für die Leitung (Release-Notes) und Anleitung fürs Team
+
+- **Neuigkeiten-Mail an 001/002:** Bei neuen Funktionen für den Hausmeisterdienst oben in `RELEASES` (Code.gs, Abschnitt
+  „Neuigkeiten“) einen Eintrag ergänzen – neuester zuerst: Titel, kurze Einleitung, Punkte (Symbol, Überschrift, Text),
+  optional Hinweise „So geben Sie es an Ihr Team weiter“. Nach dem Bereitstellen:
+  1. Menü **Mieter-App → „Neuigkeiten: Vorschau an mich“** (geht an `NOTIFY_EMAIL`),
+  2. passt alles: **„Neuigkeiten an die Leitung (001/002) senden“** (geht an `HAUSMEISTER_EMAIL`).
+  Jede Ausgabe geht nur einmal raus (Script-Eigenschaft `RELEASE_SENT_<id>`).
+- **Anleitung fürs Hausmeister-Team (Nr. ab 100):** erscheint beim ersten Start auf jedem Handy automatisch
+  (5 kurze Schritte, große Schrift: Willkommen, Scannen, Aufträge, Mangel, Hilfe) und ist jederzeit über
+  **„❓ Anleitung“** oben im Hausmeister-Bereich wieder abrufbar.
+
 ## Alarm-App ntfy (Verwaltung 007/008, Leitung 001)
 
 Web-Apps können auf Android weder eigene Töne noch lange Vibration auslösen. Für einen echten Alarm gibt es daher

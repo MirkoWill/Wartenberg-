@@ -880,6 +880,32 @@ function makeQrVideo(text) {
       check("Keine automatische Installations-Einblendung", prevented);
       await ctx.close();
     }
+    console.log("--- Anleitung fürs Hausmeister-Team (erster Start)");
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend({ tasks: [] }), hmIntro: true });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${STAFF}#hausmeister`); await p.waitForTimeout(300);
+      await acceptConsent(p); await p.waitForSelector("#staffArea:not([hidden])"); await p.waitForTimeout(700);
+      check("Team: Anleitung erscheint beim ersten Start (große Schrift)", await p.isVisible("#intro") && /Willkommen/.test(await p.textContent("#introTitle")) && await p.$eval("#intro", (e) => e.classList.contains("intro--hm")));
+      const titles = [];
+      for (let i = 0; i < 5; i++) { titles.push((await p.textContent("#introTitle")).trim()); await p.click("#introNext"); await p.waitForTimeout(100); }
+      check("Team: Schritte Willkommen → Scannen → Aufträge → Mangel → Hilfe, dann zu", titles.join("|") === "Willkommen!|Scannen|Aufträge|Mangel|Hilfe" && !(await p.isVisible("#intro")), titles);
+      await p.reload(); await p.waitForTimeout(900);
+      check("Team: Anleitung nur einmal", !(await p.isVisible("#intro")));
+      await p.click("#hmHelp"); await p.waitForTimeout(200);
+      check("Team: „❓ Anleitung“ öffnet sie wieder", await p.isVisible("#intro") && /Willkommen/.test(await p.textContent("#introTitle")));
+      await p.click("#introSkip");
+      check("Team: keine Skriptfehler", !p.errors.length, p.errors);
+      await ctx.close();
+    }
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend({}), hmIntro: true, preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?hm=${ADMIN}#cockpit`); await p.waitForTimeout(1200);
+      check("Verwaltung: keine Hausmeister-Anleitung, kein Anleitungs-Knopf", !(await p.isVisible("#intro")) && !(await p.isVisible("#hmHelp")));
+      await ctx.close();
+    }
+
     console.log("--- Hilfe: App auf den Startbildschirm");
     {
       const SAMSUNG = "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36";

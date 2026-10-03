@@ -1652,6 +1652,8 @@
     if (document.body.classList.contains("hm-simple") === on) return;
     document.body.classList.toggle("hm-simple", on);
     $("#hmTabbar").hidden = !on;
+    $("#hmHelp").hidden = !on;
+    if (on) setTimeout(() => { try { maybeShowHmIntro(); } catch (e) { /* egal */ } }, 300);
     if (on) selectStaffPane((($$("#staffTabs input").find((r) => r.checked)) || {}).value || "scan");
     if (on && !["hausmeister", ...LEGAL_VIEWS].includes(currentView)) location.hash = "hausmeister";
   }
@@ -3154,19 +3156,33 @@
     { icon: "🧰", title: "Services", text: "Zählerstände, Mängel, Klingelschild oder einen Techniker-Termin melden – gern mit Foto. Sie erhalten sofort eine Nummer." },
     { icon: "📋", title: "Meldungen und Infos", text: "Unter „Meldungen“ sehen Sie, wie weit Ihr Anliegen ist. Unter „Infos“ finden Sie Müllabfuhr, Hausordnung, Einkaufen und Abfahrten." },
   ];
+  // Kurze Anleitung für das Hausmeister-Team (Nr. ab 100) beim ersten Start – einfache Sprache, große Schrift
+  const HM_INTRO_KEY = "mieterapp.hmIntro";
+  const HM_INTRO = [
+    { icon: "👋", title: "Willkommen!", text: "Das ist Ihre Hausmeister-App. Unten sind drei große Knöpfe: Scannen, Aufträge und Mangel. Mehr brauchen Sie nicht." },
+    { icon: "📷", title: "Scannen", text: "Am Einsatzort auf „QR-Code scannen“ tippen und die Kamera auf den Aufkleber halten. Dann „Erledigt – Nachweis speichern“ tippen. Kein Internet? Kein Problem – die App schickt es später von selbst." },
+    { icon: "📋", title: "Aufträge", text: "Hier stehen die Aufträge von Ihrer Leitung. „👷 für dich“ heißt: Dieser Auftrag ist für Sie. Wenn er fertig ist: „✓ Erledigt“ tippen – gern mit einem Foto." },
+    { icon: "🛠️", title: "Mangel", text: "Etwas ist kaputt? Ort wählen, kurz aufschreiben, was los ist, ein Foto machen und „Mangel melden“ tippen. Bei Gefahr „Dringend“ ankreuzen." },
+    { icon: "❓", title: "Hilfe", text: "Diese Anleitung finden Sie jederzeit wieder oben über „❓ Anleitung“. Bei Fragen hilft Ihnen Ihre Leitung." },
+  ];
   let introStep = 0;
+  let introHm = false; // true = Anleitung für das Hausmeister-Team
 
   function renderIntro() {
-    const s = INTRO[introStep];
+    const steps = introHm ? HM_INTRO : INTRO;
+    const tt = (x) => (introHm ? x : t_(x));
+    const s = steps[introStep];
     $("#introIcon").textContent = s.icon;
-    $("#introTitle").textContent = t_(s.title);
-    $("#introText").textContent = t_(s.text);
-    $("#introDots").innerHTML = INTRO.map((_, i) => `<span class="${i === introStep ? "is-active" : ""}"></span>`).join("");
-    $("#introNext").textContent = introStep === INTRO.length - 1 ? t_("Los geht's") : t_("Weiter");
-    $("#introSkip").hidden = introStep === INTRO.length - 1;
+    $("#introTitle").textContent = tt(s.title);
+    $("#introText").textContent = tt(s.text);
+    $("#introDots").innerHTML = steps.map((_, i) => `<span class="${i === introStep ? "is-active" : ""}"></span>`).join("");
+    $("#introNext").textContent = introStep === steps.length - 1 ? tt(introHm ? "Verstanden – los geht's" : "Los geht's") : tt("Weiter");
+    $("#introSkip").hidden = introStep === steps.length - 1;
+    $("#intro").classList.toggle("intro--hm", introHm);
   }
 
-  function showIntro() {
+  function showIntro(hm) {
+    introHm = hm === true;
     introStep = 0;
     renderIntro();
     $("#intro").hidden = false;
@@ -3177,8 +3193,15 @@
   function closeIntro() {
     $("#intro").hidden = true;
     document.body.classList.toggle("has-modal", !$("#consent").hidden);
-    writeJson(INTRO_KEY, { seen: Date.now() });
-    renderInstallCard();
+    writeJson(introHm ? HM_INTRO_KEY : INTRO_KEY, { seen: Date.now() });
+    if (!introHm) renderInstallCard();
+  }
+
+  /** Hausmeister-Team: Anleitung einmal pro Gerät beim ersten Start (nach der Anmeldung). */
+  function maybeShowHmIntro() {
+    if (readJson(HM_INTRO_KEY) || !document.body.classList.contains("hm-simple") || !$("#intro").hidden) return;
+    if (!$("#consent").hidden || currentView !== "hausmeister") return;
+    showIntro(true);
   }
 
   /** Einmal pro Gerät, nach der Zustimmung; nicht für den Hausmeisterdienst. */
@@ -3190,11 +3213,12 @@
 
   function initIntro() {
     $("#introNext").addEventListener("click", () => {
-      if (introStep < INTRO.length - 1) { introStep++; renderIntro(); $("#introTitle").focus(); } else closeIntro();
+      if (introStep < (introHm ? HM_INTRO : INTRO).length - 1) { introStep++; renderIntro(); $("#introTitle").focus(); } else closeIntro();
     });
     $("#introSkip").addEventListener("click", closeIntro);
     $("#intro").addEventListener("keydown", (e) => { if (e.key === "Escape") closeIntro(); });
     $("#introOpen").addEventListener("click", (e) => { e.preventDefault(); showIntro(); });
+    $("#hmHelp").addEventListener("click", () => showIntro(true));
   }
 
   function initTextSize() {

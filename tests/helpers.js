@@ -52,7 +52,7 @@ async function launch(extraArgs = []) {
  * backend(d) bekommt die Anfrage (POST-JSON oder GET-Parameter) und gibt die Antwort zurück
  * (Objekt, oder null = Anfrage hängen lassen, oder "abort" = Netzfehler).
  */
-async function newContext(browser, { backend, preset, lang, width = 390, height = 844, scheme, extra = {} } = {}) {
+async function newContext(browser, { backend, preset, lang, width = 390, height = 844, scheme, extra = {}, hmIntro = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, locale: "de-DE", colorScheme: scheme, ...extra });
   ctx.requests = [];
   await ctx.route("https://script.google.com/**", async (route) => {
@@ -73,16 +73,18 @@ async function newContext(browser, { backend, preset, lang, width = 390, height 
       : { departures: [{ when: new Date(Date.now() + 240000).toISOString(), direction: "S+U Lichtenberg", line: { name: "256", product: "bus" } }] };
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   });
-  await ctx.addInitScript(({ preset, lang, PIN, PIN_HASH, CONSENT_VERSION }) => {
+  await ctx.addInitScript(({ preset, lang, PIN, PIN_HASH, CONSENT_VERSION, hmIntro }) => {
     if (sessionStorage.getItem("__preset")) return; // nur beim ersten Laden des Tabs
     sessionStorage.setItem("__preset", "1");
+    // Anleitung fürs Hausmeister-Team als gesehen markieren (würde sonst Klicks in anderen Tests verdecken)
+    if (!hmIntro) localStorage.setItem("mieterapp.hmIntro", JSON.stringify({ seen: Date.now() }));
     if (preset === "resident") {
       localStorage.setItem("mieterapp.consent", JSON.stringify({ v: CONSENT_VERSION, at: Date.now() }));
       localStorage.setItem("mieterapp.pin", JSON.stringify({ pin: PIN, hash: PIN_HASH }));
       localStorage.setItem("mieterapp.intro", JSON.stringify({ seen: Date.now() }));
     }
     if (lang) localStorage.setItem("mieterapp.lang", lang);
-  }, { preset, lang, PIN, PIN_HASH, CONSENT_VERSION });
+  }, { preset, lang, PIN, PIN_HASH, CONSENT_VERSION, hmIntro });
   return ctx;
 }
 

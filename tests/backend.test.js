@@ -1004,5 +1004,20 @@ props.NOTIFY_EMAIL = nm;
   check('Leitung (002) darf verteilen, aber keine Zuständigkeit/Notiz ändern', (() => { const t2 = sheets['Mitarbeiter'].grid.find((r) => r[0] === '002')[3]; return post({ action: 'adminUpdateTask', token: t2, id: du.id, assignee: '100' }).ok && !post({ action: 'adminUpdateTask', token: t2, id: du.id, owner: 'Verwaltung' }).ok; })());
   check('Zurück an die Verwaltung → Zuweisung gelöscht, Team sieht ihn nicht mehr', post({ action: 'adminUpdateTask', token: admTok, id: du.id, owner: 'Verwaltung' }).ok && !post({ action: 'getTasks', token: hmT }).tasks.some((t) => t.id === du.id));
 }
+
+// Neuigkeiten-Mail an die Leitung (Release-Notes)
+{
+  mails.length = 0;
+  ctx.releaseNotesPreviewNow();
+  const pv = mails.find((m) => /^\[VORSCHAU\] Neu in der Mieter-App/.test(m.subject));
+  check('Neuigkeiten: Vorschau geht an NOTIFY_EMAIL, nicht an die Leitung', pv && pv.to === 'service@willbrandt-kompagnon.de' && !mails.some((m) => m.to === 'info@gs-schreier.de'), mails.map((m) => m.to));
+  mails.length = 0;
+  const r1 = ctx.releaseNotesSendNow();
+  const rm = mails.find((m) => m.to === 'info@gs-schreier.de');
+  check('Neuigkeiten: schöne Mail an die Leitung (Titel, Punkte, Team-Hinweise, Link zur App)', r1.sent && rm && /^Neu in der Mieter-App: /.test(rm.subject) && /Zu verteilen/.test(rm.htmlBody) && /So geben Sie es an Ihr Team weiter/.test(rm.htmlBody) && /#cockpit/.test(rm.htmlBody) && /002/.test(rm.body), rm && rm.subject);
+  mails.length = 0;
+  const r2 = ctx.releaseNotesSendNow();
+  check('Neuigkeiten: dieselbe Ausgabe geht nur einmal raus', !r2.sent && r2.already && mails.length === 0);
+}
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (Löschkonzept/Überwachung)');
 process.exitCode = fails ? 1 : 0;
