@@ -1196,3 +1196,5 @@ body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }
 .intro--hm .btn { min-height: 60px; font-size: 20px; }
 .weather-warn { margin-bottom: 16px; }
 .weather-warn .weather__warn:first-child { margin-top: 0; }
+.contact__img { display: block; width: 36px; height: 36px; object-fit: contain; }
+@media (prefers-color-scheme: dark) { .contact__img { background: #fff; border-radius: 8px; padding: 3px; } }
