@@ -206,7 +206,7 @@ In der Tabelle: Spalten „Langläufer“ (ja) und „Langläufer-Grund“, Zeil
 - **Gemeinsam trainieren:** Beim Buchen optional „Gemeinsam mit“ andere Nummern wählen (Spalte „Mit“).
   Die Buchung zählt dann für alle Beteiligten; ein Partner kann für sich absagen, die Buchung bleibt bestehen.
 - Statistik „Anfeuern“: Trainings (gebuchte Zeiten, die begonnen haben) je Woche/Monat/Jahr, Minuten,
-  🔥 Wochen in Folge, Wochenziel (2×). Anzeige nur mit Nummern. Buchungen werden nach 2 Jahren gelöscht.
+  🔥 Wochen in Folge, Wochenziel (3×). Anzeige nur mit Nummern. Buchungen werden nach 2 Jahren gelöscht.
 
 ## Benachrichtigungen (nur Android)
 

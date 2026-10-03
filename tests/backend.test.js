@@ -614,7 +614,7 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   const clash = post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '19:00', minutes: 60 });
   check('Fitness: Überschneidung abgelehnt (eine Buchung zur Zeit)', !clash.ok && /belegt/.test(clash.error) && /010/.test(clash.error), clash);
   check('Fitness: direkt danach geht', post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '19:30', minutes: 30 }).ok);
-  check('Fitness: Regeln (Zeit, Dauer, Schritte, Vorlauf)', ['05:30', '22:30'].every((t) => !post({ action: 'fitnessBook', token: fitTok, date: day, time: t, minutes: 60 }).ok)
+  check('Fitness: Regeln (Zeit, Dauer, Schritte, Vorlauf)', ['04:30', '22:30'].every((t) => !post({ action: 'fitnessBook', token: fitTok, date: day, time: t, minutes: 60 }).ok)
     && [20, 150, 45, 'x'].every((m) => !post({ action: 'fitnessBook', token: fitTok, date: day, time: '08:00', minutes: m }).ok)
     && !post({ action: 'fitnessBook', token: fitTok, date: day, time: '08:15', minutes: 30 }).ok
     && !post({ action: 'fitnessBook', token: fitTok, date: '2020-01-01', time: '08:00', minutes: 30 }).ok

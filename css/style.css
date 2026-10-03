@@ -1194,6 +1194,5 @@ body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }
 .intro--hm .intro__text { font-size: 21px; line-height: 1.5; }
 .intro--hm .intro__icon { font-size: 64px; }
 .intro--hm .btn { min-height: 60px; font-size: 20px; }
-.tile--wide { display: grid; min-height: 92px; row-gap: 2px; grid-template-columns: auto 1fr; column-gap: 14px; align-items: center; margin-bottom: 12px; border-top-color: var(--c-primary); background: var(--c-primary-soft); }
-.tile--wide .tile__icon { grid-row: span 2; font-size: 34px; margin: 0; }
-.tile--wide .tile__label { font-size: 19px; }
+.weather-warn { margin-bottom: 16px; }
+.weather-warn .weather__warn:first-child { margin-top: 0; }
