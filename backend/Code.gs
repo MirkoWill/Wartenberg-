@@ -108,8 +108,8 @@ const CONFIG = {
   // Rollen im Blatt „Mitarbeiter“: Leitung = Chef des Hausmeisterdienstes (Team-Cockpit, nur Hausmeister-Aufträge)
   ROLES: ["Hausmeister", "Leitung", "Verwaltung", "Fitness"],
   // Fitnessraum (privat): Mitglieder nach Nummer, Buchungsregeln, Wochenziel für die Statistik
-  FITNESS: { members: ["007", "008", "010", "011"], fromHour: 6, toHour: 23, minMinutes: 30, maxMinutes: 120,
-    stepMinutes: 30, daysAhead: 28, maxFuture: 10, weeklyGoal: 2,
+  FITNESS: { members: ["007", "008", "010", "011"], fromHour: 5, toHour: 23, minMinutes: 30, maxMinutes: 120,
+    stepMinutes: 30, daysAhead: 28, maxFuture: 10, weeklyGoal: 3,
     remindMinutes: 60 }, // Erinnerung per Benachrichtigung ca. 1 Std. vorher (Prüfung alle 15 Min.)
   // Benachrichtigungen (Web Push, Android): Kontakt für die Push-Dienste, Obergrenzen
   PUSH: { contact: "info@willbrandt-kompagnon.de", maxSubscriptions: 1000, maxPerSend: 300 },

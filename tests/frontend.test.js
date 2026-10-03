@@ -157,7 +157,8 @@ function makeQrVideo(text) {
       check("Abfahrten: Haltestelle, Linien, Link zur BVG – keine Anfrage an transport.rest", /Dorfstr\./.test(await p.textContent("#transitStop")) && (await p.$$(".transit-line")).length === 3
         && /^https:\/\/www\.bvg\.de\//.test(await p.getAttribute("#transitInfo", "href")) && !ctx.transitCalls);
       check("Apotheken-Notdienst als Link, kein eingebettetes Fenster", (await p.$$("iframe")).length === 0 && /aponet\.de/.test(await p.getAttribute(".kiez-link", "href")));
-      check("Services: großer Knopf „Allgemeines Anliegen“ + 5 Kacheln ohne „Meine Meldungen“", (await p.$$eval(".tile", (t) => t.map((x) => x.getAttribute("href")))).join() === "#anliegen,#wasser,#mangel,#elektro,#klingel,#strom");
+      check("Services: 6 gleich große Kacheln, „Allgemeines Anliegen“ neben Stromzähler, ohne „Meine Meldungen“", (await p.$$eval(".tile", (t) => t.map((x) => x.getAttribute("href")))).join() === "#wasser,#mangel,#elektro,#klingel,#strom,#anliegen"
+        && await p.$$eval(".tile", (t) => new Set(t.map((x) => Math.round(x.getBoundingClientRect().width))).size === 1));
       for (const bad of ['#x"],body,[a="', "#__proto__", "?obj=<b>#notfall"]) {
         await p.goto(base + bad); await p.waitForTimeout(200);
         check(`Manipulierte Adresse ${bad} → Startseite`, (await p.textContent("#viewTitle")) === "Start");
@@ -565,17 +566,17 @@ function makeQrVideo(text) {
       await p.waitForTimeout(400);
       check("Fitness (010): Link öffnet den Fitnessraum, Reiter „Fitness“", /Fitness/.test(await p.textContent("#staffTab")) && (await tabs(p)).includes("Fitness*"), await tabs(p));
       check("Fitness: Belegung zeigt nur Nummern", /Nr\. 011/.test(await p.textContent("#fitUpcoming")) && /18:00–19:00/.test(await p.textContent("#fitUpcoming")));
-      check("Fitness: Formular 29 Tage, 06:00–22:30, 30 Min–2 Std", await p.$$eval("#fitDate option", (o) => o.length) === 29
-        && await p.$eval("#fitTime option", (o) => o.value) === "06:00" && await p.$eval("#fitTime option:last-child", (o) => o.value) === "22:30"
+      check("Fitness: Formular 29 Tage, 05:00–22:30, 30 Min–2 Std", await p.$$eval("#fitDate option", (o) => o.length) === 29
+        && await p.$eval("#fitTime option", (o) => o.value) === "05:00" && await p.$eval("#fitTime option:last-child", (o) => o.value) === "22:30"
         && (await p.$$eval("#fitMinutes option", (o) => o.map((x) => x.value))).join() === "30,60,90,120");
       await p.selectOption("#fitDate", { index: 1 });
       check("Fitness: belegte Zeit am gewählten Tag als Hinweis (gemeinsam: beide Nummern)", /18:00–19:00 \(Nr\. 011 \+ 007\)/.test(await p.textContent("#fitDayInfo")), await p.textContent("#fitDayInfo"));
       check("Fitness: Wochenziel für mich (0 von 2)", /0× von 2/.test(await p.textContent("#fitMe")));
       const board = await p.$$eval("#fitBoard li", (l) => l.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
-      check("Fitness: Rangliste Woche – 011 vorne mit 🥇 und 🔥 4", /🥇 Nr\. 011 2 Trainings · 2 Std gesamt 🔥 4/.test(board[0]), board);
+      check("Fitness: Rangliste Woche – ich (010) immer oben, 011 hat 🥇 und 🔥 4", /Nr\. 010/.test(board[0]) && board.some((b) => /🥇 Nr\. 011 2 Trainings · 2 Std gesamt 🔥 4/.test(b)), board);
       await p.click("#fitPeriod [data-period=month]");
       const board2 = await p.$$eval("#fitBoard li .fit-board__nr", (l) => l.map((x) => x.textContent));
-      check("Fitness: Monat umschaltbar – 007 vorne", board2[0] === "Nr. 007", board2);
+      check("Fitness: Monat umschaltbar – ich oben, dann 007 als Führender", board2[0] === "Nr. 010" && board2[1] === "Nr. 007", board2);
       check("Gemeinsam: als Partner gebucht → „mit Nr. 008“ und „Absagen“", /mit Nr\. 008/.test(await p.textContent("#fitMine")) && (await p.textContent("#fitMine [data-fit-cancel]")).trim() === "Absagen");
       check("Gemeinsam: Auswahl zeigt die anderen drei Nummern", (await p.$$eval("#fitWith [data-with]", (b) => b.map((x) => x.dataset.with))).join() === "007,008,011");
       await p.click("#fitWith [data-with='008']");
@@ -784,7 +785,11 @@ function makeQrVideo(text) {
       const names = await p.$$eval(".weather__name", (els) => els.map((e) => e.textContent));
       check("Wetter: 3 Tage ab heute (Vortag ausgeblendet)", names.length === 3 && names[0] === "Heute" && names[1] === "Morgen", names);
       check("Wetter: Symbole und Temperaturen", /☀️/.test(await p.textContent(".weather__days")) && /⛈️/.test(await p.textContent(".weather__days")) && /31°/.test(await p.textContent(".weather__days")));
-      check("Hitze-Hinweis ab 30 °C mit Höchstwert", /Hitze: bis 34 °C/.test(await p.textContent("#weatherBox")) && await p.isVisible(".weather__warn--heat"));
+      check("Hitze-Hinweis ab 30 °C mit Höchstwert – oben auf der Startseite", /Hitze: bis 34 °C/.test(await p.textContent("#weatherWarn")) && await p.isVisible("#weatherWarn .weather__warn--heat"));
+      check("Startseite: Warnung oben, dann Notrufe, Hausreinigung, Verhaltensregeln, Wetter unten", await p.evaluate(() => {
+        const ids = ["weatherWarn", "emergencyList", "careBox", "emergencyRules", "weatherBox"].map((id) => document.getElementById(id));
+        return ids.every((el, i) => i === 0 || (ids[i - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+      }));
       check("Quelle DWD genannt", /Deutscher Wetterdienst/.test(await p.textContent(".weather__src")));
       await ctx.close();
 
@@ -792,8 +797,8 @@ function makeQrVideo(text) {
         alerts: [{ event: "STRENGER FROST", headline: "Amtliche WARNUNG vor STRENGEM FROST", headlineEn: "Official WARNING of SEVERE FROST", severity: "moderate", expires: new Date(Date.now() + 86400000).toISOString() }] };
       const ctx2 = await newContext(browser, { backend: fakeBackend(state), preset: "resident", lang: "en" });
       const p2 = await newPage(ctx2);
-      await p2.goto(`${base}?obj=lind6#notfall`); await p2.waitForSelector("#weatherBox .weather__warn");
-      const txt = await p2.textContent("#weatherBox");
+      await p2.goto(`${base}?obj=lind6#notfall`); await p2.waitForSelector("#weatherWarn .weather__warn");
+      const txt = (await p2.textContent("#weatherWarn")) + (await p2.textContent("#weatherBox"));
       check("Frost: DWD-Warnung (englisch), kein doppelter eigener Frost-Hinweis", /Official WARNING of SEVERE FROST/.test(txt) && /valid until/.test(txt) && !(await p2.isVisible(".weather__warn--cold")) && (await p2.$$(".weather__warn")).length === 1, txt);
       check("Wetter übersetzt", /Today/.test(txt) && /Source: Deutscher Wetterdienst/.test(txt));
       await ctx2.close();

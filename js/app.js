@@ -708,7 +708,8 @@
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()); // yyyy-mm-dd
     const fresh = w && Array.isArray(w.days) && Date.now() - new Date(w.at).getTime() < 24 * 3600000;
     const days = fresh ? w.days.filter((d) => d && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && d.date >= today).slice(0, 3) : [];
-    if (!days.length) { box.hidden = true; box.innerHTML = ""; return; }
+    const warnBox = $("#weatherWarn");
+    if (!days.length) { box.hidden = true; box.innerHTML = ""; warnBox.hidden = true; warnBox.innerHTML = ""; return; }
     const cfg = CFG.WEATHER || {};
     const num = (x) => (typeof x === "number" && isFinite(x) ? Math.round(x) : null);
     const dayName = (d, i) => (d.date === today ? t_("Heute") : i <= 1 && days[0].date === today ? t_("Morgen")
@@ -733,8 +734,14 @@
       warn.push({ cls: extreme ? "severe" : "dwd", icon: "⚠️", title: (LANG !== "de" && a.headlineEn) || a.headline || a.event,
         text: [t_("Warnung des Deutschen Wetterdienstes"), until(a.expires) ? t_("gültig bis {zeit}", { zeit: until(a.expires) }) : ""].filter(Boolean).join(" · ") });
     });
+    // Warnhinweise immer oben auf der Startseite, die Vorhersage ganz unten
+    warnBox.hidden = !warn.length;
+    warnBox.innerHTML = warn.map((x) => `<div class="weather__warn weather__warn--${x.cls}" role="note">
+        <span class="weather__warn-icon" aria-hidden="true">${x.icon}</span>
+        <div><strong>${esc(x.title)}</strong>${x.text ? `<p>${esc(x.text)}</p>` : ""}</div></div>`).join("");
     box.hidden = false;
     box.innerHTML = `
+      <h2 class="section-title">${esc(t_("Wetter"))}</h2>
       <div class="weather__days">${days.map((d, i) => {
         const [icon, label] = Object.prototype.hasOwnProperty.call(WEATHER_ICONS, d.icon) ? WEATHER_ICONS[d.icon] : ["🌡️", ""];
         const hi = num(d.max), lo = num(d.min);
@@ -744,9 +751,6 @@
           <div class="weather__temp"><strong>${hi === null ? "–" : esc(hi) + "°"}</strong> <span class="muted">${lo === null ? "" : esc(lo) + "°"}</span></div>
         </div>`;
       }).join("")}</div>
-      ${warn.map((x) => `<div class="weather__warn weather__warn--${x.cls}" role="note">
-        <span class="weather__warn-icon" aria-hidden="true">${x.icon}</span>
-        <div><strong>${esc(x.title)}</strong>${x.text ? `<p>${esc(x.text)}</p>` : ""}</div></div>`).join("")}
       <p class="weather__src">${esc(t_("Quelle: Deutscher Wetterdienst"))}</p>`;
   }
 
@@ -2670,7 +2674,7 @@
      ====================================================================== */
 
   const FIT_KEY = "mieterapp.fitness";
-  const FIT_RULES = { fromHour: 6, toHour: 23, minMinutes: 30, maxMinutes: 120, stepMinutes: 30, daysAhead: 28 };
+  const FIT_RULES = { fromHour: 5, toHour: 23, minMinutes: 30, maxMinutes: 120, stepMinutes: 30, daysAhead: 28 };
   let fitLoading = null;
   let fitPeriod = "week";
 
@@ -2763,7 +2767,7 @@
     if (!d) return;
     const me = String(d.me || "");
     const admin = ((staff() || {}).user || {}).role === "Verwaltung";
-    const goal = Number(d.weeklyGoal) || 2;
+    const goal = Number(d.weeklyGoal) || 3;
     const members = Array.isArray(d.members) ? d.members : [];
     const mine = members.find((m) => m.nr === me);
     const slot = (b) => `${fitHm(new Date(b.start))}–${fitHm(new Date(b.end))} Uhr`;
@@ -2813,7 +2817,9 @@
     // Rangliste
     const medals = ["🥇", "🥈", "🥉"];
     const ranked = members.slice().sort((a, b) => (b[fitPeriod].count - a[fitPeriod].count) || (b[fitPeriod].minutes - a[fitPeriod].minutes) || a.nr.localeCompare(b.nr));
-    $("#fitBoard").innerHTML = ranked.map((m, i) => {
+    // Platz (Medaille) nach Rang, angezeigt wird man selbst aber immer ganz oben
+    const shown = ranked.map((m, i) => ({ m, i })).sort((a, b) => (b.m.nr === me) - (a.m.nr === me));
+    $("#fitBoard").innerHTML = shown.map(({ m, i }) => {
       const s = m[fitPeriod];
       const medal = s.count ? medals[i] || "💪" : "·";
       const pct = Math.min(100, Math.round((m.week.count / goal) * 100));
