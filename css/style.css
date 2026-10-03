@@ -1190,3 +1190,7 @@ body.hm-simple .badge { font-size: 16px; padding: 6px 12px; }
 .tabbar--hm .tabbar__item[aria-current="page"] span { opacity: 1; }
 .tabbar--hm .seg-count { position: absolute; top: 6px; right: calc(50% - 34px); }
 body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }
+.intro--hm .intro__title { font-size: 30px; }
+.intro--hm .intro__text { font-size: 21px; line-height: 1.5; }
+.intro--hm .intro__icon { font-size: 64px; }
+.intro--hm .btn { min-height: 60px; font-size: 20px; }
