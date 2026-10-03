@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=86">
+  <link rel="stylesheet" href="css/style.css?v=87">
 </head>
 <body>
   <header class="app-header">
@@ -515,6 +515,7 @@
     <!-- ============ EPIC 2: Service-Übersicht ============ -->
     <section class="view" data-view="services" data-title="Services" hidden>
       <p class="lead">Was möchten Sie erledigen?</p>
+      <a class="tile tile--wide" href="#anliegen"><span class="tile__icon">💬</span><span class="tile__label">Allgemeines Anliegen</span><span class="tile__sub">Frage, Hinweis oder Wunsch an die Hausverwaltung</span></a>
       <div class="tile-grid">
         <a class="tile" href="#wasser"><span class="tile__icon">💧</span><span class="tile__label">Zählerstände melden</span><span class="tile__sub">Wasser &amp; Heizung, mit Foto</span></a>
         <a class="tile" href="#mangel"><span class="tile__icon">🛠️</span><span class="tile__label">Mangel melden</span><span class="tile__sub">Schaden im Haus, gern mit Foto</span></a>
@@ -702,6 +703,50 @@
       </form>
     </section>
 
+
+    <!-- ============ Allgemeines Anliegen ============ -->
+    <section class="view" data-view="anliegen" data-title="Allgemeines Anliegen" data-parent="services" hidden>
+      <p class="lead">Ihre Frage, Ihr Hinweis oder Wunsch an die Hausverwaltung – wir melden uns bei Ihnen.</p>
+      <p class="notice">Bei Notfällen (Wasserrohrbruch, Stromausfall, Gasgeruch) bitte sofort anrufen – die Nummern stehen auf der Startseite.</p>
+      <form class="form" id="formAnliegen" novalidate>
+        <label class="field">
+          <span class="field__label">Worum geht es? *</span>
+          <select name="thema" required>
+            <option value="">Bitte wählen</option>
+            <option value="Frage zur Wohnung / zum Mietverhältnis">Frage zur Wohnung / zum Mietverhältnis</option>
+            <option value="Nebenkosten / Abrechnung">Nebenkosten / Abrechnung</option>
+            <option value="Hausordnung / Zusammenleben">Hausordnung / Zusammenleben</option>
+            <option value="Schlüssel / Zugang">Schlüssel / Zugang</option>
+            <option value="Lob / Anregung">Lob / Anregung</option>
+            <option value="Sonstiges">Sonstiges</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Ihr Anliegen *</span>
+          <textarea name="details" rows="5" required maxlength="2000" placeholder="Bitte kurz beschreiben, worum es geht."></textarea>
+        </label>
+        <label class="field">
+          <span class="field__label">Foto (optional)</span>
+          <input type="file" name="foto" accept="image/*" data-preview="anliegenPreview">
+          <img class="photo-preview" id="anliegenPreview" alt="Vorschau Foto" hidden>
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="field__label">Wohnung / Gewerbe *</span>
+            <input name="wohnung" required autocomplete="off" placeholder="z. B. 04 oder Friseur">
+          </label>
+          <label class="field">
+            <span class="field__label">Ihr Name *</span>
+            <input name="name" required autocomplete="family-name">
+          </label>
+        </div>
+        <label class="field">
+          <span class="field__label">Telefon oder E-Mail</span>
+          <input name="kontakt" autocomplete="email" placeholder="für Rückfragen (optional)">
+        </label>
+        <button class="btn btn--primary btn--block" type="submit">Anliegen senden</button>
+      </form>
+    </section>
 
     <!-- ============ Impressum ============ -->
     <section class="view legal" data-view="impressum" data-title="Impressum" hidden>
@@ -974,8 +1019,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=86"></script>
-  <script src="js/i18n.js?v=86"></script>
-  <script src="js/app.js?v=86"></script>
+  <script src="js/config.js?v=87"></script>
+  <script src="js/i18n.js?v=87"></script>
+  <script src="js/app.js?v=87"></script>
 </body>
 </html>

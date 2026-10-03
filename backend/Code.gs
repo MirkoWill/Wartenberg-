@@ -99,7 +99,7 @@ const CONFIG = {
       headers: ["Datum", "Bis", "Tätigkeit", "Ort", "Bemerkung", "Kalender-ID"],
     },
   },
-  TICKET_TYPES: ["Elektroraum", "Klingelschild", "Mangel"],
+  TICKET_TYPES: ["Elektroraum", "Klingelschild", "Mangel", "Anliegen"],
   STATUS_OPEN: "offen",
   STATUS_VALUES: ["offen", "in Arbeit", "erledigt"],
   // Wer erledigt welchen Auftrag? Der Hausmeister sieht im Portal nur „Hausmeister“-Aufträge,
@@ -118,7 +118,7 @@ const CONFIG = {
     dorf24: "Dorfstr. 24", lind2: "Lindenberger Str. 2", lind4: "Lindenberger Str. 4",
     lind6: "Lindenberger Str. 6", lind8: "Lindenberger Str. 8",
   },
-  DEFAULT_OWNER: { Elektroraum: "Verwaltung", Klingelschild: "Hausmeister", Mangel: "Verwaltung", "Mangel (intern)": "Verwaltung" },
+  DEFAULT_OWNER: { Elektroraum: "Verwaltung", Klingelschild: "Hausmeister", Mangel: "Verwaltung", "Mangel (intern)": "Verwaltung", Anliegen: "Verwaltung" },
   PHOTO_FOLDER_NAME: "Mieter-App Fotos",
   MAX_TEXT: 2000,
   MAX_PHOTO_BYTES: 6 * 1024 * 1024,
@@ -143,6 +143,7 @@ const CONFIG = {
     "Mangel (intern)": { react: { workdays: 3 }, done: { days: 14 } },
     Klingelschild: { react: { workdays: 3 }, done: { workdays: 10 } },
     Elektroraum: { react: { workdaysBeforeAppointment: 1 }, done: { appointment: true } },
+    Anliegen: { react: { workdays: 3 }, done: { days: 14 } }, // allgemeines Anliegen (Frage, Hinweis, Wunsch)
   },
   SLA_WARN_HOURS: 24,
   // Monatsbericht für den Beirat: Entwurf am 1. um 8 Uhr an die Verwaltung, Versand um REPORT_SEND_HOUR.
@@ -342,7 +343,7 @@ function doGet(e) {
    Aktionen
    ========================================================================== */
 
-/** US 2.3 / 2.4 – Elektroraum, Klingelschild, Mangel */
+/** US 2.3 / 2.4 – Elektroraum, Klingelschild, Mangel, allgemeines Anliegen (Thema steht in „Ort“) */
 function submitTicket(p) {
   const type = str(p.type, 40);
   if (CONFIG.TICKET_TYPES.indexOf(type) === -1) throw userError("Unbekannter Antragstyp");
@@ -356,6 +357,9 @@ function submitTicket(p) {
     const dateError = checkWorkdayDate(termin);
     if (dateError) throw userError(dateError);
     if (!str(p.wohnung) || !str(p.name)) throw userError("Wohnung und Name sind Pflichtfelder");
+  }
+  if (type === "Anliegen" && (!str(p.wohnung) || !str(p.name))) {
+    throw userError("Wohnung und Name sind Pflichtfelder – damit wir Ihnen antworten können");
   }
   if (type === "Klingelschild" && (!str(p.wohnung) || !str(p.name))) {
     throw userError("Wohnung und Name sind Pflichtfelder");
@@ -378,8 +382,9 @@ function submitTicket(p) {
     `Wohnung: ${str(p.wohnung)}`,
     `Name: ${str(p.name)}`,
     termin ? `Termin: ${termin}` : "",
-    str(p.ort) ? `Ort: ${str(p.ort)}` : "",
-    `Details: ${details}`,
+    str(p.ort) ? `${type === "Anliegen" ? "Thema" : "Ort"}: ${str(p.ort)}` : "",
+    str(p.telefon || p.kontakt) ? `Kontakt: ${str(p.telefon || p.kontakt, 120)}` : "",
+    `${type === "Anliegen" ? "Nachricht" : "Details"}: ${details}`,
     photoUrl ? `Foto: ${photoUrl}` : "",
     defaultOwner(type) === "Hausmeister" ? `\nGeht an die Leitung des Hausmeisterdienstes (Übersicht morgen um ${CONFIG.HM_DIGEST_HOUR} Uhr) – sie verteilt den Auftrag im Team.` : "",
   ]);
@@ -1911,7 +1916,7 @@ function adminOverview(p, user) {
   const months = [];
   for (let i = 11; i >= 0; i--) months.push(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 15)));
   const perMonth = {};
-  months.forEach((m) => { perMonth[m] = { Mangel: 0, Klingelschild: 0, Elektroraum: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 0 }; });
+  months.forEach((m) => { perMonth[m] = { Mangel: 0, Klingelschild: 0, Elektroraum: 0, Anliegen: 0, "Mangel (intern)": 0, Zähler: 0, Nachweise: 0 }; });
   tasks.forEach((t) => { const m = t.created && monthKey(t.created); if (perMonth[m] && perMonth[m][t.type] !== undefined) perMonth[m][t.type]++; });
   const meterBatches = {};
   (lead ? [] : sheetObjects(CONFIG.SHEETS.meter)).forEach((r) => {
@@ -2148,7 +2153,7 @@ function reportData(y, m) {
   const tasks = allTasks().map((t) => Object.assign(t, { sla: slaInfo(t, now) }));
   const inRange = (d, a, b) => d instanceof Date && d >= a && d < b;
   const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-  const TYPES = ["Mangel", "Mangel (intern)", "Klingelschild", "Elektroraum"];
+  const TYPES = ["Mangel", "Mangel (intern)", "Klingelschild", "Elektroraum", "Anliegen"];
   const stats = (a, b) => {
     const received = tasks.filter((t) => inRange(t.created, a, b));
     const closedAll = tasks.filter((t) => t.status === "erledigt" && inRange(t.done, a, b));
@@ -2265,7 +2270,7 @@ function reportHtml(r, preview, comment) {
       ${c.byType.map((t) => `<tr><td>${e(t.type === "Mangel (intern)" ? "Mangel (vom Hausmeister gemeldet)" : t.type)}</td><td>${t.received}</td><td>${t.closed}</td><td>${pct(t.slaQuote)}</td></tr>`).join("")}
     </table>
     <p class="muted">Service-Ziele: Dringend – Reaktion 1 Tag, erledigt 3 Tage · Mangel – Reaktion 3 Werktage, erledigt 14 Tage ·
-      Klingelschild – Reaktion 3 Werktage, erledigt 10 Werktage · Elektroraum – bestätigt 1 Werktag vor dem Termin, erledigt am Termin.</p>
+      Klingelschild – Reaktion 3 Werktage, erledigt 10 Werktage · Anliegen – Reaktion 3 Werktage, erledigt 14 Tage · Elektroraum – bestätigt 1 Werktag vor dem Termin, erledigt am Termin.</p>
 
     <h2>Meldungen nach Aufgang</h2>
     ${entr.length ? `<table class="rows">${entr.map(([k, v]) => `<tr><td style="width:40%">${e(k)}</td><td style="width:50%">${bar(v, maxE, "#6d7454")}</td><td>${v}</td></tr>`).join("")}</table>` : '<p class="muted">Keine Meldungen in diesem Monat.</p>'}
@@ -2836,7 +2841,7 @@ function buildStartSheet(ss) {
 
 function sheetPurpose(name) {
   return {
-    "Tickets": "Meldungen der Bewohner (Mangel, Klingelschild, Elektroraum) – Status, Zuständig, Notiz.",
+    "Tickets": "Meldungen der Bewohner (Mangel, Klingelschild, Elektroraum, Anliegen) – Status, Zuständig, Notiz.",
     "Mängel Hausmeister": "Vom Hausmeisterdienst gemeldete Mängel.",
     "Aktuelles": "Hinweise auf der Startseite der App (auch im Cockpit anlegbar).",
     "Umfragen": "Stimmungsbilder (auch im Cockpit anlegbar).",

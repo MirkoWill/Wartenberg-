@@ -486,7 +486,7 @@ wx.fail = false; delete cache.weather;
 {
   const now = new Date();
   const rd = ctx.reportData(now.getFullYear(), now.getMonth());
-  check('Monatsbericht: Kennzahlen, 6-Monats-Trend, Reinigung', typeof rd.cur.received === 'number' && rd.trend.length === 6 && typeof rd.cleaning.soll === 'number' && rd.cur.byType.length === 4, rd.cur);
+  check('Monatsbericht: Kennzahlen, 6-Monats-Trend, Reinigung', typeof rd.cur.received === 'number' && rd.trend.length === 6 && typeof rd.cleaning.soll === 'number' && rd.cur.byType.length === 5 && rd.cur.byType.some((b) => b.type === 'Anliegen'), rd.cur);
   const html = ctx.reportHtml(rd, false, '');
   check('Monatsbericht: keine Namen, Wohnungen, Beschreibungen, Mitarbeiternummern', !/Müller|Max Schreier|Tor schließt nicht|Nr\. 100|Whg /.test(html) && /Monatsbericht/.test(html), html.length);
   check('Anmerkungen erscheinen im PDF (Schadcode entschärft)', /Anmerkungen der Verwaltung/.test(ctx.reportHtml(rd, false, 'Zeile 1\n<b>x</b>')) && !/<b>x<\/b>/.test(ctx.reportHtml(rd, false, '<b>x</b>')));
@@ -1018,6 +1018,24 @@ props.NOTIFY_EMAIL = nm;
   mails.length = 0;
   const r2 = ctx.releaseNotesSendNow();
   check('Neuigkeiten: dieselbe Ausgabe geht nur einmal raus', !r2.sent && r2.already && mails.length === 0);
+}
+
+// Allgemeines Anliegen
+{
+  Object.keys(cache).forEach((k) => delete cache[k]);
+  check('Anliegen: ohne Wohnung/Name abgelehnt', post({ ...base, action: 'submitTicket', type: 'Anliegen', ort: 'Sonstiges', details: 'x' }).ok === false);
+  mails.length = 0;
+  const an = post({ ...base, action: 'submitTicket', type: 'Anliegen', ort: 'Nebenkosten / Abrechnung', details: 'Frage zur Abrechnung', wohnung: '07', name: 'Schulz', kontakt: '0170 555' });
+  const arow = sheets['Tickets'].grid.find((r) => r[0] === an.id);
+  check('Anliegen: gespeichert als Typ „Anliegen“, Thema in „Ort“, zuständig Verwaltung', an.ok && arow[2] === 'Anliegen' && arow[11] === 'Nebenkosten / Abrechnung' && arow[17] === 'Verwaltung' && arow[12] === '0170 555', arow);
+  const am = mails.find((m) => /Neuer Antrag: Anliegen/.test(m.subject));
+  check('Anliegen: Mail mit Thema, Nachricht und Kontakt', am && /Thema: Nebenkosten/.test(am.body) && /Nachricht: Frage zur Abrechnung/.test(am.body) && /Kontakt: 0170 555/.test(am.body), am && am.body);
+  const ov = post({ action: 'adminOverview', token: admTok });
+  const at = ov.tasks.find((t) => t.id === an.id);
+  check('Anliegen: im Cockpit mit Ampel (Service-Ziel 3 Werktage)', at && at.type === 'Anliegen' && at.sla && at.sla.light === 'green' && at.sla.reactDue, at);
+  check('Anliegen: Team/Leitung sehen es nicht (Verwaltung)', !post({ action: 'getTasks', token: leadTok }).tasks.some((t) => t.id === an.id));
+  check('Anliegen: kann der Verwaltung auch an den Hausmeister geben', post({ action: 'adminUpdateTask', token: admTok, id: an.id, owner: 'Hausmeister' }).ok && post({ action: 'getTasks', token: leadTok }).tasks.some((t) => t.id === an.id));
+  post({ action: 'adminUpdateTask', token: admTok, id: an.id, owner: 'Verwaltung', status: 'erledigt' });
 }
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (Löschkonzept/Überwachung)');
 process.exitCode = fails ? 1 : 0;

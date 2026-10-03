@@ -1152,6 +1152,20 @@
 
   // US 2.4b – Mängelmeldung (Foto optional)
   function initDefectForm() {
+    bindForm("#formAnliegen", async (form) => {
+      const f = form.elements;
+      return {
+        action: "submitTicket",
+        type: "Anliegen",
+        ort: f.thema.value,
+        wohnung: f.wohnung.value.trim(),
+        name: f.name.value.trim(),
+        kontakt: f.kontakt.value.trim(),
+        details: f.details.value.trim(),
+        photo: f.foto.files[0] ? await readPhoto(f.foto.files[0]) : null,
+      };
+    }, "Danke! Ihr Anliegen ist bei uns angekommen – wir melden uns.");
+
     bindForm("#formDefect", async (form) => {
       const f = form.elements;
       return {
@@ -2509,6 +2523,7 @@
       { key: "Mangel (intern)", label: "Mangel (intern)", color: "#e08a00" },
       { key: "Klingelschild", label: "Klingelschild", color: "#6d7454" },
       { key: "Elektroraum", label: "Elektroraum", color: "#3a6ea5" },
+      { key: "Anliegen", label: "Anliegen", color: "#7a5ea8" },
     ]) + barChart("Reinigungsnachweise je Monat", months, [{ key: "Nachweise", label: "Nachweise (Scans)", color: "#4f7a28" }])
       + (d.role === "Leitung" ? "" : barChart("Zählerablesungen je Monat", months, [{ key: "Zähler", label: "Meldungen Zählerstand", color: "#3a6ea5" }]))
       + (entrances.length ? `<figure class="chart"><figcaption>Meldungen je Aufgang (12 Monate)</figcaption>
@@ -3153,7 +3168,7 @@
   const INTRO_KEY = "mieterapp.intro";
   const INTRO = [
     { icon: "🏠", title: "Start", text: "Aktuelles aus dem Haus und alle Notfallnummern. Ein Tipp genügt, und der Anruf startet." },
-    { icon: "🧰", title: "Services", text: "Zählerstände, Mängel, Klingelschild oder einen Techniker-Termin melden – gern mit Foto. Sie erhalten sofort eine Nummer." },
+    { icon: "🧰", title: "Services", text: "Allgemeine Anliegen, Zählerstände, Mängel, Klingelschild oder einen Techniker-Termin melden – gern mit Foto. Sie erhalten sofort eine Nummer." },
     { icon: "📋", title: "Meldungen und Infos", text: "Unter „Meldungen“ sehen Sie, wie weit Ihr Anliegen ist. Unter „Infos“ finden Sie Müllabfuhr, Hausordnung, Einkaufen und Abfahrten." },
   ];
   // Kurze Anleitung für das Hausmeister-Team (Nr. ab 100) beim ersten Start – einfache Sprache, große Schrift

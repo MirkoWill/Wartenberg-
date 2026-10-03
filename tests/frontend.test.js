@@ -157,7 +157,7 @@ function makeQrVideo(text) {
       check("Abfahrten: Haltestelle, Linien, Link zur BVG – keine Anfrage an transport.rest", /Dorfstr\./.test(await p.textContent("#transitStop")) && (await p.$$(".transit-line")).length === 3
         && /^https:\/\/www\.bvg\.de\//.test(await p.getAttribute("#transitInfo", "href")) && !ctx.transitCalls);
       check("Apotheken-Notdienst als Link, kein eingebettetes Fenster", (await p.$$("iframe")).length === 0 && /aponet\.de/.test(await p.getAttribute(".kiez-link", "href")));
-      check("Services: 5 Kacheln ohne „Meine Meldungen“", (await p.$$eval(".tile", (t) => t.map((x) => x.getAttribute("href")))).join() === "#wasser,#mangel,#elektro,#klingel,#strom");
+      check("Services: großer Knopf „Allgemeines Anliegen“ + 5 Kacheln ohne „Meine Meldungen“", (await p.$$eval(".tile", (t) => t.map((x) => x.getAttribute("href")))).join() === "#anliegen,#wasser,#mangel,#elektro,#klingel,#strom");
       for (const bad of ['#x"],body,[a="', "#__proto__", "?obj=<b>#notfall"]) {
         await p.goto(base + bad); await p.waitForTimeout(200);
         check(`Manipulierte Adresse ${bad} → Startseite`, (await p.textContent("#viewTitle")) === "Start");
@@ -199,6 +199,27 @@ function makeQrVideo(text) {
       check("Mangel gesendet", mangel && mangel.type === "Mangel" && mangel.object === "lind6" && mangel.ort === "Keller");
       check("Meldung unter „Meldungen“ gemerkt", (await p.evaluate(() => JSON.parse(localStorage.getItem("mieterapp.tickets") || "[]").length)) >= 2);
       check("Keine Skriptfehler", !p.errors.length, p.errors);
+      await ctx.close();
+    }
+
+    console.log("--- Allgemeines Anliegen");
+    {
+      const ctx = await newContext(browser, { backend: fakeBackend(), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#services`); await p.waitForTimeout(300);
+      await p.click('.tile[href="#anliegen"]'); await p.waitForTimeout(200);
+      check("Anliegen: Formular öffnet sich, Zurück zu Services", await p.isVisible("#formAnliegen") && await p.isVisible("#backBtn"));
+      await p.click('#formAnliegen [type="submit"]'); await p.waitForTimeout(300);
+      check("Anliegen: ohne Pflichtfelder wird nicht gesendet", !ctx.requests.some((r) => r.type === "Anliegen"));
+      await p.selectOption('#formAnliegen [name="thema"]', "Nebenkosten / Abrechnung");
+      await p.fill('#formAnliegen [name="details"]', "Frage zur Abrechnung 2025");
+      await p.fill('#formAnliegen [name="wohnung"]', "07");
+      await p.fill('#formAnliegen [name="name"]', "Schulz");
+      await p.fill('#formAnliegen [name="kontakt"]', "0170 555");
+      await p.click('#formAnliegen [type="submit"]'); await p.waitForTimeout(800);
+      const a = ctx.requests.find((r) => r.type === "Anliegen");
+      check("Anliegen: wird als Meldung „Anliegen“ mit Thema, Wohnung, Name, Kontakt gesendet", !!(a && a.action === "submitTicket" && a.ort === "Nebenkosten / Abrechnung" && a.wohnung === "07" && a.name === "Schulz" && a.kontakt === "0170 555" && a.details === "Frage zur Abrechnung 2025"), a);
+      check("Anliegen: keine Skriptfehler", !p.errors.length, p.errors);
       await ctx.close();
     }
 
