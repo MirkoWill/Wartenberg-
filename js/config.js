@@ -48,8 +48,8 @@ window.APP_CONFIG = {
       { label: "Polizei", sub: "Notruf", phone: "110", icon: "🚓", level: "danger" },
       { label: "GASAG-Entstörungsdienst", sub: "Gasgeruch, Störung der Gasversorgung · 030 787272", phone: "+4930787272", icon: "⚠️", level: "danger" },
       { label: "Stromnetz Berlin – Störungsdienst", sub: "Stromausfall im Haus oder in der Straße · 0800 2112525", phone: "+498002112525", icon: "⚡️", level: "urgent" },
-      { label: "Willbrandt und Kompagnon", sub: "Hausverwaltung · 030 99270747", phone: "+493099270747", icon: "🏢" },
-      { label: "Rauchwarnmelder – Störung", sub: "objektus · 030 297 772 50 · nur bei Störung – bei Brand immer 112", phone: "+493029777250", icon: "📟" },
+      { label: "Willbrandt und Kompagnon", sub: "Hausverwaltung · 030 99270747", phone: "+493099270747", img: "icons/logo-mark.png" },
+      { label: "Rauchwarnmelder – Störung", sub: "objektus · 030 297 772 50 · nur bei Störung – bei Brand immer 112", phone: "+493029777250", img: "icons/rauchmelder.svg" },
       { label: "Schlüsseldienst Günther", sub: "Schlossmontage J. Günther GmbH · Mo, Mi, Fr 8–18 · Di, Do 8–16 Uhr", phone: "+49304237223", icon: "🔑" }, // Nummer laut Branchenverzeichnis – bitte prüfen
     ],
     emergencyRules: [

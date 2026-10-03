@@ -709,7 +709,7 @@
     const fresh = w && Array.isArray(w.days) && Date.now() - new Date(w.at).getTime() < 24 * 3600000;
     const days = fresh ? w.days.filter((d) => d && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && d.date >= today).slice(0, 3) : [];
     const warnBox = $("#weatherWarn");
-    if (!days.length) { box.hidden = true; box.innerHTML = ""; warnBox.hidden = true; warnBox.innerHTML = ""; return; }
+    if (!days.length) { box.hidden = true; box.innerHTML = ""; $("#weatherTitle").hidden = true; warnBox.hidden = true; warnBox.innerHTML = ""; return; }
     const cfg = CFG.WEATHER || {};
     const num = (x) => (typeof x === "number" && isFinite(x) ? Math.round(x) : null);
     const dayName = (d, i) => (d.date === today ? t_("Heute") : i <= 1 && days[0].date === today ? t_("Morgen")
@@ -740,8 +740,8 @@
         <span class="weather__warn-icon" aria-hidden="true">${x.icon}</span>
         <div><strong>${esc(x.title)}</strong>${x.text ? `<p>${esc(x.text)}</p>` : ""}</div></div>`).join("");
     box.hidden = false;
+    $("#weatherTitle").hidden = false;
     box.innerHTML = `
-      <h2 class="section-title">${esc(t_("Wetter"))}</h2>
       <div class="weather__days">${days.map((d, i) => {
         const [icon, label] = Object.prototype.hasOwnProperty.call(WEATHER_ICONS, d.icon) ? WEATHER_ICONS[d.icon] : ["🌡️", ""];
         const hi = num(d.max), lo = num(d.min);
@@ -803,7 +803,8 @@
     return list.map((c) => `
       <li>
         <a class="contact${c.level === "danger" || c.danger ? " contact--danger" : c.level === "urgent" ? " contact--urgent" : ""}" href="tel:${esc(c.phone.replace(/[^\d+]/g, ""))}">
-          <span class="contact__icon" aria-hidden="true">${esc(c.icon || "📞")}</span>
+          <span class="contact__icon" aria-hidden="true">${/^icons\/[\w-]+\.(svg|png)$/.test(c.img || "")
+            ? `<img class="contact__img" src="${esc(c.img)}" alt="" width="34" height="34">` : esc(c.icon || "📞")}</span>
           <span class="contact__body">
             <span class="contact__label">${esc(c.label)}</span>
             <span class="contact__sub">${esc(c.sub || formatPhone(c.phone))}</span>
