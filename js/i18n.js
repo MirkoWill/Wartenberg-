@@ -217,6 +217,8 @@ window.I18N = {
     "Wichtig:": ["Important:", "Важно:", "Важливо:", "Důležité:"],
     "Die Sperrmüll-Abholung beauftragen und bezahlen Sie selbst – sie geht auf Ihre eigenen Kosten.": ["You book and pay for the bulky waste collection yourself – it is at your own expense.", "Вывоз крупногабаритного мусора вы заказываете и оплачиваете сами – за свой счёт.", "Вивезення великогабаритного сміття ви замовляєте й оплачуєте самі – за власний рахунок.", "Odvoz objemného odpadu si objednáváte a platíte sami – na vlastní náklady."],
     "Wetter": ["Weather", "Погода", "Погода", "Počasí"],
+    "Rauchwarnmelder – Störung": ["Smoke detector – fault", "Дымовой извещатель – неисправность", "Димовий сповіщувач – несправність", "Hlásič kouře – porucha"],
+    "objektus · 030 297 772 50 · nur bei Störung – bei Brand immer 112": ["objektus · 030 297 772 50 · faults only – in case of fire always call 112", "objektus · 030 297 772 50 · только при неисправности – при пожаре всегда 112", "objektus · 030 297 772 50 · лише при несправності – у разі пожежі завжди 112", "objektus · 030 297 772 50 · jen při poruše – při požáru vždy 112"],
     "Mangel melden": ["Report a defect", "Сообщить о неисправности", "Повідомити про несправність", "Nahlásit závadu"],
     "Meine Meldungen": ["My reports", "Мои заявки", "Мої заявки", "Moje hlášení"],
     "Meldung senden": ["Send report", "Отправить заявку", "Надіслати заявку", "Odeslat hlášení"],
