@@ -76,6 +76,14 @@ Test: Die URL im Browser öffnen, dann sollte `{"ok":true,"service":"mieter-app"
 - **Fotos** liegen im privaten Drive-Ordner und sind **nicht öffentlich**; der Link in der Tabelle
   funktioniert nur für Sie bzw. für Personen, mit denen Sie den Ordner teilen.
 
+## Allgemeines Anliegen (Services → großer Knopf oben)
+
+Bewohner schicken Fragen, Hinweise oder Wünsche über die App statt per WhatsApp: Thema (Auswahl), Nachricht, optional
+Foto, Wohnung und Name (Pflicht, damit Sie antworten können), Telefon oder E-Mail (optional). Es entsteht eine
+Meldung vom Typ **„Anliegen“** im Blatt *Tickets* (Thema steht in der Spalte „Ort“), zuständig **Verwaltung** – mit
+Mail, Benachrichtigung, Ampel/Service-Ziel, Statistik und Monatsbericht wie die anderen Meldungen. Im Cockpit können
+Sie es wie gewohnt bearbeiten oder an den Hausmeister geben. Die Bewohner sehen den Stand unter „Meldungen“.
+
 ## Hausmeister-Portal (Epic 3)
 
 `setup` legt dafür diese Blätter an und füllt sie beim ersten Mal:
@@ -171,6 +179,7 @@ Nr. 008 legt `setup` bzw. **Mieter-App → Mitarbeiter-Links ergänzen** automat
 | Dringend (Mangel vom Hausmeister mit „dringend“) | 1 Tag | 3 Tage |
 | Mangel (Bewohner und intern) | 3 Werktage | 14 Tage |
 | Klingelschild | 3 Werktage | 10 Werktage |
+| Allgemeines Anliegen | 3 Werktage | 14 Tage |
 | Elektroraum | bestätigt 1 Werktag vor dem Termin | am Termin |
 
 Werktage = Mo–Fr (Feiertage zählen als Werktage). Zeitstempel „In Arbeit seit“ und „Erledigt am“ setzt das
