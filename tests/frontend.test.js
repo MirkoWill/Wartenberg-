@@ -24,7 +24,7 @@ function fakeBackend(state = {}) {
       if (!staff || !staff.fitness) return { ok: false, error: "Kein Zugang zum Fitnessraum.", code: "staff" };
       (state.fitCalls = state.fitCalls || []).push(d);
       const f = state.fitness || { ok: true, me: "010", weeklyGoal: 2, upcoming: [], mine: [], members: [] };
-      if (d.action === "fitnessBook") { const s = new Date(`${d.date}T${d.time}`); f.mine = [{ id: "F-NEW", start: s.toISOString(), end: new Date(s.getTime() + d.minutes * 60000).toISOString(), past: false }]; state.fitness = f; return { ok: true, id: "F-NEW" }; }
+      if (d.action === "fitnessBook") { const s = new Date(`${d.date}T${d.time}`); f.mine = [{ id: "F-NEW", start: s.toISOString(), end: new Date(s.getTime() + d.minutes * 60000).toISOString(), past: false }]; state.fitness = f; return state.fitBookAbort ? "abort" : { ok: true, id: "F-NEW" }; }
       if (d.action === "fitnessCancel") { f.mine = f.mine.filter((b) => b.id !== d.id); return { ok: true }; }
       return f;
     }
@@ -589,6 +589,14 @@ function makeQrVideo(text) {
       p.once("dialog", (dlg) => dlg.accept());
       await p.click("#fitMine [data-fit-cancel]"); await p.waitForTimeout(500);
       check("Fitness: Stornieren sendet die ID", (state.fitCalls || []).some((d) => d.action === "fitnessCancel" && d.id === "F-NEW"));
+      // Antwort geht verloren, Buchung ist aber gespeichert → App prüft nach und meldet Erfolg statt Fehler
+      state.fitBookAbort = true;
+      await p.selectOption("#fitTime", "08:00"); await p.selectOption("#fitMinutes", "60");
+      await p.click("#formFit button[type=submit]"); await p.waitForTimeout(800);
+      const lost = await p.textContent("#toast");
+      check("Fitness: Antwort verloren, Buchung angekommen → „Gebucht“ statt Fehler", /Gebucht/.test(lost) && !/nicht möglich/.test(lost), lost);
+      check("Fitness: Knopf danach wieder „Buchen“", (await p.textContent("#formFit button[type=submit]")).trim() === "Buchen" && !(await p.isDisabled("#formFit button[type=submit]")));
+      state.fitBookAbort = false;
       await p.goto(`${base}?obj=lind6#hausmeister`); await p.waitForTimeout(800);
       check("Fitness: Hausmeister-Bereich leitet in den Fitnessraum um", /#fitness$/.test(p.url()) && !(await p.isVisible("#scanBtn")));
       check("Fitness: keine Hausmeister-Anfragen (Aufträge)", !(state.fitCalls || []).length || !state.tasksAsked);

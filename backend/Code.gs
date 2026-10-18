@@ -2971,8 +2971,12 @@ function fitnessBook(p, user) {
   lock.waitLock(20000);
   try {
     const rows = fitnessRows();
-    if (rows.filter((r) => r._people.indexOf(user.nr) !== -1 && r.Beginn > now).length >= F.maxFuture) throw userError(`Höchstens ${F.maxFuture} offene Buchungen je Person.`);
     const clash = rows.find((r) => r.Beginn < end && r.Ende > start);
+    // Gleiche Buchung schon vorhanden (Antwort kam beim ersten Versuch zu spät an) → nicht als Fehler melden
+    if (clash && clash._people.indexOf(user.nr) !== -1 && clash.Beginn.getTime() === start.getTime() && clash.Ende.getTime() === end.getTime()) {
+      return { ok: true, id: String(clash.ID), with: clash._with, already: true };
+    }
+    if (rows.filter((r) => r._people.indexOf(user.nr) !== -1 && r.Beginn > now).length >= F.maxFuture) throw userError(`Höchstens ${F.maxFuture} offene Buchungen je Person.`);
     if (clash) {
       const t = (x) => Utilities.formatDate(x, CONFIG.TIMEZONE, "HH:mm");
       throw userError(`Schon belegt von ${t(clash.Beginn)} bis ${t(clash.Ende)} Uhr (${fitnessWho(clash)}).`);

@@ -611,6 +611,11 @@ check('Wartung: Automatik 3 Uhr angelegt', triggers.some((t) => t.getHandlerFunc
   const b1 = post({ action: 'fitnessBook', token: fitTok, date: day, time: '18:00', minutes: 90 });
   const frow = sheets['Fitness-Buchungen'].grid.slice(-1)[0];
   check('Fitness: Buchung gespeichert (nur Nummer)', b1.ok && /^F-/.test(b1.id) && frow[1] === '010' && frow[2].getHours() === 18 && frow[3].getHours() === 19 && frow[3].getMinutes() === 30 && frow[4] === 90, frow);
+  const rowsBefore = sheets['Fitness-Buchungen'].grid.length;
+  const again = post({ action: 'fitnessBook', token: fitTok, date: day, time: '18:00', minutes: 90 });
+  check('Fitness: gleiche Buchung nochmal (Antwort kam zu spät) → ok, keine zweite Zeile', again.ok && again.already && again.id === b1.id && sheets['Fitness-Buchungen'].grid.length === rowsBefore, again);
+  const other = post({ action: 'fitnessBook', token: fitTok, date: day, time: '18:30', minutes: 60 });
+  check('Fitness: andere Zeit über eigene Buchung → weiter „belegt“', !other.ok && /belegt/.test(other.error), other);
   const clash = post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '19:00', minutes: 60 });
   check('Fitness: Überschneidung abgelehnt (eine Buchung zur Zeit)', !clash.ok && /belegt/.test(clash.error) && /010/.test(clash.error), clash);
   check('Fitness: direkt danach geht', post({ action: 'fitnessBook', token: fit2Tok, date: day, time: '19:30', minutes: 30 }).ok);
