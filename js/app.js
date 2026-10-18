@@ -2839,17 +2839,35 @@
     const btn = form.querySelector("button[type=submit]");
     const partners = $$("#fitWith [aria-pressed=true]").map((x) => x.dataset.with);
     const body = { action: "fitnessBook", date: $("#fitDate").value, time: $("#fitTime").value, minutes: Number($("#fitMinutes").value), with: partners };
+    const label = btn.textContent;
     btn.disabled = true;
-    try {
-      await staffPost(body, 30000);
+    btn.textContent = "Wird gebucht …";
+    const booked = () => {
       toast(`Gebucht: ${fitDayLabel(new Date(`${body.date}T00:00`))}, ${body.time} Uhr, ${fitDuration(body.minutes)}`
         + `${partners.length ? ` mit Nr. ${partners.join(" + ")}` : ""}. Viel Spaß! 💪`, "ok", 6000);
       $$("#fitWith [aria-pressed=true]").forEach((x) => x.setAttribute("aria-pressed", "false"));
+    };
+    try {
+      await staffPost(body, 45000);
+      booked();
       await loadFitness();
     } catch (err) {
-      toast(err.userMessage || "Buchen nicht möglich – bitte Internetverbindung prüfen.", "error", 8000);
+      if (err.userMessage) {
+        toast(err.userMessage, "error", 8000);
+      } else {
+        // Keine (rechtzeitige) Antwort: Google hat die Buchung oft trotzdem gespeichert → nachsehen statt Fehler melden
+        btn.textContent = "Prüfe Buchung …";
+        await loadFitness();
+        const c = readJson(FIT_KEY);
+        const start = new Date(`${body.date}T${body.time}`).getTime();
+        const end = start + body.minutes * 60000;
+        const hit = ((c && c.data && c.data.mine) || []).some((b) => new Date(b.start).getTime() === start && new Date(b.end).getTime() === end);
+        if (hit) booked();
+        else toast("Buchen nicht möglich – bitte Internetverbindung prüfen und erneut versuchen.", "error", 8000);
+      }
     } finally {
       btn.disabled = false;
+      btn.textContent = label;
     }
   }
 
