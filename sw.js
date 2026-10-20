@@ -21,6 +21,7 @@ const APP_SHELL = [
   "./icons/rauchmelder.svg",
   "./icons/logo-mark.png",
   "./assets/hausverwaltung.vcf",
+  "./assets/kopf-haus.jpg",
   "./assets/abfuhrkalender-2026.ics",
   "./fonts/playfair-display-latin-400-normal.woff2",
   "./fonts/playfair-display-latin-600-normal.woff2",
