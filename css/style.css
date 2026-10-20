@@ -1359,3 +1359,9 @@ body.hm-simple .seg-ico.ico { width: 28px; height: 28px; }
 .link-item__icon .ico, .transit-link__icon .ico { width: 28px; height: 28px; color: var(--c-primary); }
 .subsection-title .ico { width: 22px; height: 22px; vertical-align: -4px; margin-right: 4px; color: var(--c-primary); }
 .btn--small .ico { width: 18px; height: 18px; margin-right: 6px; }
+
+/* Pflicht-Häkchen (z. B. „ohne Gewähr“ bei Zählerständen): Sternchen wie bei Pflichtfeldern, rot markiert, wenn es fehlt */
+.remember--confirm > span::after { content: " *"; }
+.remember--confirm { padding: 12px 14px; border: 1.5px solid transparent; border-radius: var(--radius); }
+.was-validated .remember--confirm:has(input:invalid) { border-color: var(--c-danger); background: var(--c-danger-soft); }
+.was-validated .remember--confirm:has(input:invalid) > span { color: var(--c-danger); }
