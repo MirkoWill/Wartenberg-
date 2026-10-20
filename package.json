@@ -5,7 +5,7 @@
   "scripts": {
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "node tests/backend.test.js && node tests/backend-security.test.js",
-    "test:frontend": "node tests/frontend.test.js"
+    "test:frontend": "node tests/frontend.test.js && node tests/frontend-security.test.js"
   },
   "devDependencies": {
     "playwright": "1.56.1"

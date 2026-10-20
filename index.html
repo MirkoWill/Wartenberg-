@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=95">
+  <link rel="stylesheet" href="css/style.css?v=96">
 </head>
 <body>
   <header class="app-header">
@@ -33,7 +33,7 @@
   </header>
 
   <!-- Titelband im Stil der Website (dunkel, schräge Kante) -->
-  <div class="hero">
+  <div class="hero" role="region" aria-labelledby="viewTitle">
     <div class="hero__inner">
       <div class="hero__top">
         <a class="hero__eyebrow" href="#aufgang" title="Adresse wechseln"><span id="objectName">Wohnanlage</span> <span aria-hidden="true">▾</span></a>
@@ -83,14 +83,14 @@
         <div class="transit-head__stop" id="transitStop">–</div>
         <div class="transit-lines" id="transitLines"></div>
       </div>
-      <a class="btn btn--primary btn--block" id="transitInfo" href="#" target="_blank" rel="noopener">🚌 Live-Abfahrten bei der BVG</a>
+      <a class="btn btn--primary btn--block" id="transitInfo" href="#" target="_blank" rel="noopener"><span class="ico ico--bus" aria-hidden="true"></span>Live-Abfahrten bei der BVG</a>
       <p class="muted small">Öffnet die offizielle Abfahrtsanzeige der BVG mit Echtzeit und Verspätungen.</p>
     </section>
 
     <!-- ============ EPIC 1 – US 1.2 + 1.4: Abfall, Hausordnung, Kiez, Apotheke ============ -->
     <section class="view" data-view="infos" data-title="Infos" hidden>
       <a class="card transit-link" href="#oepnv">
-        <span class="transit-link__icon" aria-hidden="true">🚌</span>
+        <span class="transit-link__icon" aria-hidden="true"><span class="ico ico--bus"></span></span>
         <span class="transit-link__body">
           <span class="transit-link__title">Abfahrten</span>
           <span class="transit-link__sub">Dorfstr./Lindenberger Str. · Bus 256, 893, N56 · Live bei der BVG</span>
@@ -135,7 +135,7 @@
       <ul class="link-list">
         <li>
           <a class="link-item link-item--page" href="#hausordnung">
-            <span class="link-item__icon" aria-hidden="true">📘</span>
+            <span class="link-item__icon" aria-hidden="true"><span class="ico ico--book"></span></span>
             <span class="link-item__body">
               <span class="link-item__label">Hausordnung</span>
               <span class="link-item__sub">Direkt in der App lesen</span>
@@ -184,7 +184,7 @@
           <button class="btn btn--ghost btn--small" id="hmHelp" type="button" hidden>❓ Anleitung</button>
         </div>
 
-        <div class="segmented segmented--tabs" role="tablist" id="staffTabs">
+        <div class="segmented segmented--tabs" role="radiogroup" aria-label="Bereich" id="staffTabs">
           <label><input type="radio" name="staffTab" value="scan" checked><span><span class="ico ico--scan seg-ico" aria-hidden="true"></span>Scannen</span></label>
           <label><input type="radio" name="staffTab" value="tasks"><span><span class="ico ico--tasks seg-ico" aria-hidden="true"></span>Aufträge <b class="seg-count" id="taskCount" hidden></b></span></label>
           <label><input type="radio" name="staffTab" value="defect"><span><span class="ico ico--defect seg-ico" aria-hidden="true"></span>Mangel</span></label>
@@ -590,7 +590,8 @@
     <section class="view" data-view="meldungen" data-title="Meine Meldungen" hidden>
       <p class="lead">Hier sehen Sie den Bearbeitungsstand Ihrer Meldungen von diesem Gerät.</p>
       <ul class="status-list" id="statusList"></ul>
-      <p class="muted small" id="statusEmpty" hidden>Noch keine Meldungen auf diesem Gerät.</p>
+      <div id="statusEmpty" hidden><p class="muted small">Noch keine Meldungen auf diesem Gerät.</p>
+        <a class="btn btn--ghost btn--block" href="#services">Etwas melden</a></div>
       <button class="btn btn--ghost btn--block" id="statusRefresh" type="button">Status aktualisieren</button>
 
       <form class="form status-lookup" id="statusLookup" novalidate>
@@ -1028,8 +1029,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=95"></script>
-  <script src="js/i18n.js?v=95"></script>
-  <script src="js/app.js?v=95"></script>
+  <script src="js/config.js?v=96"></script>
+  <script src="js/i18n.js?v=96"></script>
+  <script src="js/app.js?v=96"></script>
 </body>
 </html>

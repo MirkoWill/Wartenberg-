@@ -178,7 +178,7 @@ window.APP_CONFIG = {
     kiez: [
       {
         group: "Supermärkte",
-        icon: "🛒",
+        icon: "cart",
         places: [
           { name: "ALDI Nord", address: "Dorfstraße 22, 13059 Berlin", note: "mit DHL Packstation 508" },
           { name: "REWE", address: "Ernst-Barlach-Straße 19, 13059 Berlin" },
@@ -188,7 +188,7 @@ window.APP_CONFIG = {
       {
         group: "Apotheke",
         id: "apotheke",
-        icon: "💊",
+        icon: "pharmacy",
         places: [
           { name: "Amsel-Apotheke", address: "Rostocker Str. 15, 13059 Berlin" },
         ],
@@ -197,7 +197,7 @@ window.APP_CONFIG = {
       },
       {
         group: "Pakete",
-        icon: "📦",
+        icon: "package",
         places: [
           { name: "Fair Kauf", address: "Dorfstraße 25, 13059 Berlin", note: "Paketshop" },
           { name: "DHL Packstation 508", address: "Dorfstraße 22, 13059 Berlin", note: "bei ALDI Nord" },
@@ -207,7 +207,7 @@ window.APP_CONFIG = {
 
     // Dokumente zum Herunterladen
     documents: [
-      { label: "Visitenkarte Willbrandt und Kompagnon", sub: "Kontakt speichern (.vcf)", url: "assets/hausverwaltung.vcf", icon: "👤" },
+      { label: "Visitenkarte Willbrandt und Kompagnon", sub: "Kontakt speichern (.vcf)", url: "assets/hausverwaltung.vcf", icon: "contact" },
     ],
 
 

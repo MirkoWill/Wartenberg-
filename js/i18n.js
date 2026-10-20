@@ -230,6 +230,7 @@ window.I18N = {
     "Neuer Versuch in {n} min.": ["Retrying in {n} min.", "Повторная попытка через {n} мин.", "Повторна спроба через {n} хв.", "Nový pokus za {n} min."],
     "Neues oder geändertes Klingel- und Briefkastenschild beantragen.": ["Request a new or changed doorbell and letterbox sign.", "Заказать новую или изменённую табличку на звонке и почтовом ящике.", "Замовити нову або змінену табличку на дзвінку та поштовій скриньці.", "Požádat o novou nebo změněnou jmenovku u zvonku a schránky."],
     "Nicht zustimmen": ["Do not agree", "Не соглашаться", "Не погоджуватися", "Nesouhlasím"],
+    "Etwas melden": ["Report something", "Сообщить о проблеме", "Повідомити про проблему", "Něco nahlásit"],
     "Noch keine Meldungen auf diesem Gerät.": ["No reports on this device yet.", "На этом устройстве пока нет заявок.", "На цьому пристрої ще немає заявок.", "Na tomto zařízení zatím nejsou žádná hlášení."],
     "Notdienst-Apotheken rund um 13059 Berlin, tagesaktuell von aponet.de.": ["Emergency pharmacies around 13059 Berlin, updated daily by aponet.de.", "Дежурные аптеки около 13059 Berlin, ежедневно обновляется aponet.de.", "Чергові аптеки поблизу 13059 Berlin, щоденне оновлення від aponet.de.", "Pohotovostní lékárny v okolí 13059 Berlin, denně aktualizováno z aponet.de."],
     "Notfall": ["Emergency", "Помощь", "Допомога", "Nouze"],
