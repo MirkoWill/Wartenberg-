@@ -18,7 +18,7 @@
   <link rel="preload" href="fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <!-- ?v= bei jeder Veröffentlichung zusammen mit CACHE_VERSION in sw.js erhöhen -->
-  <link rel="stylesheet" href="css/style.css?v=92">
+  <link rel="stylesheet" href="css/style.css?v=93">
 </head>
 <body>
   <header class="app-header">
@@ -952,6 +952,7 @@
   <!-- ============ Kurze Einführung (einmal nach der ersten Zustimmung) ============ -->
   <div class="intro" id="intro" role="dialog" aria-modal="true" aria-labelledby="introTitle" hidden>
     <div class="intro__box">
+      <p class="intro__kicker" id="introKicker"></p>
       <div class="intro__icon" id="introIcon" aria-hidden="true"></div>
       <h2 class="intro__title" id="introTitle" tabindex="-1"></h2>
       <p class="intro__text" id="introText"></p>
@@ -1023,8 +1024,8 @@
 
   <a class="consent-return btn btn--primary" id="consentReturn" href="#" hidden>Zurück zur Zustimmung</a>
 
-  <script src="js/config.js?v=92"></script>
-  <script src="js/i18n.js?v=92"></script>
-  <script src="js/app.js?v=92"></script>
+  <script src="js/config.js?v=93"></script>
+  <script src="js/i18n.js?v=93"></script>
+  <script src="js/app.js?v=93"></script>
 </body>
 </html>
