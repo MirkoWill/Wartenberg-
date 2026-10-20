@@ -930,7 +930,9 @@
     $("#transitStop").textContent = stop.name;
     $("#transitLines").innerHTML = (stop.lines || []).map((l) => `<span class="transit-line">${esc(l)}</span>`).join("");
     const link = $("#transitInfo");
-    link.href = stop.infoUrl;
+    // BVG gibt es auf Deutsch und Englisch: wer die App in einer anderen Sprache nutzt, bekommt die englische Seite
+    link.href = LANG === "de" ? stop.infoUrl
+      : String(stop.infoUrl).replace("/de/verbindungen/stationsuebersicht/", "/en/connections/station-overview/");
   }
 
   /* ======================================================================
@@ -1731,7 +1733,6 @@
     defectOrt.value = keep;
     // Verwaltung entscheidet bei der Aufnahme, ob sie selbst oder der Hausmeister sich kümmert
     $("#defectOwnerWrap").hidden = s.user.role !== "Verwaltung";
-    $("#cockpitDefect").hidden = s.user.role !== "Verwaltung";
     renderNtfyBoxes(s);
     renderQueueBadge();
     renderToday();
@@ -2644,7 +2645,8 @@
       staffLogin().then(() => { if (currentView === "cockpit" && !readJson(COCKPIT_KEY)) loadCockpit(); });
     };
     $("#cockpitRefresh").addEventListener("click", loadCockpit);
-    $("#cockpitDefect").addEventListener("click", () => { location.hash = "hausmeister"; selectStaffPane("defect"); });
+    // Werkzeuge oben im Cockpit: Scannen, Aufträge, Mangel – öffnet den Hausmeister-Bereich mit dem passenden Reiter
+    $$("[data-tool-pane]").forEach((btn) => btn.addEventListener("click", () => { selectStaffPane(btn.dataset.toolPane); location.hash = "hausmeister"; }));
     const setCockpitFilter = (f) => {
       cockpitFilter = f;
       $$("#cockpitFilter [data-filter]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.filter === f)));
@@ -3192,18 +3194,18 @@
 
   const INTRO_KEY = "mieterapp.intro";
   const INTRO = [
-    { icon: "🏠", title: "Start", text: "Aktuelles aus dem Haus und alle Notfallnummern. Ein Tipp genügt, und der Anruf startet." },
-    { icon: "🧰", title: "Services", text: "Allgemeine Anliegen, Zählerstände, Mängel, Klingelschild oder einen Techniker-Termin melden – gern mit Foto. Sie erhalten sofort eine Nummer." },
-    { icon: "📋", title: "Meldungen und Infos", text: "Unter „Meldungen“ sehen Sie, wie weit Ihr Anliegen ist. Unter „Infos“ finden Sie Müllabfuhr, Hausordnung, Einkaufen und Abfahrten." },
+    { icon: "home", title: "Start", text: "Aktuelles aus dem Haus und alle Notfallnummern. Ein Tipp genügt, und der Anruf startet." },
+    { icon: "services", title: "Services", text: "Allgemeine Anliegen, Zählerstände, Mängel, Klingelschild oder einen Techniker-Termin melden – gern mit Foto. Sie erhalten sofort eine Nummer." },
+    { icon: "meldungen", title: "Meldungen und Infos", text: "Unter „Meldungen“ sehen Sie, wie weit Ihr Anliegen ist. Unter „Infos“ finden Sie Müllabfuhr, Hausordnung, Einkaufen und Abfahrten." },
   ];
   // Kurze Anleitung für das Hausmeister-Team (Nr. ab 100) beim ersten Start – einfache Sprache, große Schrift
   const HM_INTRO_KEY = "mieterapp.hmIntro";
   const HM_INTRO = [
-    { icon: "👋", title: "Willkommen!", text: "Das ist Ihre Hausmeister-App. Unten sind drei große Knöpfe: Scannen, Aufträge und Mangel. Mehr brauchen Sie nicht." },
-    { icon: "📷", title: "Scannen", text: "Am Einsatzort auf „QR-Code scannen“ tippen und die Kamera auf den Aufkleber halten. Dann „Erledigt – Nachweis speichern“ tippen. Kein Internet? Kein Problem – die App schickt es später von selbst." },
-    { icon: "📋", title: "Aufträge", text: "Hier stehen die Aufträge von Ihrer Leitung. „👷 für dich“ heißt: Dieser Auftrag ist für Sie. Wenn er fertig ist: „✓ Erledigt“ tippen – gern mit einem Foto." },
-    { icon: "🛠️", title: "Mangel", text: "Etwas ist kaputt? Ort wählen, kurz aufschreiben, was los ist, ein Foto machen und „Mangel melden“ tippen. Bei Gefahr „Dringend“ ankreuzen." },
-    { icon: "❓", title: "Hilfe", text: "Diese Anleitung finden Sie jederzeit wieder oben über „❓ Anleitung“. Bei Fragen hilft Ihnen Ihre Leitung." },
+    { icon: "hausmeister", title: "Willkommen!", text: "Das ist Ihre Hausmeister-App. Unten sind drei große Knöpfe: Scannen, Aufträge und Mangel. Mehr brauchen Sie nicht." },
+    { icon: "scan", title: "Scannen", text: "Am Einsatzort auf „QR-Code scannen“ tippen und die Kamera auf den Aufkleber halten. Dann „Erledigt – Nachweis speichern“ tippen. Kein Internet? Kein Problem – die App schickt es später von selbst." },
+    { icon: "tasks", title: "Aufträge", text: "Hier stehen die Aufträge von Ihrer Leitung. „👷 für dich“ heißt: Dieser Auftrag ist für Sie. Wenn er fertig ist: „✓ Erledigt“ tippen – gern mit einem Foto." },
+    { icon: "defect", title: "Mangel", text: "Etwas ist kaputt? Ort wählen, kurz aufschreiben, was los ist, ein Foto machen und „Mangel melden“ tippen. Bei Gefahr „Dringend“ ankreuzen." },
+    { icon: "help", title: "Hilfe", text: "Diese Anleitung finden Sie jederzeit wieder oben über „❓ Anleitung“. Bei Fragen hilft Ihnen Ihre Leitung." },
   ];
   let introStep = 0;
   let introHm = false; // true = Anleitung für das Hausmeister-Team
@@ -3212,7 +3214,8 @@
     const steps = introHm ? HM_INTRO : INTRO;
     const tt = (x) => (introHm ? x : t_(x));
     const s = steps[introStep];
-    $("#introIcon").textContent = s.icon;
+    $("#introIcon").innerHTML = `<span class="ico ico--${s.icon}"></span>`;
+    $("#introKicker").textContent = `${tt("Kurze Einführung")} · ${introStep + 1}/${steps.length}`;
     $("#introTitle").textContent = tt(s.title);
     $("#introText").textContent = tt(s.text);
     $("#introDots").innerHTML = steps.map((_, i) => `<span class="${i === introStep ? "is-active" : ""}"></span>`).join("");

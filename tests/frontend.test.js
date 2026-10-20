@@ -155,7 +155,7 @@ function makeQrVideo(text) {
       await p.goto(`${base}?obj=lind6#infos`); await p.click(".transit-link"); await p.waitForSelector("#transitInfo:visible");
       check("Abfahrten über Infos, Zurück → Infos", (await p.textContent("#backLabel")) === "Infos" && /Infos\*/.test(await tabs(p)));
       check("Abfahrten: Haltestelle, Linien, Link zur BVG – keine Anfrage an transport.rest", /Dorfstr\./.test(await p.textContent("#transitStop")) && (await p.$$(".transit-line")).length === 3
-        && /^https:\/\/www\.bvg\.de\//.test(await p.getAttribute("#transitInfo", "href")) && !ctx.transitCalls);
+        && /^https:\/\/www\.bvg\.de\/de\/verbindungen\/stationsuebersicht\//.test(await p.getAttribute("#transitInfo", "href")) && !ctx.transitCalls);
       check("Apotheken-Notdienst als Link, kein eingebettetes Fenster", (await p.$$("iframe")).length === 0 && /aponet\.de/.test(await p.getAttribute(".kiez-link", "href")));
       check("Services: 6 gleich große Kacheln, „Allgemeines Anliegen“ neben Stromzähler, ohne „Meine Meldungen“", (await p.$$eval(".tile", (t) => t.map((x) => x.getAttribute("href")))).join() === "#wasser,#mangel,#elektro,#klingel,#strom,#anliegen"
         && await p.$$eval(".tile", (t) => new Set(t.map((x) => Math.round(x.getBoundingClientRect().width))).size === 1));
@@ -345,6 +345,10 @@ function makeQrVideo(text) {
       check("Cockpit: Kennzahlen", (await p.$$(".kpi")).length === 9 && /80 %/.test(await p.textContent("#cockpitKpis")) && /5,5 Std\./.test(await p.textContent("#cockpitKpis")));
       check("Cockpit: offene Aufträge mit Ampel, Überfälliges markiert", (await p.$$("#cockpitList .task")).length === 3 && await p.isVisible(".task--sla-red .sla-dot--red") && /überfällig/.test(await p.textContent(".task--sla-red .task__due")));
       check("Cockpit-Tab aktiv markiert", (await p.getAttribute("#staffTab", "aria-current")) === "page");
+      check("Cockpit: Werkzeuge Scannen · Aufträge · Mangel erfassen sichtbar", (await p.$$eval("#cockpitTools [data-tool-pane]", (x) => x.map((b) => b.dataset.toolPane))).join() === "scan,tasks,defect" && await p.isVisible("#cockpitTools"));
+      await p.click('#cockpitTools [data-tool-pane="tasks"]'); await p.waitForTimeout(400);
+      check("Cockpit: „Aufträge“ öffnet den Hausmeister-Bereich mit dem Reiter Aufträge", /#hausmeister$/.test(p.url()) && await p.isVisible('[data-pane="tasks"]') && await p.isChecked('#staffTabs input[value="tasks"]'));
+      await p.goto(`${base}?obj=lind6#cockpit`); await p.waitForSelector("#cockpitTools", { state: "visible", timeout: 5000 }).catch(() => {});
       // Verwaltung erfasst selbst einen Mangel und übergibt ihn gleich (dringend) an den Hausmeister
       await p.click("#cockpitDefect"); await p.waitForSelector('[data-pane="defect"]:not([hidden])', { timeout: 5000 }).catch(() => {});
       check("Cockpit: „Mangel erfassen“ öffnet das Formular mit „Wer kümmert sich?“", await p.isVisible("#formStaffDefect") && await p.isVisible("#defectOwnerWrap"));

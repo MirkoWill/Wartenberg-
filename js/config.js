@@ -117,7 +117,7 @@ window.APP_CONFIG = {
     // Abfahrten (US 1.3): Haltestelle, Linien und Link zur offiziellen Live-Anzeige der BVG.
     transitStop: {
       name: "Dorfstr./Lindenberger Str.",
-      infoUrl: "https://www.bvg.de/en/connections/station-overview/dorfstr-lindenberger-str",
+      infoUrl: "https://www.bvg.de/de/verbindungen/stationsuebersicht/dorfstr-lindenberger-str",
       lines: ["Bus 256", "Bus 893", "Nachtbus N56"],
     },
 
