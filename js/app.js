@@ -1697,8 +1697,8 @@
       tab.dataset.role = kind;
       tab.setAttribute("href", admin ? "#cockpit" : fitOnly ? "#fitness" : "#hausmeister");
       tab.dataset.tab = admin ? "cockpit hausmeister fitness" : fitOnly ? "fitness" : "hausmeister";
-      tab.innerHTML = admin ? '<span aria-hidden="true">📊</span>Cockpit'
-        : fitOnly ? '<span aria-hidden="true">💪</span>Fitness' : '<span aria-hidden="true">🧹</span>Hausmeister';
+      const ico = (n) => `<span class="ico ico--${n}" aria-hidden="true"></span>`;
+      tab.innerHTML = admin ? `${ico("cockpit")}Cockpit` : fitOnly ? `${ico("fitness")}Fitness` : `${ico("hausmeister")}Hausmeister`;
       if (tab.dataset.tab.split(" ").includes(currentView)) tab.setAttribute("aria-current", "page");
     }
     renderFitnessAccess();
