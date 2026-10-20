@@ -804,12 +804,13 @@
       <li>
         <a class="contact${c.level === "danger" || c.danger ? " contact--danger" : c.level === "urgent" ? " contact--urgent" : ""}" href="tel:${esc(c.phone.replace(/[^\d+]/g, ""))}">
           <span class="contact__icon" aria-hidden="true">${/^icons\/[\w-]+\.(svg|png)$/.test(c.img || "")
-            ? `<img class="contact__img" src="${esc(c.img)}" alt="" width="34" height="34">` : esc(c.icon || "📞")}</span>
+            ? `<img class="contact__img" src="${esc(c.img)}" alt="" width="34" height="34">`
+            : /^[a-z]+$/.test(c.icon || "") ? `<span class="ico ico--${c.icon}"></span>` : esc(c.icon || "📞")}</span>
           <span class="contact__body">
             <span class="contact__label">${esc(c.label)}</span>
             <span class="contact__sub">${esc(c.sub || formatPhone(c.phone))}</span>
           </span>
-          <span class="contact__call" aria-hidden="true">📞</span>
+          <span class="contact__call" aria-hidden="true"><span class="ico ico--phone"></span></span>
         </a>
       </li>`).join("");
   }

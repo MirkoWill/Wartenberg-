@@ -1222,6 +1222,12 @@ body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }
 .ico--chat { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M4 5h16v11H9l-5 4z%22/%3E%3Cpath d=%22M8 9.5h8M8 12.5h5%22/%3E%3C/svg%3E"); }
 .ico--help { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%229%22/%3E%3Cpath d=%22M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6%22/%3E%3Cpath d=%22M12 17.2h.01%22/%3E%3C/svg%3E"); }
 .ico--print { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M7 9V3h10v6%22/%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%228%22 rx=%222%22/%3E%3Cpath d=%22M7 14h10v7H7z%22/%3E%3C/svg%3E"); }
+.ico--toolbox { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%228%22 width=%2218%22 height=%2212%22 rx=%222%22/%3E%3Cpath d=%22M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2%22/%3E%3Cpath d=%22M3 13h18%22/%3E%3Cpath d=%22M8 12v2M16 12v2%22/%3E%3C/svg%3E"); }
+.ico--fire { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M12 3c.5 3.5 5 5.5 5 10.5a5 5 0 0 1-10 0c0-2.4 1.3-3.9 2.4-5 .2 1.6 1 2.6 2.1 3 0-3 .2-5.8.5-8.5z%22/%3E%3C/svg%3E"); }
+.ico--police { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M12 3 4.5 6v5.5c0 4.5 3.2 8 7.5 9.5 4.3-1.5 7.5-5 7.5-9.5V6z%22/%3E%3Cpath d=%22m12 8.3 1.1 2.3 2.5.3-1.8 1.8.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.8 2.5-.3z%22/%3E%3C/svg%3E"); }
+.ico--gas { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M12 3.5 2.8 19.5h18.4z%22/%3E%3Cpath d=%22M12 10v4.5%22/%3E%3Cpath d=%22M12 17.3h.01%22/%3E%3C/svg%3E"); }
+.ico--key { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%228%22 cy=%2215%22 r=%224%22/%3E%3Cpath d=%22m11 12 8.5-8.5%22/%3E%3Cpath d=%22m16.5 6.5 2.5 2.5M14.5 8.5l2 2%22/%3E%3C/svg%3E"); }
+.ico--phone { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M5 4h3.5l1.8 4.5-2.3 1.4a11 11 0 0 0 6.1 6.1l1.4-2.3 4.5 1.8V19a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z%22/%3E%3C/svg%3E"); }
 
 :root {
   --radius: 14px;
@@ -1330,3 +1336,11 @@ body.hm-simple .seg-ico.ico { width: 28px; height: 28px; }
 /* Symbol im Reiter ist selbst ein <span>: nicht wie die Reiterfläche gestalten */
 .segmented span.ico { display: inline-block; min-height: 0; background: currentColor; }
 .tool-row__btn { align-content: start; }
+
+/* Notfallnummern: Linien-Symbol in der Farbe der Stufe, weißes Telefon im Anruf-Knopf (besser lesbar als Emoji) */
+.contact__icon { display: grid; place-items: center; width: 40px; color: var(--c-primary); }
+.contact__icon .ico { width: 34px; height: 34px; }
+.contact--danger .contact__icon { color: var(--c-danger); }
+.contact--urgent .contact__icon { color: var(--c-urgent); }
+.contact__call .ico { width: 24px; height: 24px; color: #fff; }
+@media (prefers-color-scheme: dark) { .contact__call .ico { color: #151515; } }
