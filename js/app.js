@@ -930,7 +930,9 @@
     $("#transitStop").textContent = stop.name;
     $("#transitLines").innerHTML = (stop.lines || []).map((l) => `<span class="transit-line">${esc(l)}</span>`).join("");
     const link = $("#transitInfo");
-    link.href = stop.infoUrl;
+    // BVG gibt es auf Deutsch und Englisch: wer die App in einer anderen Sprache nutzt, bekommt die englische Seite
+    link.href = LANG === "de" ? stop.infoUrl
+      : String(stop.infoUrl).replace("/de/verbindungen/stationsuebersicht/", "/en/connections/station-overview/");
   }
 
   /* ======================================================================

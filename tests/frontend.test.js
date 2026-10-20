@@ -155,7 +155,7 @@ function makeQrVideo(text) {
       await p.goto(`${base}?obj=lind6#infos`); await p.click(".transit-link"); await p.waitForSelector("#transitInfo:visible");
       check("Abfahrten über Infos, Zurück → Infos", (await p.textContent("#backLabel")) === "Infos" && /Infos\*/.test(await tabs(p)));
       check("Abfahrten: Haltestelle, Linien, Link zur BVG – keine Anfrage an transport.rest", /Dorfstr\./.test(await p.textContent("#transitStop")) && (await p.$$(".transit-line")).length === 3
-        && /^https:\/\/www\.bvg\.de\//.test(await p.getAttribute("#transitInfo", "href")) && !ctx.transitCalls);
+        && /^https:\/\/www\.bvg\.de\/de\/verbindungen\/stationsuebersicht\//.test(await p.getAttribute("#transitInfo", "href")) && !ctx.transitCalls);
       check("Apotheken-Notdienst als Link, kein eingebettetes Fenster", (await p.$$("iframe")).length === 0 && /aponet\.de/.test(await p.getAttribute(".kiez-link", "href")));
       check("Services: 6 gleich große Kacheln, „Allgemeines Anliegen“ neben Stromzähler, ohne „Meine Meldungen“", (await p.$$eval(".tile", (t) => t.map((x) => x.getAttribute("href")))).join() === "#wasser,#mangel,#elektro,#klingel,#strom,#anliegen"
         && await p.$$eval(".tile", (t) => new Set(t.map((x) => Math.round(x.getBoundingClientRect().width))).size === 1));
