@@ -331,7 +331,7 @@ reset();
   const ok = P({ action: 'adminUpdateTask', token: LEAD, id: kl.id, assignee: '100' });
   check('J9 Leitung weist zu → Team sieht Auftrag, Verwaltungs-Auftrag weiter nicht zuweisbar', ok.ok && P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === kl.id && t.mine)
     && !(P({ action: 'adminUpdateTask', token: LEAD, id: mg.id, assignee: '100' }).ok && P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === mg.id)));
-  check('J10 Interne Funktionen nicht als Aktion aufrufbar', ['setup', 'hausmeisterDigest', 'hausmeisterDigestNow', 'releaseNotesSendNow', 'releaseNotesPreviewNow', 'gtasksSync', 'gtasksSetupNow', 'morningDigest', 'assignSecret', 'ntfySend', 'rebuildAnalytics']
+  check('J10 Interne Funktionen nicht als Aktion aufrufbar', ['setup', 'hausmeisterDigest', 'hausmeisterDigestNow', 'releaseNotesSendNow', 'releaseNotesPreviewNow', 'gtasksSync', 'gtasksSetupNow', 'morningDigest', 'assignSecret', 'ntfySend', 'rebuildAnalytics', 'resetTestData', 'resetTestDataPrompt']
     .every((action) => { const before = mails.length; const r1 = P({ action, token: ADM, pin: '13059' }); const r2 = G({ action, token: ADM, pin: '13059' }); return r1.ok !== true && (r2.ok !== true || (r2.service === 'mieter-app' && Object.keys(r2).length === 2)) && mails.length === before; })); // GET ohne bekannte Aktion = nur Lebenszeichen
   check('J11 Alarm-App: Test nur für Verwaltung/Leitung, Kennung nur an sie', P({ action: 'ntfyTest', token: HM }).ok !== true && P({ action: 'ntfyTest', token: FIT }).ok !== true
     && !P({ action: 'hmLogin', token: HM }).ntfy && !P({ action: 'hmLogin', token: FIT }).ntfy);

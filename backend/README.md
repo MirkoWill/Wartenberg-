@@ -332,6 +332,21 @@ Datum). **Nur Zahlen – keine Namen, Wohnungen, Beschreibungen oder Mitarbeiter
    „Beiratsberichte Mieter-App“ abgelegt. Anschreiben und Signatur: `reportMail()` bzw. `CONFIG.REPORT_SIGNATURE`.
 4. Menü **Mieter-App → Monatsbericht: Vorschau an mich** zeigt Bericht und Mail jederzeit vorab (nur an Sie).
 
+## Testdaten zurücksetzen (vor dem Start)
+
+Menü **Mieter-App → Testdaten zurücksetzen (vor dem Start) …** und zur Bestätigung `ZURÜCKSETZEN` eintippen.
+
+- **Vorher** legt das Script automatisch eine **Sicherungskopie** der ganzen Tabelle in Ihrem Google Drive an
+  („Sicherung Mieter-App vor Zurücksetzen …“). Schlägt die Kopie fehl, wird nichts gelöscht.
+- **Geleert** (Kopfzeilen und Formate bleiben): Tickets, Zählerstände, Übersicht Zähler, Reinigung, Mängel Hausmeister,
+  Aktuelles, Umfragen, Umfrage-Stimmen, Fitness-Buchungen, Google Tasks, Fehlerprotokoll.
+  Fotos der App gehen in den Papierkorb (30 Tage wiederherstellbar), die Liste in Google Tasks wird entfernt
+  (beim nächsten Abgleich leer neu angelegt), Zwischenspeicher werden verworfen.
+- **Bleiben**: Mitarbeiter und Links, QR-Orte, Tätigkeiten, Reinigungsplan (und Kalender), angemeldete Handys, PIN.
+
+Besser als Zeilen von Hand löschen: Fotos, Google Tasks und Zwischenspeicher werden mit aufgeräumt, und
+Kopfzeilen, Kontrollkästchen und Formate bleiben erhalten.
+
 ## Löschkonzept und Überwachung (automatisch, täglich 3 Uhr)
 
 `setup` richtet einen nächtlichen Wartungslauf ein:
