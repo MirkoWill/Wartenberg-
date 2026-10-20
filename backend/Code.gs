@@ -268,6 +268,8 @@ function onOpen() {
     .addItem("Google Tasks: einrichten / jetzt abgleichen", "gtasksSetupNow")
     .addItem("Google Tasks: Abgleich ausschalten", "gtasksOff")
     .addItem("Alte Daten jetzt löschen (Löschkonzept)", "cleanupNow")
+    .addSeparator()
+    .addItem("Testdaten zurücksetzen (vor dem Start) …", "resetTestDataPrompt")
     .addToUi();
 }
 
@@ -1709,6 +1711,73 @@ function cleanupNow() {
   const r = cleanupOldData();
   showResult("Löschkonzept", `Gelöscht: ${r.tickets} Meldungen, ${r.staffDefects} interne Mängel, ${r.meter} Zählerstände, `
     + `${r.cleaning} Nachweise, ${r.plan} Plan-Einträge, ${r.errors} Fehlereinträge (jeweils samt Fotos).`);
+}
+
+/* ---------- Testdaten zurücksetzen (vor dem Echtbetrieb) ---------- */
+
+// Blätter mit erfassten Daten – werden geleert (Kopfzeile bleibt). Einstellungen bleiben unangetastet:
+// Mitarbeiter, QR-Orte, Tätigkeiten, Reinigungsplan, Benachrichtigungen (angemeldete Handys), Start.
+const RESET_SHEETS = ["tickets", "meter", "meterOverview", "cleaning", "staffDefects", "news", "polls", "votes", "fitness", "gtasks", "errors"];
+
+/** Menü: Sicherheitsabfrage, dann alles Erfasste löschen (mit Sicherungskopie der Tabelle). */
+function resetTestDataPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const names = RESET_SHEETS.map((k) => CONFIG.SHEETS[k] && CONFIG.SHEETS[k].name).filter(Boolean);
+  const r = ui.prompt("Testdaten zurücksetzen",
+    "Gelöscht werden alle Einträge in: " + names.join(", ") + " – dazu die Fotos der App (Papierkorb, 30 Tage "
+    + "wiederherstellbar), die Aufgaben in Google Tasks und zwischengespeicherte Daten.\n\n"
+    + "Es bleiben: Mitarbeiter und Links, QR-Orte, Tätigkeiten, Reinigungsplan, angemeldete Handys, PIN.\n"
+    + "Vorher wird automatisch eine Sicherungskopie der Tabelle in Ihrem Google Drive angelegt.\n\n"
+    + "Zum Bestätigen bitte ZURÜCKSETZEN eintippen:", ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  if (String(r.getResponseText() || "").trim().toUpperCase() !== "ZURÜCKSETZEN") { ui.alert("Abgebrochen – es wurde nichts gelöscht."); return; }
+  const res = resetTestData();
+  showResult("Testdaten zurückgesetzt ✓", `Gelöscht: ${res.rows} Zeilen, ${res.photos} Fotos${res.gtasks ? ", Google-Tasks-Liste" : ""}.\n`
+    + `Sicherungskopie: „${res.backup}“ in Ihrem Google Drive.\n\n`
+    + "Auf den Handys: App einmal schließen und neu öffnen. Unter „Meine Meldungen“ stehen alte Nummern ggf. noch auf dem Gerät – "
+    + "sie zeigen keinen Stand mehr und können ignoriert werden.");
+}
+
+/** Löscht alle erfassten Daten (Kopfzeilen, Formate und Einstellungen bleiben). Ohne Sicherungskopie bricht es ab. */
+function resetTestData() {
+  const ss = getSpreadsheet();
+  const backup = `Sicherung Mieter-App vor Zurücksetzen ${Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm")}`;
+  ss.copy(backup); // wirft bei Fehler → es wird nichts gelöscht
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  let rows = 0, photos = 0;
+  try {
+    RESET_SHEETS.forEach((k) => {
+      const def = CONFIG.SHEETS[k];
+      const sheet = def && ss.getSheetByName(def.name);
+      if (!sheet) return;
+      const last = sheet.getLastRow();
+      if (last < 2) return;
+      const width = Math.max(Number(sheet.getLastColumn()) || 0, def.headers.length);
+      const values = sheet.getRange(2, 1, last - 1, width).getValues();
+      values.forEach((row) => row.forEach((c) => { if (/drive\.google\.com/.test(String(c)) && trashPhoto(c)) photos++; }));
+      rows += values.filter((row) => row.some((c) => c !== "" && c != null)).length;
+      sheet.getRange(2, 1, last - 1, width).clearContent();
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  // Google Tasks: Liste der App entfernen, sie wird beim nächsten Abgleich leer neu angelegt
+  const props = PropertiesService.getScriptProperties();
+  let gtasks = false;
+  try {
+    const id = props.getProperty("GTASKS_LIST_ID");
+    if (id && typeof Tasks !== "undefined") { Tasks.Tasklists.remove(id); gtasks = true; }
+  } catch (e) { console.error("Google Tasks:", e); }
+  props.deleteProperty("GTASKS_LIST_ID");
+  props.deleteProperty("REPORT_PENDING");
+  // Zwischengespeicherte Daten verwerfen (Startseite, Wetter, Plan, Orte, Mitarbeiter)
+  try {
+    CacheService.getScriptCache().removeAll(["staff", "areas", "todayPlan", "weather", "pinFails", "news_-"]
+      .concat(Object.keys(CONFIG.ENTRANCE_NAMES).map((k) => `news_${k}`)));
+  } catch (e) { console.error("Cache:", e); }
+  try { rebuildMeterOverview(); } catch (e) { console.error("Zähler-Übersicht:", e); }
+  return { rows, photos, gtasks, backup };
 }
 
 /* ---------- Fehlerüberwachung ---------- */

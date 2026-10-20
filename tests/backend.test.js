@@ -18,17 +18,19 @@ function mkSheet(name) {
       setValue(x) { sh.ensure(r); sh.grid[r - 1][c - 1] = x; return P; },
       setBackgrounds(b) { sh.bgs = b; return P; }, setRichTextValues(v) { sh.ensure(r + nr - 1); v.forEach((row, i) => { sh.grid[r - 1 + i][c - 1] = row[0]; }); return P; }, setFontWeight() { return P; }, setBackground() { return P; }, setFontColor() { return P; },
       setNumberFormat() { return P; }, setDataValidation() { return P; },
+      clearContent() { for (let i = 0; i < nr; i++) { const row = sh.grid[r - 1 + i]; if (row) for (let j = 0; j < nc; j++) row[c - 1 + j] = ''; } return P; },
       createFilter() { sh.filter = { remove() { sh.filter = null; } }; return sh.filter; } }; P = chain(api); return P; },
     getDataRange() { return { getValues: () => sh.grid.map((r) => r.slice()) }; },
     getLastRow() { return sh.grid.length; }, getMaxRows() { return 1000; }, setFrozenRows() {},
     appendRow(row) { sh.grid.push(row); }, deleteRow(n) { sh.grid.splice(n - 1, 1); }, clear() { sh.grid = []; }, getFilter() { return sh.filter; }, autoResizeColumns() {} };
   return (sheets[name] = chain(sh));
 }
-const ss = chain({ getSheetByName: (n) => sheets[n] || null, insertSheet: mkSheet, getSheets: () => Object.values(sheets), deleteSheet() {}, getUrl: () => 'https://sheet' });
+const copies = [];
+const ss = chain({ copy: (n) => { copies.push(n); return {}; }, getSheetByName: (n) => sheets[n] || null, insertSheet: mkSheet, getSheets: () => Object.values(sheets), deleteSheet() {}, getUrl: () => 'https://sheet' });
 const ctx = { console, JSON, Math, Date, Object, String, Number, Error, Array, encodeURIComponent,
   Logger: { log() {} },
   SpreadsheetApp: { getActive: () => ({ toast() {} }), getActiveSpreadsheet: () => ss, newRichTextValue: () => { const o = { text: '', url: null, setText(t) { o.text = t; return o; }, setLinkUrl(u) { o.url = u; return o; }, build() { return { rich: true, text: o.text, url: o.url }; } }; return o; }, newConditionalFormatRule: () => chain({ build: () => ({}) }), newDataValidation: () => ({ requireValueInList() { return this; }, requireCheckbox() { return this; }, requireValueInRange() { return this; }, setAllowInvalid() { return this; }, build() { return {}; } }), getUi: () => ({ alert: (t, m) => { alerts.push(t + ': ' + m); }, ButtonSet: { OK: 1, OK_CANCEL: 2 }, Button: { OK: 'ok', CANCEL: 'cancel' }, prompt: () => { const a = prompts.shift() || { ok: false, text: '' }; return { getSelectedButton: () => (a.ok ? 'ok' : 'cancel'), getResponseText: () => a.text }; }, createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
-  PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
+  PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: (k) => { delete props[k]; } }) },
   DriveApp: { getFileById: (id) => ({ setTrashed: () => trashed.push(id), getBlob: () => ({ name: 'blob:' + id }) }), createFolder: () => ({ getId: () => 'F1', createFile: (b) => ({ getId: () => 'FILE_' + b.name }) }), getFolderById: () => ({ createFile: (b) => { files.push(b.name); return { getId: () => 'FILE_' + b.name, getUrl: () => 'https://drive.google.com/file/d/' + b.name }; } }) },
   Utilities: { DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash(a).update(typeof t === 'string' ? Buffer.from(t, 'utf8') : Buffer.from(t)).digest()].map((b) => (b > 127 ? b - 256 : b)), base64EncodeWebSafe: (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'), base64Decode: (s) => Buffer.from(s, 'base64'), newBlob: (bytes, mime, name) => ({ name }), getUuid: () => (++uuidSeq).toString(16).padStart(4, '0') + require('crypto').randomUUID().slice(4), // Anfang eindeutig: viele Vorgänge am selben Tag ohne zufällig doppelte Nummer
     formatDate: (d, tz, f) => { const p = (n) => String(n).padStart(2, '0'); if (f === 'HH:mm') return `${p(d.getHours())}:${p(d.getMinutes())}`; return f === 'yyMMdd' ? String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } },
@@ -1041,6 +1043,31 @@ props.NOTIFY_EMAIL = nm;
   check('Anliegen: Team/Leitung sehen es nicht (Verwaltung)', !post({ action: 'getTasks', token: leadTok }).tasks.some((t) => t.id === an.id));
   check('Anliegen: kann der Verwaltung auch an den Hausmeister geben', post({ action: 'adminUpdateTask', token: admTok, id: an.id, owner: 'Hausmeister' }).ok && post({ action: 'getTasks', token: leadTok }).tasks.some((t) => t.id === an.id));
   post({ action: 'adminUpdateTask', token: admTok, id: an.id, owner: 'Verwaltung', status: 'erledigt' });
+}
+
+// Testdaten zurücksetzen (Menü): alles Erfasste weg, Einstellungen bleiben, vorher Sicherungskopie
+{
+  const keep = ['Mitarbeiter', 'QR-Orte', 'Tätigkeiten', 'Reinigungsplan', 'Benachrichtigungen'].map((n) => [n, JSON.stringify(sheets[n] ? sheets[n].grid : null)]);
+  const filled = ['Tickets', 'Zählerstände', 'Reinigung', 'Mängel Hausmeister', 'Aktuelles', 'Umfragen', 'Fitness-Buchungen', 'Fehlerprotokoll']
+    .filter((n) => sheets[n] && sheets[n].grid.slice(1).some((r) => r.some((c) => c !== '' && c != null)));
+  const pinBefore = props.APP_PIN; const trashedBefore = trashed.length;
+  alerts.length = 0;
+  prompts.push({ ok: true, text: 'nein' }); ctx.resetTestDataPrompt();
+  check('Zurücksetzen: falsches Bestätigungswort → nichts gelöscht', /Abgebrochen/.test(alerts.join()) && sheets['Tickets'].grid.slice(1).some((r) => r[0]));
+  prompts.push({ ok: false, text: '' }); ctx.resetTestDataPrompt();
+  check('Zurücksetzen: Abbrechen → nichts gelöscht, keine Kopie', copies.length === 0 && sheets['Tickets'].grid.slice(1).some((r) => r[0]));
+  alerts.length = 0;
+  prompts.push({ ok: true, text: ' zurücksetzen ' }); ctx.resetTestDataPrompt();
+  const empty = (n) => !sheets[n] || sheets[n].grid.slice(1).every((r) => r.every((c) => c === '' || c == null));
+  check('Zurücksetzen: vorher Sicherungskopie der Tabelle', copies.length === 1 && /^Sicherung Mieter-App vor Zurücksetzen \d{4}-\d{2}-\d{2}/.test(copies[0]), copies);
+  check('Zurücksetzen: Meldungen, Zähler, Nachweise, Mängel, Hinweise, Umfragen, Stimmen, Fitness, Fehler leer', filled.length >= 5
+    && ['Tickets', 'Zählerstände', 'Reinigung', 'Mängel Hausmeister', 'Aktuelles', 'Umfragen', 'Umfrage-Stimmen', 'Fitness-Buchungen', 'Google Tasks', 'Fehlerprotokoll'].every(empty), filled);
+  check('Zurücksetzen: Kopfzeilen bleiben', sheets['Tickets'].grid[0][0] === 'ID' && sheets['Mängel Hausmeister'].grid[0].length > 3);
+  check('Zurücksetzen: Mitarbeiter/Links, QR-Orte, Tätigkeiten, Reinigungsplan, Handys und PIN unverändert', keep.every(([n, g]) => JSON.stringify(sheets[n] ? sheets[n].grid : null) === g) && props.APP_PIN === pinBefore);
+  check('Zurücksetzen: Fotos in den Papierkorb, Google-Tasks-Liste entfernt', trashed.length > trashedBefore && !props.GTASKS_LIST_ID, [trashed.length - trashedBefore]);
+  check('Zurücksetzen: Ergebnis mit Hinweis auf die Sicherung', alerts.some((a) => /zurückgesetzt/.test(a) && /Sicherungskopie/.test(a)), alerts);
+  check('Zurücksetzen: App funktioniert danach (neue Meldung, Cockpit, Team)', post({ ...base, action: 'submitTicket', type: 'Mangel', ort: 'Keller', details: 'Nach dem Zurücksetzen' }).ok
+    && post({ action: 'adminOverview', token: admTok }).tasks.length === 1 && post({ action: 'getTasks', token: leadTok }).ok);
 }
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (Löschkonzept/Überwachung)');
 process.exitCode = fails ? 1 : 0;
