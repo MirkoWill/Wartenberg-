@@ -304,5 +304,52 @@ check('I4 Leitung: fremde Rolle per Anfrage nicht erschleichbar', (() => { const
 check('I5 Hausmeister: Cockpit-Aktionen gesperrt, auch mit role-Feld', P({ action: 'adminOverview', token: HM, role: 'Verwaltung' }).code === 'staff');
 check('I6 Notiz-Formel wird Text (adminUpdateTask)', (() => { const t = P({ action: 'adminOverview', token: ADM }).tasks[0]; P({ action: 'adminUpdateTask', token: ADM, id: t.id, note: '=HYPERLINK("http://x")' }); const g = [sheets['Tickets'], sheets['Mängel Hausmeister']].map((s) => s.grid).flat(); return g.some((r) => r[0] === t.id && r.some((c) => typeof c === 'string' && c.startsWith("'=HYPERLINK"))); })());
 
+console.log('--- J. Team-Aufträge, Zuweisen-Links, Alarm-App, Anliegen (Pen-Test 3)');
+reset();
+{
+  const LEAD2 = row('002') && row('002')[3];
+  check('J0 Nr. 002 (Leitung) vorhanden und wie 001 eingeschränkt', !!LEAD2 && P({ action: 'adminOverview', token: LEAD2 }).role === 'Leitung');
+  // Ein Hausmeister-Auftrag (Klingelschild) und ein Verwaltungs-Auftrag (Mangel)
+  const kl = P({ ...base, action: 'submitTicket', type: 'Klingelschild', wohnung: '9', name: 'Pentest', details: 'Schild', website: '' });
+  const mg = P({ ...base, action: 'submitTicket', type: 'Mangel', ort: 'Keller', details: 'Pentest Mangel' });
+  const sig = (id, nr) => ctx.assignSig(id, nr);
+  const A = (q) => G({ action: 'assign', ...q });
+  const html = (r) => String((r && (r.html || r.content)) || JSON.stringify(r));
+  check('J1 Zuweisen-Link: gefälschte/fremde Signatur abgelehnt', [
+    { id: kl.id, nr: '100', s: 'x'.repeat(32) }, { id: kl.id, nr: '100', s: sig(kl.id, '101') }, { id: kl.id, nr: '100' }, { id: kl.id, nr: '100', s: [sig(kl.id, '100')] },
+    { id: kl.id + 'X', nr: '100', s: sig(kl.id, '100') }].every((q) => /ungültig/.test(html(A({ ...q, confirm: '1' })))));
+  check('J2 Zuweisen-Link: Verwaltungs-Auftrag (gültige Signatur) nicht an das Team', !/jetzt Nr\. 100 zugewiesen/.test(html(A({ id: mg.id, nr: '100', s: sig(mg.id, '100'), confirm: '1' }))));
+  check('J3 Zuweisen-Link: gesperrte Nummer (101) und Nicht-Hausmeister (007) abgelehnt',
+    ['101', '007', '010'].every((nr) => !/zugewiesen und steht/.test(html(A({ id: kl.id, nr, s: sig(kl.id, nr), confirm: '1' })))));
+  check('J4 Zuweisen-Link: ohne Bestätigung keine Änderung', /An Nr\. 100 geben\?/.test(html(A({ id: kl.id, nr: '100', s: sig(kl.id, '100') })))
+    && !P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === kl.id));
+  check('J5 Team sieht unverteilte Aufträge und Verwaltungs-Aufträge nicht', (() => { const ts = P({ action: 'getTasks', token: HM }).tasks; return !ts.some((t) => t.id === kl.id || t.id === mg.id); })());
+  check('J6 Team kann unverteilten Auftrag nicht erledigen', !P({ action: 'completeTask', token: HM, id: kl.id }).ok);
+  check('J7 Leitung: Zuweisen nur an aktive Hausmeister (nicht 101/007/999/Objekt)', ['101', '007', '999', '0100', ' 100', { toString: () => '100' }, ['100']]
+    .every((assignee) => { const r = P({ action: 'adminUpdateTask', token: LEAD, id: kl.id, assignee }); return !r.ok || !P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === kl.id && t.assignee !== '100'); }));
+  check('J8 Hausmeister darf nicht selbst zuweisen', P({ action: 'adminUpdateTask', token: HM, id: kl.id, assignee: '100' }).code === 'staff');
+  const ok = P({ action: 'adminUpdateTask', token: LEAD, id: kl.id, assignee: '100' });
+  check('J9 Leitung weist zu → Team sieht Auftrag, Verwaltungs-Auftrag weiter nicht zuweisbar', ok.ok && P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === kl.id && t.mine)
+    && !(P({ action: 'adminUpdateTask', token: LEAD, id: mg.id, assignee: '100' }).ok && P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === mg.id)));
+  check('J10 Interne Funktionen nicht als Aktion aufrufbar', ['setup', 'hausmeisterDigest', 'hausmeisterDigestNow', 'releaseNotesSendNow', 'releaseNotesPreviewNow', 'gtasksSync', 'gtasksSetupNow', 'morningDigest', 'assignSecret', 'ntfySend', 'rebuildAnalytics']
+    .every((action) => { const before = mails.length; const r1 = P({ action, token: ADM, pin: '13059' }); const r2 = G({ action, token: ADM, pin: '13059' }); return r1.ok !== true && (r2.ok !== true || (r2.service === 'mieter-app' && Object.keys(r2).length === 2)) && mails.length === before; })); // GET ohne bekannte Aktion = nur Lebenszeichen
+  check('J11 Alarm-App: Test nur für Verwaltung/Leitung, Kennung nur an sie', P({ action: 'ntfyTest', token: HM }).ok !== true && P({ action: 'ntfyTest', token: FIT }).ok !== true
+    && !P({ action: 'hmLogin', token: HM }).ntfy && !P({ action: 'hmLogin', token: FIT }).ntfy);
+  const an = P({ ...base, action: 'submitTicket', type: 'Anliegen', wohnung: '07', name: '=IMPORTXML("http://x","//a")', ort: '+cmd|x', details: '@SUM(1)'.repeat(2000), kontakt: '-2+3', owner: 'Hausmeister', assignee: '100', status: 'erledigt' });
+  const arow = sheets['Tickets'].grid.find((r) => r[0] === an.id) || [];
+  check('J12 Anliegen: Formeln entschärft, Länge begrenzt, Zuständigkeit/Status/Zuweisung nicht von außen setzbar', an.ok
+    && arow.every((c) => typeof c !== 'string' || !/^[=+\-@]/.test(c)) && arow.every((c) => typeof c !== 'string' || c.length <= 4100)
+    && arow.includes('Verwaltung') && arow.includes('offen') && !P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === an.id), arow.map((c) => String(c).slice(0, 30)));
+  check('J13 Unbekannte Meldungsart abgelehnt', !P({ ...base, action: 'submitTicket', type: 'Admin', details: 'x' }).ok && !P({ ...base, action: 'submitTicket', type: '__proto__', details: 'x' }).ok);
+  const st = G({ action: 'status', pin: '13059', ids: an.id });
+  check('J14 Status eines Anliegens verrät weder Name noch Kontakt', st.ok && !/IMPORTXML|-2\+3|07/.test(JSON.stringify(st.items)), st.items);
+  const sd = P({ action: 'submitStaffDefect', token: HM, ort: 'Keller', beschreibung: 'x', owner: 'Hausmeister', urgent: false });
+  check('J15 Team-Mangel geht immer zuerst an die Verwaltung (owner aus der Anfrage ignoriert)', sd.ok && sd.owner === 'Verwaltung', sd);
+  const fb = P({ action: 'fitnessBook', token: ADM, date: (() => { const x = new Date(); x.setDate(x.getDate() + 5); return x.toISOString().slice(0, 10); })(), time: '07:00', minutes: 30 });
+  check('J16 Fitness: fremde Buchung nicht stornierbar (010 storniert 007), Verwaltung darf', fb.ok && !P({ action: 'fitnessCancel', token: FIT, id: fb.id }).ok && P({ action: 'fitnessCancel', token: ADM2, id: fb.id }).ok);
+  const errs = [P({ action: 'getTasks', token: HM, id: { $gt: '' } }), P({ action: 'completeTask', token: HM, id: { toString: null } }), G({ action: 'assign', id: {}, nr: [], s: null })];
+  check('J17 Fehler verraten keine Interna (kein Stacktrace/Dateiname)', errs.every((r) => !/at |Code\.gs|evalmachine|TypeError/.test(JSON.stringify(r))), errs);
+}
+
 console.log(fails ? `>>> ${fails} BEFUND(E)` : '>>> KEINE BEFUNDE');
 process.exitCode = fails ? 1 : 0;

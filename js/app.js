@@ -799,6 +799,11 @@
     $("#emergencyRules").innerHTML = renderAccordion(OBJ.emergencyRules, false);
   }
 
+  /** Symbol: Name eines Linien-Symbols (z. B. "bus") oder – für ältere Einträge – ein Emoji. */
+  function icon(name, fallback) {
+    return /^[a-z]+$/.test(name || "") ? `<span class="ico ico--${name}" aria-hidden="true"></span>` : esc(name || fallback || "");
+  }
+
   function contactItems(list) {
     return list.map((c) => `
       <li>
@@ -889,7 +894,7 @@
     $("#documentList").innerHTML = OBJ.documents.map((d) => `
       <li>
         <a class="link-item" href="${esc(d.url)}" target="_blank" rel="noopener"${d.url.endsWith(".vcf") ? " download" : ""}>
-          <span class="link-item__icon" aria-hidden="true">${esc(d.icon || "📄")}</span>
+          <span class="link-item__icon" aria-hidden="true">${icon(d.icon, "📄")}</span>
           <span class="link-item__body">
             <span class="link-item__label">${esc(d.label)}</span>
             <span class="link-item__sub">${esc(d.sub || "")}</span>
@@ -898,7 +903,7 @@
       </li>`).join("");
 
     $("#kiezList").innerHTML = OBJ.kiez.map((g) => `
-      <h3 class="subsection-title"${g.id ? ` id="${esc(g.id)}"` : ""}><span aria-hidden="true">${esc(g.icon)}</span> ${esc(g.group)}</h3>
+      <h3 class="subsection-title"${g.id ? ` id="${esc(g.id)}"` : ""}><span aria-hidden="true">${icon(g.icon)}</span> ${esc(g.group)}</h3>
       <ul class="place-list">
         ${g.places.map((pl) => `
           <li class="place">
@@ -2772,7 +2777,11 @@
     const me = String(d.me || "");
     const admin = ((staff() || {}).user || {}).role === "Verwaltung";
     const goal = Number(d.weeklyGoal) || 3;
-    const members = Array.isArray(d.members) ? d.members : [];
+    // Zahlen vom Server immer als Zahl behandeln (landen ohne Maskierung im HTML)
+    const num = (x) => Math.max(0, Math.round(Number(x)) || 0);
+    const stat = (x) => ({ count: num(x && x.count), minutes: num(x && x.minutes), together: num(x && x.together) });
+    const members = (Array.isArray(d.members) ? d.members : []).map((m) => ({ nr: String((m && m.nr) || ""), streak: num(m && m.streak),
+      week: stat(m && m.week), month: stat(m && m.month), year: stat(m && m.year) }));
     const mine = members.find((m) => m.nr === me);
     const slot = (b) => `${fitHm(new Date(b.start))}–${fitHm(new Date(b.end))} Uhr`;
 
@@ -3097,9 +3106,9 @@
     const webcal = httpsUrl.replace(/^https?:\/\//, "webcal://");
     const google = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`;
     return `<div class="cal-buttons">
-      <a class="btn btn--ghost btn--small" href="${esc(webcal)}">📅 ${esc(t_("iPhone / Outlook"))}</a>
-      <a class="btn btn--ghost btn--small" href="${esc(google)}" target="_blank" rel="noopener">📅 ${esc(t_("Google Kalender"))}</a>
-      <button class="btn btn--ghost btn--small" type="button" data-copy="${esc(httpsUrl)}">🔗 ${esc(t_("Adresse kopieren"))}</button>
+      <a class="btn btn--ghost btn--small" href="${esc(webcal)}">${icon("calendar")}${esc(t_("iPhone / Outlook"))}</a>
+      <a class="btn btn--ghost btn--small" href="${esc(google)}" target="_blank" rel="noopener">${icon("calendar")}${esc(t_("Google Kalender"))}</a>
+      <button class="btn btn--ghost btn--small" type="button" data-copy="${esc(httpsUrl)}">${icon("link")}${esc(t_("Adresse kopieren"))}</button>
     </div>`;
   }
 

@@ -42,7 +42,7 @@
   --c-urgent: #b85c00;        /* dringende Störung (orange) */
   --c-urgent-soft: #fff1e0;
   --c-ok: #4f7a28;
-  --c-whatsapp: #1c9d56;
+  --c-whatsapp: #137a43;        /* dunkler als das WhatsApp-Grün: Kontrast ≥ 4,5:1 zu Weiß */
 
   --font-serif: "Playfair Display", Georgia, "Times New Roman", serif;
   --font-sans: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -852,7 +852,7 @@ body.lang-de .i18n-note { display: none; }
 .v-wheel { fill: var(--c-danger); }
 .v-arrow { fill: none; stroke: var(--c-text); stroke-width: 3; stroke-linecap: round; }
 .v-arrowhead { fill: var(--c-text); }
-.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 700; font-size: 12px; color: #fff; margin-bottom: 2px; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-weight: 700; font-size: 13px; color: #fff; margin-bottom: 2px; }
 .tag--ok { background: #2e7d32; }
 .tag--stop { background: var(--c-danger); }
 .steps__tip { margin: 10px 0 0; font-size: 16px; }
@@ -1228,6 +1228,14 @@ body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }
 .ico--gas { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M12 3.5 2.8 19.5h18.4z%22/%3E%3Cpath d=%22M12 10v4.5%22/%3E%3Cpath d=%22M12 17.3h.01%22/%3E%3C/svg%3E"); }
 .ico--key { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%228%22 cy=%2215%22 r=%224%22/%3E%3Cpath d=%22m11 12 8.5-8.5%22/%3E%3Cpath d=%22m16.5 6.5 2.5 2.5M14.5 8.5l2 2%22/%3E%3C/svg%3E"); }
 .ico--phone { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.8%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M5 4h3.5l1.8 4.5-2.3 1.4a11 11 0 0 0 6.1 6.1l1.4-2.3 4.5 1.8V19a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z%22/%3E%3C/svg%3E"); }
+.ico--bus { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%224%22 y=%223%22 width=%2216%22 height=%2215%22 rx=%223%22/%3E%3Cpath d=%22M4 11h16M8 18v3M16 18v3%22/%3E%3Cpath d=%22M8 14.5h.01M16 14.5h.01%22/%3E%3C/svg%3E"); }
+.ico--cart { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M3 4h2.5l2.2 10.5h10.3l2-7.5H6.6%22/%3E%3Ccircle cx=%229%22 cy=%2219%22 r=%221.4%22/%3E%3Ccircle cx=%2217%22 cy=%2219%22 r=%221.4%22/%3E%3C/svg%3E"); }
+.ico--pharmacy { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223.5%22 y=%223.5%22 width=%2217%22 height=%2217%22 rx=%224%22/%3E%3Cpath d=%22M12 8v8M8 12h8%22/%3E%3C/svg%3E"); }
+.ico--package { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M12 3 4 7v10l8 4 8-4V7z%22/%3E%3Cpath d=%22M4 7l8 4 8-4M12 11v10%22/%3E%3C/svg%3E"); }
+.ico--book { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z%22/%3E%3Cpath d=%22M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3%22/%3E%3Cpath d=%22M9 7.5h6%22/%3E%3C/svg%3E"); }
+.ico--contact { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%225%22 width=%2218%22 height=%2214%22 rx=%222%22/%3E%3Ccircle cx=%229%22 cy=%2211%22 r=%222.2%22/%3E%3Cpath d=%22M5.8 16a3.4 3.4 0 0 1 6.4 0M14.5 10h3.5M14.5 13.5h3.5%22/%3E%3C/svg%3E"); }
+.ico--calendar { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223.5%22 y=%225%22 width=%2217%22 height=%2215.5%22 rx=%222%22/%3E%3Cpath d=%22M3.5 10h17M8 3v4M16 3v4%22/%3E%3C/svg%3E"); }
+.ico--link { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1%22/%3E%3Cpath d=%22M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1%22/%3E%3C/svg%3E"); }
 
 :root {
   --radius: 14px;
@@ -1344,3 +1352,10 @@ body.hm-simple .seg-ico.ico { width: 28px; height: 28px; }
 .contact--urgent .contact__icon { color: var(--c-urgent); }
 .contact__call .ico { width: 24px; height: 24px; color: #fff; }
 @media (prefers-color-scheme: dark) { .contact__call .ico { color: #151515; } }
+
+/* UX-Prüfung: Knöpfe im Kopf groß genug zum Tippen (mind. 44 px), Symbole in Listen und Knöpfen */
+.hero__btn, .lang__btn { min-height: 44px; padding: 10px 14px; display: inline-flex; align-items: center; gap: 6px; }
+.hero__eyebrow { padding: 10px 0; }
+.link-item__icon .ico, .transit-link__icon .ico { width: 28px; height: 28px; color: var(--c-primary); }
+.subsection-title .ico { width: 22px; height: 22px; vertical-align: -4px; margin-right: 4px; color: var(--c-primary); }
+.btn--small .ico { width: 18px; height: 18px; margin-right: 6px; }
