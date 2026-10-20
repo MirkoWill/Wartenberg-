@@ -187,6 +187,7 @@ function makeQrVideo(text) {
       await p.click("#waterSubmit"); await p.waitForTimeout(600);
       check("Zähler: ohne Bestätigungs-Häkchen wird nicht gesendet", !ctx.requests.some((r) => r.action === "submitMeterReadings")
         && await p.evaluate(() => document.activeElement && document.activeElement.name === "disclaimer"));
+      check("Zähler: Pflicht-Häkchen mit Sternchen und rot markiert, solange es fehlt", await p.evaluate(() => { const l = document.querySelector("#formWater .remember--confirm"); const span = l.querySelector("span"); return getComputedStyle(span, "::after").content.includes("*") && getComputedStyle(l).borderTopColor !== "rgba(0, 0, 0, 0)"; }));
       await p.check("#formWater [name=disclaimer]");
       await p.click("#waterSubmit"); await p.waitForTimeout(1200);
       const sent = ctx.requests.find((r) => r.action === "submitMeterReadings");
