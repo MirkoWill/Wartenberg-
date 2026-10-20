@@ -185,9 +185,9 @@
         </div>
 
         <div class="segmented segmented--tabs" role="tablist" id="staffTabs">
-          <label><input type="radio" name="staffTab" value="scan" checked><span><i class="seg-ico" aria-hidden="true">📷</i>Scannen</span></label>
-          <label><input type="radio" name="staffTab" value="tasks"><span><i class="seg-ico" aria-hidden="true">📋</i>Aufträge <b class="seg-count" id="taskCount" hidden></b></span></label>
-          <label><input type="radio" name="staffTab" value="defect"><span><i class="seg-ico" aria-hidden="true">🛠️</i>Mangel</span></label>
+          <label><input type="radio" name="staffTab" value="scan" checked><span><span class="ico ico--scan seg-ico" aria-hidden="true"></span>Scannen</span></label>
+          <label><input type="radio" name="staffTab" value="tasks"><span><span class="ico ico--tasks seg-ico" aria-hidden="true"></span>Aufträge <b class="seg-count" id="taskCount" hidden></b></span></label>
+          <label><input type="radio" name="staffTab" value="defect"><span><span class="ico ico--defect seg-ico" aria-hidden="true"></span>Mangel</span></label>
         </div>
 
         <!-- Scannen -->
@@ -202,7 +202,7 @@
           </div>
 
           <div id="scanStart">
-            <button class="btn btn--primary btn--block btn--big" id="scanBtn" type="button">📷 QR-Code scannen</button>
+            <button class="btn btn--primary btn--block btn--big" id="scanBtn" type="button"><span class="ico ico--scan" aria-hidden="true"></span>QR-Code scannen</button>
             <button class="btn btn--ghost btn--block" id="manualBtn" type="button">Ort ohne QR-Code wählen (Code beschädigt)</button>
           </div>
           <div class="scanner" id="scanner" hidden>
@@ -276,9 +276,9 @@
 
         <div class="staff-admin" id="staffAdmin" hidden>
           <h2 class="section-title">Cockpit &amp; Werkzeuge</h2>
-          <a class="btn btn--primary btn--block" href="#cockpit">📊 Cockpit: Aufträge, SLA, Arbeiten, Statistik</a>
-          <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
-          <a class="btn btn--ghost btn--block" href="#fitness" data-fit-link hidden>💪 Fitnessraum</a>
+          <a class="btn btn--primary btn--block" href="#cockpit"><span class="ico ico--cockpit" aria-hidden="true"></span>Cockpit: Aufträge, SLA, Arbeiten, Statistik</a>
+          <a class="btn btn--ghost btn--block" href="#qrdruck"><span class="ico ico--print" aria-hidden="true"></span>QR-Codes drucken</a>
+          <a class="btn btn--ghost btn--block" href="#fitness" data-fit-link hidden><span class="ico ico--fitness" aria-hidden="true"></span>Fitnessraum</a>
         </div>
 
         <div class="push-box" data-push-box="staff" data-no-i18n hidden></div>
@@ -306,7 +306,11 @@
           <span class="muted small" id="cockpitStatus">–</span>
           <button class="btn btn--ghost btn--small" id="cockpitRefresh" type="button">↻ Aktualisieren</button>
         </div>
-        <button class="btn btn--primary btn--block" id="cockpitDefect" type="button" hidden>🛠️ Mangel erfassen</button>
+        <nav class="tool-row" id="cockpitTools" aria-label="Werkzeuge">
+          <button class="tool-row__btn" type="button" data-tool-pane="scan"><span class="ico ico--scan" aria-hidden="true"></span>Scannen</button>
+          <button class="tool-row__btn" type="button" data-tool-pane="tasks"><span class="ico ico--tasks" aria-hidden="true"></span>Aufträge</button>
+          <button class="tool-row__btn" type="button" data-tool-pane="defect" id="cockpitDefect"><span class="ico ico--defect" aria-hidden="true"></span>Mangel erfassen</button>
+        </nav>
         <div class="kpis" id="cockpitKpis"></div>
 
         <section id="cockpitNews" hidden>
@@ -377,8 +381,8 @@
 
         <h2 class="section-title">Werkzeuge</h2>
         <a class="btn btn--ghost btn--block" href="#hausmeister">🧹 Hausmeister-Tools (Scannen, Mangel erfassen)</a>
-        <a class="btn btn--ghost btn--block" href="#qrdruck">🖨️ QR-Codes drucken</a>
-        <a class="btn btn--ghost btn--block" href="#fitness" data-fit-link hidden>💪 Fitnessraum</a>
+        <a class="btn btn--ghost btn--block" href="#qrdruck"><span class="ico ico--print" aria-hidden="true"></span>QR-Codes drucken</a>
+        <a class="btn btn--ghost btn--block" href="#fitness" data-fit-link hidden><span class="ico ico--fitness" aria-hidden="true"></span>Fitnessraum</a>
         <div class="push-box" data-push-box="staff" data-no-i18n hidden></div>
         <div class="push-box ntfy-box" data-ntfy-box data-no-i18n hidden></div>
         <p class="muted small">SLA-Ziele: Dringend – Reaktion 1 Tag, erledigt 3 Tage · Mangel – Reaktion 3 Werktage, erledigt
@@ -455,7 +459,7 @@
       <div data-no-i18n>
       <div class="no-print">
         <p class="muted">Ein Code je Ort (Blatt „QR-Orte“). Am besten laminiert oder als wetterfeste Aufkleber anbringen.</p>
-        <button class="btn btn--primary btn--block" id="qrPrint" type="button">🖨️ Drucken</button>
+        <button class="btn btn--primary btn--block" id="qrPrint" type="button"><span class="ico ico--print" aria-hidden="true"></span>Drucken</button>
       </div>
       <div class="qr-sheet" id="qrSheet"></div>
       </div>
@@ -801,7 +805,7 @@
         etablierte externe Dienste. Welche das sind und welche Daten dabei anfallen, beschreiben wir im Folgenden.</p>
 
       <h2 class="section-title">3. Eingesetzte Dienste</h2>
-      <details class="rule" open>
+      <details class="rule">
         <summary>Bereitstellung der App – GitHub</summary>
         <p>Die App wird über GitHub Pages ausgeliefert (GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco,
           CA 94107, USA). Beim Aufruf verarbeitet GitHub technisch notwendige Daten wie Ihre IP-Adresse, Datum und

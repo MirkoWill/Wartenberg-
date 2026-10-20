@@ -1150,7 +1150,6 @@ button.kpi { font: inherit; color: inherit; text-align: left; width: 100%; curso
 .remember--confirm { align-items: flex-start; font-weight: 600; }
 .defect-owner { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
 .defect-owner legend { margin-bottom: 8px; }
-#cockpitDefect { margin: 4px 0 14px; }
 .ntfy-box { display: block; }
 .ntfy summary { cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
 .ntfy__steps { margin: 10px 0 6px; padding-left: 20px; display: grid; gap: 8px; }
@@ -1222,6 +1221,7 @@ body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }
 .ico--bolt { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M13 3 5 13.5h6L10 21l8-10.5h-6z%22/%3E%3C/svg%3E"); }
 .ico--chat { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M4 5h16v11H9l-5 4z%22/%3E%3Cpath d=%22M8 9.5h8M8 12.5h5%22/%3E%3C/svg%3E"); }
 .ico--help { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%229%22/%3E%3Cpath d=%22M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6%22/%3E%3Cpath d=%22M12 17.2h.01%22/%3E%3C/svg%3E"); }
+.ico--print { --i: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M7 9V3h10v6%22/%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%228%22 rx=%222%22/%3E%3Cpath d=%22M7 14h10v7H7z%22/%3E%3C/svg%3E"); }
 
 :root {
   --radius: 14px;
@@ -1305,3 +1305,28 @@ body.hm-simple main { padding-bottom: calc(96px + var(--safe-bottom)); }
 .intro--hm .intro__icon { width: 92px; height: 92px; font-size: 0; }
 .intro--hm .intro__icon .ico { width: 48px; height: 48px; }
 @media (prefers-color-scheme: dark) { .intro__box { border: 1px solid var(--c-border); box-shadow: none; } }
+
+/* Werkzeuge oben im Cockpit (Verwaltung/Leitung): Scannen · Aufträge · Mangel erfassen */
+.tool-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 4px 0 18px; }
+.tool-row__btn { display: grid; justify-items: center; gap: 6px; padding: 14px 6px 12px; border: 0; border-radius: var(--radius); background: var(--c-surface); box-shadow: var(--shadow); color: var(--c-heading); font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; cursor: pointer; }
+.tool-row__btn .ico { width: 28px; height: 28px; color: var(--c-primary); }
+.tool-row__btn:active { transform: scale(.98); }
+@media (prefers-color-scheme: dark) { .tool-row__btn { border: 1px solid var(--c-border); } }
+/* Linien-Symbole in Knöpfen und Reitern */
+.btn .ico { width: 22px; height: 22px; margin-right: 8px; }
+.seg-ico.ico { width: 22px; height: 22px; margin-right: 8px; vertical-align: -5px; }
+body.hm-simple .seg-ico.ico { width: 28px; height: 28px; }
+
+/* Werkzeuge oben im Cockpit (Verwaltung/Leitung): Scannen · Aufträge · Mangel erfassen */
+.tool-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 4px 0 18px; }
+.tool-row__btn { display: grid; justify-items: center; gap: 6px; padding: 14px 6px 12px; border: 0; border-radius: var(--radius); background: var(--c-surface); box-shadow: var(--shadow); color: var(--c-heading); font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; cursor: pointer; }
+.tool-row__btn .ico { width: 28px; height: 28px; color: var(--c-primary); }
+.tool-row__btn:active { transform: scale(.98); }
+@media (prefers-color-scheme: dark) { .tool-row__btn { border: 1px solid var(--c-border); } }
+/* Linien-Symbole in Knöpfen und Reitern */
+.btn .ico { width: 22px; height: 22px; margin-right: 8px; }
+.seg-ico.ico { width: 22px; height: 22px; margin-right: 8px; vertical-align: -5px; }
+body.hm-simple .seg-ico.ico { width: 28px; height: 28px; }
+/* Symbol im Reiter ist selbst ein <span>: nicht wie die Reiterfläche gestalten */
+.segmented span.ico { display: inline-block; min-height: 0; background: currentColor; }
+.tool-row__btn { align-content: start; }

@@ -1731,7 +1731,6 @@
     defectOrt.value = keep;
     // Verwaltung entscheidet bei der Aufnahme, ob sie selbst oder der Hausmeister sich kümmert
     $("#defectOwnerWrap").hidden = s.user.role !== "Verwaltung";
-    $("#cockpitDefect").hidden = s.user.role !== "Verwaltung";
     renderNtfyBoxes(s);
     renderQueueBadge();
     renderToday();
@@ -2644,7 +2643,8 @@
       staffLogin().then(() => { if (currentView === "cockpit" && !readJson(COCKPIT_KEY)) loadCockpit(); });
     };
     $("#cockpitRefresh").addEventListener("click", loadCockpit);
-    $("#cockpitDefect").addEventListener("click", () => { location.hash = "hausmeister"; selectStaffPane("defect"); });
+    // Werkzeuge oben im Cockpit: Scannen, Aufträge, Mangel – öffnet den Hausmeister-Bereich mit dem passenden Reiter
+    $$("[data-tool-pane]").forEach((btn) => btn.addEventListener("click", () => { selectStaffPane(btn.dataset.toolPane); location.hash = "hausmeister"; }));
     const setCockpitFilter = (f) => {
       cockpitFilter = f;
       $$("#cockpitFilter [data-filter]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.filter === f)));
