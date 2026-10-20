@@ -342,7 +342,7 @@ reset();
     && arow.includes('Verwaltung') && arow.includes('offen') && !P({ action: 'getTasks', token: HM }).tasks.some((t) => t.id === an.id), arow.map((c) => String(c).slice(0, 30)));
   check('J13 Unbekannte Meldungsart abgelehnt', !P({ ...base, action: 'submitTicket', type: 'Admin', details: 'x' }).ok && !P({ ...base, action: 'submitTicket', type: '__proto__', details: 'x' }).ok);
   const st = G({ action: 'status', pin: '13059', ids: an.id });
-  check('J14 Status eines Anliegens verrät weder Name noch Kontakt', st.ok && !/IMPORTXML|-2\+3|07/.test(JSON.stringify(st.items)), st.items);
+  check('J14 Status eines Anliegens verrät weder Name, Wohnung noch Kontakt', st.ok && st.items.length === 1 && st.items.every((i) => !('name' in i) && !('wohnung' in i) && !('contact' in i)) && !/IMPORTXML|-2\+3/.test(JSON.stringify(st.items)), st.items); // nicht nach „07“ suchen: steckt auch in Uhrzeiten
   const sd = P({ action: 'submitStaffDefect', token: HM, ort: 'Keller', beschreibung: 'x', owner: 'Hausmeister', urgent: false });
   check('J15 Team-Mangel geht immer zuerst an die Verwaltung (owner aus der Anfrage ignoriert)', sd.ok && sd.owner === 'Verwaltung', sd);
   const fb = P({ action: 'fitnessBook', token: ADM, date: (() => { const x = new Date(); x.setDate(x.getDate() + 5); return x.toISOString().slice(0, 10); })(), time: '07:00', minutes: 30 });
