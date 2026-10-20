@@ -793,8 +793,15 @@ function protectCell(s) {
 
 function newId(prefix) {
   const day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyMMdd");
-  const rand = Utilities.getUuid().replace(/-/g, "").slice(0, 4).toUpperCase();
-  return `${prefix}-${day}-${rand}`;
+  // 4 Zeichen reichen, solange keine Nummer am selben Tag doppelt vergeben wird: vergebene Nummern 6 Std. merken (Höchstdauer des Cache)
+  const cache = CacheService.getScriptCache();
+  let id = "";
+  for (let i = 0; i < 8; i++) {
+    id = `${prefix}-${day}-${Utilities.getUuid().replace(/-/g, "").slice(0, 4).toUpperCase()}`;
+    if (!cache.get(`id_${id}`)) break;
+  }
+  cache.put(`id_${id}`, "1", 21600);
+  return id;
 }
 
 /** Die Tabelle, an die das Script gebunden ist. */
