@@ -144,6 +144,20 @@ function makeQrVideo(text) {
       }
     }
     console.log("--- Navigation");
+    { // Meine Meldungen: Nummern, die es nicht mehr gibt (z. B. nach dem Zurücksetzen), verschwinden vom Gerät
+      const old = new Date(Date.now() - 3 * 86400000).toISOString(), now = new Date().toISOString();
+      const ctx = await newContext(browser, { preset: "resident", backend: (d) => d.action === "status"
+        ? { ok: true, items: [{ id: "T-261018-6B27", status: "unbekannt" }, { id: "T-261021-NEU1", status: "unbekannt" }, { id: "T-261020-ABCD", kind: "ticket", type: "Mangel", status: "in Arbeit", created: now }] }
+        : { ok: true, items: [] } });
+      await ctx.addInitScript(([old, now]) => localStorage.setItem("mieterapp.tickets", JSON.stringify([
+        { id: "T-261018-6B27", type: "Mangel", date: old }, { id: "T-261021-NEU1", type: "", date: now }, { id: "T-261020-ABCD", type: "Mangel", date: old }])), [old, now]);
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#meldungen`); await p.waitForTimeout(900);
+      const ids = await p.$$eval("#statusList .status-item__meta", (l) => l.map((x) => x.textContent.split(" ")[0]));
+      const stored = await p.evaluate(() => JSON.parse(localStorage.getItem("mieterapp.tickets")).map((t) => t.id));
+      check("Meine Meldungen: gelöschte alte Nummer verschwindet, frisch eingetippte und vorhandene bleiben", ids.join() === "T-261021-NEU1,T-261020-ABCD" && stored.join() === ids.join(), { ids, stored });
+      await ctx.close();
+    }
     {
       const ctx = await newContext(browser, { backend: fakeBackend(), preset: "resident" });
       const p = await newPage(ctx);

@@ -544,6 +544,11 @@
       if (data.code === "pin") { handlePinRejected(); return; }
       const byId = {};
       (data.items || []).forEach((i) => { byId[i.id] = i; });
+      // Nummern, die es in der Verwaltung nicht (mehr) gibt – z. B. nach dem Zurücksetzen der Testdaten oder dem
+      // Löschkonzept –, von diesem Gerät entfernen. Frisch eingetippte bleiben 10 Min. stehen (Tippfehler sichtbar).
+      const gone = (t) => byId[t.id] && byId[t.id].status === "unbekannt" && Date.now() - new Date(t.date).getTime() > 10 * 60000;
+      const kept = (readJson(TICKETS_KEY) || []).filter((t) => !gone(t));
+      if (kept.length !== list.length) writeJson(TICKETS_KEY, kept);
       renderStatusList(byId);
     } catch (err) {
       console.error("Status:", err);
