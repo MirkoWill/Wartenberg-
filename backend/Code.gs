@@ -14,6 +14,7 @@
  *   PHOTO_FOLDER_ID     wird von setup() automatisch gesetzt
  *   NTFY_TOPICS         geheime Alarm-Kanäle (ntfy) je Nummer – legt das Script selbst an, nicht löschen
  *   GTASKS_ON / GTASKS_LIST_ID  werden über das Menü „Google Tasks: einrichten …“ gesetzt (Dienst „Tasks“ nötig)
+ *   BACKUP_FOLDER_ID / BACKUP_LAST  monatliches Code-Backup ins Google Drive (legt das Script selbst an)
  *   APP_PIN             Zugangs-PIN der App – über das Menü „Zugangs-PIN ändern …“ setzen (nie in den Code). Bei Änderung auch
  *                       PIN_SHA256 in js/config.js anpassen.
  */
@@ -268,6 +269,7 @@ function onOpen() {
     .addItem("Google Tasks: einrichten / jetzt abgleichen", "gtasksSetupNow")
     .addItem("Google Tasks: Abgleich ausschalten", "gtasksOff")
     .addItem("Alte Daten jetzt löschen (Löschkonzept)", "cleanupNow")
+    .addItem("Code-Backup jetzt ins Google Drive", "backupNow")
     .addSeparator()
     .addItem("Testdaten zurücksetzen (vor dem Start) …", "resetTestDataPrompt")
     .addToUi();
@@ -1104,6 +1106,7 @@ function setupPortalSheets() {
   ensureReportTrigger();
   ensureFitnessReminderTrigger();
   ensureHausmeisterDigestTrigger();
+  ensureBackupTrigger();
   CacheService.getScriptCache().removeAll(["areas", "staff"]);
 }
 
@@ -1780,6 +1783,69 @@ function resetTestData() {
   return { rows, photos, gtasks, backup };
 }
 
+/* ---------- Code-Backup (unabhängig von GitHub) ---------- */
+
+// Einmal im Monat lädt das Script das komplette Projekt (App, Backend, Tests, Anleitungen) als ZIP von GitHub
+// und legt es im Google Drive ab. Wiederherstellen: docs/WIEDERHERSTELLUNG.md (liegt im ZIP).
+const BACKUP = {
+  url: "https://codeload.github.com/MirkoWill/Wartenberg-/zip/refs/heads/main",
+  folderName: "Mieter-App Backups",
+  prefix: "Mieter-App Backup ",
+  keep: 6,
+  minBytes: 100000, // ein vollständiges Projekt ist deutlich größer – kleiner heißt: Fehlerseite statt ZIP
+  trigger: "backupRepo",
+};
+
+function backupFolder() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty("BACKUP_FOLDER_ID");
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* gelöscht → neu anlegen */ } }
+  const folder = DriveApp.createFolder(BACKUP.folderName);
+  props.setProperty("BACKUP_FOLDER_ID", folder.getId());
+  return folder;
+}
+
+/** Monatlich (Zeitauslöser): Projekt als ZIP ins Drive, die letzten 6 behalten. Fehler → Fehlerprotokoll + Mail. */
+function backupRepo() {
+  try {
+    const res = UrlFetchApp.fetch(BACKUP.url, { muteHttpExceptions: true, followRedirects: true });
+    const code = res.getResponseCode();
+    const bytes = code === 200 ? res.getBlob().getBytes() : [];
+    if (code !== 200 || bytes.length < BACKUP.minBytes || bytes[0] !== 0x50 || bytes[1] !== 0x4b) { // "PK" = ZIP
+      throw new Error(`GitHub lieferte kein vollständiges Archiv (HTTP ${code}, ${bytes.length} Bytes)`);
+    }
+    const name = `${BACKUP.prefix}${Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd")}.zip`;
+    const folder = backupFolder();
+    const file = folder.createFile(Utilities.newBlob(bytes, "application/zip", name));
+    // Ältere Backups über die Anzahl hinaus in den Papierkorb (nach Datum im Namen sortiert)
+    const all = [];
+    const it = folder.getFiles();
+    while (it.hasNext()) { const f = it.next(); if (String(f.getName()).indexOf(BACKUP.prefix) === 0) all.push(f); }
+    all.sort((a, b) => String(b.getName()).localeCompare(String(a.getName())));
+    all.slice(BACKUP.keep).forEach((f) => { try { f.setTrashed(true); } catch (e) { /* egal */ } });
+    PropertiesService.getScriptProperties().setProperty("BACKUP_LAST", String(Date.now()));
+    return { ok: true, name, bytes: bytes.length, kept: Math.min(all.length, BACKUP.keep), url: file.getUrl ? file.getUrl() : "" };
+  } catch (err) {
+    logServerError(err, "Code-Backup");
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function ensureBackupTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === BACKUP.trigger);
+  if (!exists) ScriptApp.newTrigger(BACKUP.trigger).timeBased().onMonthDay(2).atHour(4).inTimezone(CONFIG.TIMEZONE).create();
+}
+
+/** Menü: Backup sofort erstellen. */
+function backupNow() {
+  ensureBackupTrigger();
+  const r = backupRepo();
+  showResult("Code-Backup", r.ok
+    ? `Gespeichert: „${r.name}“ (${Math.round(r.bytes / 1024)} KB) im Ordner „${BACKUP.folderName}“ in Ihrem Google Drive. `
+      + `Es werden die letzten ${BACKUP.keep} Backups aufbewahrt; ab jetzt automatisch am 2. jedes Monats.`
+    : `Backup fehlgeschlagen: ${r.error}\nDetails im Blatt „Fehlerprotokoll“.`);
+}
+
 /* ---------- Fehlerüberwachung ---------- */
 
 function errorRow(source, message, details, view, browser) {
@@ -1829,9 +1895,11 @@ function healthCheck(extra) {
     if (!ss.getSheetByName(CONFIG.SHEETS[k].name)) issues.push(`Blatt „${CONFIG.SHEETS[k].name}“ fehlt – setup ausführen.`);
   });
   const handlers = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
-  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest", "monthlyReport", "monthlyReportSend", "hausmeisterDigest"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
+  ["checkPlanFulfilment", "dailyMaintenance", "morningDigest", "monthlyReport", "monthlyReportSend", "hausmeisterDigest", "backupRepo"].forEach((h) => { if (handlers.indexOf(h) === -1) issues.push(`Automatik „${h}“ fehlt – setup ausführen.`); });
   if (planRows().length) { try { findCalendar(); } catch (e) { issues.push(e.userMessage || e.message); } }
   if (!activeAreas().length) issues.push("Keine aktiven QR-Orte.");
+  const lastBackup = Number(props.getProperty("BACKUP_LAST") || 0);
+  if (lastBackup && Date.now() - lastBackup > 40 * 86400000) issues.push("Das letzte Code-Backup ist über 40 Tage alt – Menü „Code-Backup jetzt ins Google Drive“.");
 
   const since = new Date(Date.now() - 86400000);
   const errs = sheetObjects(CONFIG.SHEETS.errors).filter((r) => r.Zeit instanceof Date && r.Zeit > since);

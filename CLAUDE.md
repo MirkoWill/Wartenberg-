@@ -8,6 +8,7 @@ Bewohner-App (PWA) für die WEG Wartenberger Dorfkrug (3 Häuser, 5 Aufgänge), 
 **Willbrandt und Kompagnon**. Reines Frontend (HTML, CSS, Vanilla JS) auf GitHub Pages unter
 `app.willbrandt-kompagnon.de`, Backend als **Google Apps Script** mit Google-Tabelle (`backend/Code.gs`).
 Betriebskosten 0 €. Details: `README.md`, `backend/README.md`, `docs/API.md`.
+Backup: monatlich als ZIP im Google Drive („Mieter-App Backups“); Wiederherstellen: `docs/WIEDERHERSTELLUNG.md`.
 
 - `index.html` – alle Ansichten (Hash-Routing), `js/app.js` – Logik, `js/config.js` – alle Daten
   (Telefonnummern, Aufgänge, Kiez …), `js/i18n.js` – Übersetzungen (Schlüssel = deutscher Text; DE, EN, RU, UK, CS)
@@ -86,6 +87,7 @@ trägt das hier im selben Commit ein** (Teil des Ablaufs bei jeder Änderung).
 | ntfy.sh | öffentlicher Dienst | `backend/Code.gs` | Alarm-App für Verwaltung/Leitung |
 | Bright Sky (DWD-Wetter) | öffentlicher Dienst, ohne Schlüssel | `backend/Code.gs` | Wetter und Warnungen |
 | BVG, BSR, aponet | nur Links | `js/config.js` | Abfahrten, Abfall, Apotheken |
+| GitHub-Archiv (codeload.github.com) | monatlicher ZIP-Download | `backend/Code.gs` (`backupRepo`) | Code-Backup ins Google Drive |
 | Playwright | siehe `package.json` (nur Tests) | `tests/` | automatische Tests, nicht in der App |
 | Endgeräte | Android (Chrome, Samsung Internet), iPhone (Safari) | – | Nutzung der App |
 | Website willbrandt-kompagnon.de | im Aufbau: statisches HTML bei Strato (Hosting Basic, PHP verfügbar, derzeit nicht genutzt); bisher IONOS-Baukasten | – | nur informativ, eigenes Projekt |
