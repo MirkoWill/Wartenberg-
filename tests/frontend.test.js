@@ -642,7 +642,7 @@ function makeQrVideo(text) {
 
     console.log("--- Benachrichtigungen (Android)");
     // Voller Chromium (die schlanke Headless-Variante verweigert Benachrichtigungen grundsätzlich)
-    const pushBrowser = await require("playwright").chromium.launch({ channel: "chromium" });
+    const pushBrowser = await require("playwright").chromium.launch({ channel: "chromium", executablePath: process.env.PW_CHROMIUM || undefined });
     {
       const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
       const fakePush = () => {

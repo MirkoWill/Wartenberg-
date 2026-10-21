@@ -44,7 +44,8 @@ function startServer() {
 }
 
 async function launch(extraArgs = []) {
-  return chromium.launch({ args: extraArgs });
+  // PW_CHROMIUM: fester Browserpfad (z. B. /opt/pw-browsers/chromium), falls die passende Playwright-Version fehlt
+  return chromium.launch({ args: extraArgs, executablePath: process.env.PW_CHROMIUM || undefined });
 }
 
 /**
