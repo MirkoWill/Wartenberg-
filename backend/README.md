@@ -343,6 +343,8 @@ Menü **Mieter-App → Testdaten zurücksetzen (vor dem Start) …** und zur Bes
   Fotos der App gehen in den Papierkorb (30 Tage wiederherstellbar), die Liste in Google Tasks wird entfernt
   (beim nächsten Abgleich leer neu angelegt), Zwischenspeicher werden verworfen.
 - **Bleiben**: Mitarbeiter und Links, QR-Orte, Tätigkeiten, Reinigungsplan (und Kalender), angemeldete Handys, PIN.
+- **Auf den Handys**: Nummern unter „Meine Meldungen“, die es nicht mehr gibt, entfernt die App beim nächsten Öffnen
+  dieser Seite von selbst (frisch eingetippte Nummern bleiben 10 Minuten stehen, damit Tippfehler sichtbar sind).
 
 Besser als Zeilen von Hand löschen: Fotos, Google Tasks und Zwischenspeicher werden mit aufgeräumt, und
 Kopfzeilen, Kontrollkästchen und Formate bleiben erhalten.

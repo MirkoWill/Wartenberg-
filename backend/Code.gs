@@ -1734,8 +1734,8 @@ function resetTestDataPrompt() {
   const res = resetTestData();
   showResult("Testdaten zurückgesetzt ✓", `Gelöscht: ${res.rows} Zeilen, ${res.photos} Fotos${res.gtasks ? ", Google-Tasks-Liste" : ""}.\n`
     + `Sicherungskopie: „${res.backup}“ in Ihrem Google Drive.\n\n`
-    + "Auf den Handys: App einmal schließen und neu öffnen. Unter „Meine Meldungen“ stehen alte Nummern ggf. noch auf dem Gerät – "
-    + "sie zeigen keinen Stand mehr und können ignoriert werden.");
+    + "Auf den Handys: App einmal schließen und neu öffnen. Alte Nummern unter „Meine Meldungen“ verschwinden beim "
+    + "nächsten Öffnen dieser Seite von selbst.");
 }
 
 /** Löscht alle erfassten Daten (Kopfzeilen, Formate und Einstellungen bleiben). Ohne Sicherungskopie bricht es ab. */
