@@ -1069,5 +1069,38 @@ props.NOTIFY_EMAIL = nm;
   check('Zurücksetzen: App funktioniert danach (neue Meldung, Cockpit, Team)', post({ ...base, action: 'submitTicket', type: 'Mangel', ort: 'Keller', details: 'Nach dem Zurücksetzen' }).ok
     && post({ action: 'adminOverview', token: admTok }).tasks.length === 1 && post({ action: 'getTasks', token: leadTok }).ok);
 }
+
+// Code-Backup: monatlich als ZIP ins Google Drive, die letzten 6 behalten, Fehler werden gemeldet
+{
+  const origFetch = ctx.UrlFetchApp.fetch, origDrive = ctx.DriveApp;
+  const driveFiles = []; let folders = 0;
+  const folder = { getId: () => 'BK', createFile: (b) => { const f = { name: b.name, size: b.bytes.length, trashed: false, getName() { return this.name; }, setTrashed(v) { this.trashed = v; }, getUrl: () => 'https://drive/' + b.name }; driveFiles.push(f); return f; },
+    getFiles: () => { const l = driveFiles.filter((f) => !f.trashed); let i = 0; return { hasNext: () => i < l.length, next: () => l[i++] }; } };
+  ctx.DriveApp = { ...origDrive, createFolder: (n) => { folders++; folder.name = n; return folder; }, getFolderById: (id) => { if (id === 'BK') return folder; return origDrive.getFolderById(id); } };
+  let reply = { code: 200, bytes: [0x50, 0x4b, ...new Array(150000).fill(1)] }; const fetched = [];
+  ctx.UrlFetchApp.fetch = (url, o) => { if (/codeload\.github\.com/.test(url)) { fetched.push(url); return { getResponseCode: () => reply.code, getBlob: () => ({ getBytes: () => reply.bytes }) }; } return origFetch(url, o); };
+  const origBlob = ctx.Utilities.newBlob; ctx.Utilities.newBlob = (bytes, mime, name) => ({ bytes, mime, name });
+  delete props.BACKUP_FOLDER_ID; delete props.BACKUP_LAST;
+  alerts.length = 0; ctx.backupNow();
+  check('Backup: ZIP des ganzen Projekts im Ordner „Mieter-App Backups“, Datum im Namen', fetched.length === 1 && folders === 1 && folder.name === 'Mieter-App Backups'
+    && driveFiles.length === 1 && /^Mieter-App Backup \d{4}-\d{2}-\d{2}\.zip$/.test(driveFiles[0].name) && driveFiles[0].size > 100000 && props.BACKUP_LAST, driveFiles.map((f) => f.name));
+  check('Backup: Meldung mit Dateiname, monatlicher Auslöser angelegt', alerts.some((a) => /Gespeichert/.test(a) && /Mieter-App Backups/.test(a)) && triggers.some((t) => t.getHandlerFunction() === 'backupRepo'), alerts);
+  // Rotation: 8 alte Backups → nach dem nächsten Lauf nur noch 6
+  for (let m = 1; m <= 8; m++) driveFiles.push({ name: `Mieter-App Backup 2026-0${m}-02.zip`, trashed: false, getName() { return this.name; }, setTrashed(v) { this.trashed = v; } });
+  driveFiles.push({ name: 'Eigene Notiz.txt', trashed: false, getName() { return this.name; }, setTrashed(v) { this.trashed = v; } });
+  const r2 = ctx.backupRepo();
+  const live = driveFiles.filter((f) => !f.trashed).map((f) => f.name);
+  check('Backup: nur die letzten 6 bleiben, fremde Dateien im Ordner unangetastet', r2.ok && live.filter((n) => /^Mieter-App Backup/.test(n)).length === 6 && live.includes('Eigene Notiz.txt')
+    && !live.includes('Mieter-App Backup 2026-01-02.zip') && folders === 1, live);
+  // Fehler: GitHub nicht erreichbar / Fehlerseite statt ZIP → nichts gespeichert, Fehlerprotokoll
+  const before = driveFiles.length; const errBefore = sheets['Fehlerprotokoll'].grid.length;
+  reply = { code: 404, bytes: [] }; const r3 = ctx.backupRepo();
+  reply = { code: 200, bytes: Array.from(Buffer.from('<html>Fehler</html>')) }; const r4 = ctx.backupRepo();
+  check('Backup: Fehlerseite oder Fehler → nichts gespeichert, im Fehlerprotokoll', !r3.ok && !r4.ok && driveFiles.length === before && sheets['Fehlerprotokoll'].grid.length >= errBefore + 2, [r3, r4]);
+  props.BACKUP_LAST = String(Date.now() - 50 * 86400000);
+  check('Backup: Systemprüfung meldet zu altes Backup', ctx.healthCheck().issues.some((i) => /Code-Backup ist über 40 Tage alt/.test(i)));
+  props.BACKUP_LAST = String(Date.now());
+  ctx.UrlFetchApp.fetch = origFetch; ctx.DriveApp = origDrive; ctx.Utilities.newBlob = origBlob;
+}
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK (Löschkonzept/Überwachung)');
 process.exitCode = fails ? 1 : 0;

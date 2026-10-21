@@ -332,6 +332,14 @@ Datum). **Nur Zahlen – keine Namen, Wohnungen, Beschreibungen oder Mitarbeiter
    „Beiratsberichte Mieter-App“ abgelegt. Anschreiben und Signatur: `reportMail()` bzw. `CONFIG.REPORT_SIGNATURE`.
 4. Menü **Mieter-App → Monatsbericht: Vorschau an mich** zeigt Bericht und Mail jederzeit vorab (nur an Sie).
 
+## Code-Backup (unabhängig von GitHub)
+
+Am **2. jedes Monats um 4 Uhr** lädt das Script das komplette Projekt als ZIP von GitHub und legt es im Google Drive
+ab (Ordner **„Mieter-App Backups“**, die letzten 6 bleiben). Sofort: Menü **Mieter-App → Code-Backup jetzt ins
+Google Drive** (legt beim ersten Mal auch den monatlichen Auslöser an; sonst über `setup`). Fehler landen im
+Fehlerprotokoll; die Systemprüfung meldet ein Backup, das älter als 40 Tage ist. Wiederherstellen:
+`docs/WIEDERHERSTELLUNG.md` (liegt im ZIP).
+
 ## Testdaten zurücksetzen (vor dem Start)
 
 Menü **Mieter-App → Testdaten zurücksetzen (vor dem Start) …** und zur Bestätigung `ZURÜCKSETZEN` eintippen.
