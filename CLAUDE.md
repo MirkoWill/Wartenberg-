@@ -45,6 +45,7 @@ Betriebskosten 0 €. Details: `README.md`, `backend/README.md`, `docs/API.md`.
 4. Commit auf dem Arbeitszweig, PR nach `main`, CI abwarten, bei Grün squash-mergen, danach den Arbeitszweig
    auf `origin/main` zurücksetzen. Veröffentlicht ist erst, was in `main` ist (GitHub Pages).
 5. Dem Nutzer sagen: App am Handy einmal komplett schließen und neu öffnen.
+6. Neue oder geänderte Dienste/Bausteine in „Technik-Bestandteile“ eintragen (für die Sicherheits-Routine).
 
 **Backend (`backend/Code.gs`) wird nicht automatisch veröffentlicht.** Nach Änderungen muss der Nutzer 💻:
 Code.gs im Apps-Script-Editor ersetzen → ggf. `setup` ausführen → Bereitstellen → Bereitstellungen verwalten →
@@ -67,6 +68,27 @@ nach Stufe (rot/orange). Seriös, ruhig, gut lesbar; Tipp-Flächen mind. 44 px, 
 - Backend: Formeln in Eingaben werden zu Text, Längen begrenzt, Rollen/Zuständigkeit nur serverseitig,
   Zuweisen-Links in Mails signiert (`assignSig`). Sicherheitstests: `tests/backend-security.test.js`,
   `tests/frontend-security.test.js`.
+
+## Technik-Bestandteile (für die wöchentliche Sicherheitsprüfung)
+
+Diese Liste liest die Sicherheits-Routine jeden Montag und gleicht sie mit aktuellen Warnungen (BSI, CERT-Bund,
+GitHub Advisories, Hersteller) ab. **Wer einen Dienst oder Baustein hinzufügt, entfernt oder aktualisiert,
+trägt das hier im selben Commit ein** (Teil des Ablaufs bei jeder Änderung).
+
+| Bestandteil | Version / Stand | Wo | Wofür |
+|---|---|---|---|
+| GitHub Pages | Hosting (statisch, kein Server-Code) | app.willbrandt-kompagnon.de | App ausliefern |
+| Google Apps Script + Google Sheets/Drive/Kalender/Mail | V8-Laufzeit | `backend/Code.gs` | Backend, Daten, Fotos, Mails |
+| Google Tasks API (Advanced Service) | v1 | `backend/appsscript.json` | Übersicht für die Verwaltung (optional) |
+| html5-qrcode | 2.3.8 (Apache-2.0) | `vendor/html5-qrcode.min.js` | QR-Scanner (nur Hausmeister-Bereich) |
+| qrcode-generator | 1.4.4 (Code identisch bis 2.0.2, MIT) | `vendor/qrcode-generator.js` | QR-Codes drucken |
+| Web Push (VAPID, ES256) | eigene Umsetzung | `backend/Code.gs`, `sw.js` | Benachrichtigungen (Android) |
+| ntfy.sh | öffentlicher Dienst | `backend/Code.gs` | Alarm-App für Verwaltung/Leitung |
+| Bright Sky (DWD-Wetter) | öffentlicher Dienst, ohne Schlüssel | `backend/Code.gs` | Wetter und Warnungen |
+| BVG, BSR, aponet | nur Links | `js/config.js` | Abfahrten, Abfall, Apotheken |
+| Playwright | siehe `package.json` (nur Tests) | `tests/` | automatische Tests, nicht in der App |
+| Endgeräte | Android (Chrome, Samsung Internet), iPhone (Safari) | – | Nutzung der App |
+| Website willbrandt-kompagnon.de | im Aufbau: statisches HTML bei Strato (Hosting Basic, PHP verfügbar, derzeit nicht genutzt); bisher IONOS-Baukasten | – | nur informativ, eigenes Projekt |
 
 ## Offene Punkte beim Nutzer (Stand Oktober 2026)
 

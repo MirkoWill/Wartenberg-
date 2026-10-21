@@ -1,0 +1,16 @@
+# Automatische Hinweise auf Sicherheitslücken und Updates (GitHub Dependabot).
+# Die Fremdbausteine in vendor/ erkennt Dependabot nicht – die prüft die wöchentliche Sicherheits-Routine
+# anhand der Liste „Technik-Bestandteile“ in CLAUDE.md.
+version: 2
+updates:
+  - package-ecosystem: "npm"          # nur Test-Werkzeuge (Playwright), nicht Teil der App
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
