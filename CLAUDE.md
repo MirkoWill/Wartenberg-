@@ -43,6 +43,7 @@ Backup: monatlich als ZIP im Google Drive („Mieter-App Backups“); Wiederhers
    (ein Test prüft, dass beides passt). Neue Dateien, die offline nötig sind, in die Liste in `sw.js` aufnehmen.
 3. Tests lokal: `npm run test:backend` und `npm run test:frontend`
    (Backend, Sicherheit, Browser, Browser-Sicherheit – alle müssen grün sein). Neue Funktionen bekommen Tests.
+   Fehlt lokal der zur Playwright-Version passende Browser: `PW_CHROMIUM=/opt/pw-browsers/chromium` davorsetzen.
 4. Commit auf dem Arbeitszweig, PR nach `main`, CI abwarten, bei Grün squash-mergen, danach den Arbeitszweig
    auf `origin/main` zurücksetzen. Veröffentlicht ist erst, was in `main` ist (GitHub Pages).
 5. Dem Nutzer sagen: App am Handy einmal komplett schließen und neu öffnen.
