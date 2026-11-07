@@ -349,6 +349,11 @@ window.I18N = {
     "QR-Codes": ["QR codes", "QR-коды", "QR-коди", "QR kódy"],
     "Hausreinigung & Pflege": ["Cleaning & maintenance", "Уборка и уход", "Прибирання та догляд", "Úklid a údržba"],
     "Zuletzt erledigt": ["Recently done", "Недавно выполнено", "Нещодавно виконано", "Naposledy provedeno"],
+    "Ihr Aufgang – letzte, diese und nächste Woche. Nachweise für die gesamte Anlage erhalten Sie auf Anfrage bei der Hausverwaltung.": [
+      "Your entrance – last, this and next week. Records for the whole property are available from the property management on request.",
+      "Ваш подъезд – прошлая, эта и следующая неделя. Подтверждения работ по всему комплексу можно запросить в управляющей компании.",
+      "Ваш під'їзд – минулий, цей і наступний тиждень. Підтвердження робіт по всьому комплексу можна отримати на запит в управителя.",
+      "Váš vchod – minulý, tento a příští týden. Doklady za celý areál vám na požádání poskytne správa domu."],
     "Geplant": ["Planned", "Запланировано", "Заплановано", "Plánováno"],
     "Treppenhausreinigung": ["Stairwell cleaning", "Уборка подъезда", "Прибирання під'їзду", "Úklid schodiště"],
     "Fensterreinigung Aufgang": ["Stairwell window cleaning", "Мытьё окон в подъезде", "Миття вікон у під'їзді", "Mytí oken na schodišti"],

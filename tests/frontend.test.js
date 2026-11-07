@@ -798,6 +798,19 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Hausreinigung (Bewohner)");
+    {
+      const state = { care: { last: [{ ort: "Treppenhaus Lindenberger Str. 6", activity: "Treppenhausreinigung", time: new Date().toISOString() }],
+        next: [{ activity: "Reinigung", ort: "Kellerbereich Lindenberger Str. 6", from: "2030-01-09", to: "2030-01-09" }] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6#notfall`); await p.waitForSelector("#careBox .care__list");
+      const txt = await p.textContent("#careBox");
+      check("Hausreinigung: eigener Aufgang, Hinweis auf drei Wochen und Nachweise auf Anfrage", /Ihr Aufgang – letzte, diese und nächste Woche/.test(txt) && /auf Anfrage bei der Hausverwaltung/.test(txt)
+        && /Kellerbereich Lindenberger Str\. 6/.test(txt) && /Zuletzt erledigt/.test(txt) && /Geplant/.test(txt), txt);
+      await ctx.close();
+    }
+
     console.log("--- Wetter");
     {
       const day = (off) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + off * 86400000));

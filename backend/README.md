@@ -120,6 +120,12 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
 - **Großer Plan (z. B. Jahresplan mit 300+ Zeilen):** Das Übertragen hört nach gut 4 Minuten auf (Google-Grenze 6 Minuten)
   bzw. wenn Google das Anlegen vieler Termine bremst, und meldet „noch nicht fertig (x von y)“. Einfach erneut aufrufen –
   es geht an der Stelle weiter, ohne doppelte Termine. Unveränderte Termine werden nicht neu geschrieben.
+- **Bewohner sehen** in der App nur ihren eigenen Aufgang (Treppenhaus, Keller, Waschküche): erledigt in der letzten und
+  dieser Woche, geplant in dieser und der nächsten Woche. Gesamtanlage (Müllplatz, Hof, Tiefgarage …) und Kontrollgänge nicht.
+- **Leistungsnachweis auf Anfrage:** Menü **Mieter-App → Leistungsnachweis exportieren …** – Monat (z. B. `10.2026`) oder
+  Zeitraum (`01.10.2026 - 31.10.2026`), leer = Vormonat. Es entsteht eine neue Google-Tabelle im Drive mit allen Nachweisen
+  (auch Gesamtanlage und Kontrollgänge) und dem Abgleich mit dem Plan (erledigt / nachgeholt / fehlt / geplant) –
+  ohne Mitarbeiternummern. Weitergeben über Datei → Herunterladen (PDF/Excel).
 - **Tätigkeit im Plan = Tätigkeit beim Scan:** Ein Termin gilt nur als erledigt, wenn am selben Tag am selben Ort mit genau
   dieser Tätigkeit gescannt wurde. Deshalb im Plan die Standard-Tätigkeit des QR-Orts verwenden und Zusatzleistungen
   in die Bemerkung schreiben (ein Scan je Ort und Tag).

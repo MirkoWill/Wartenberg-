@@ -525,13 +525,70 @@ wx.fail = false; delete cache.weather;
   delete props.BEIRAT_EMAILS; delete props.REPORT_PENDING;
 }
 
-// Bewohner-Info
-Object.keys(cache).forEach((k) => delete cache[k]);
-let nw6 = ctx.doGet({ parameter: { action: 'news', obj: 'lind6', pin: '13059' } });
-check('Bewohner lind6: Treppenhaus zuletzt + Müllplatz, keine Tiefgarage-Technik', nw6.care.last.some((x) => x.ort === 'Treppenhaus Lindenberger Str. 6') && nw6.care.last.some((x) => x.ort === 'Müllplatz (außen)') && !nw6.care.last.some((x) => /Elektro/.test(x.ort)), nw6.care.last);
-check('Bewohner lind6: geplant Treppenhaus + Müllplatz, nicht Fenster Lind 8', nw6.care.next.some((x) => x.activity === 'Treppenhausreinigung') && nw6.care.next.some((x) => x.activity === 'Müllplatzreinigung') && !nw6.care.next.some((x) => /Str\. 8/.test(x.ort)), nw6.care.next);
-let nw2 = ctx.doGet({ parameter: { action: 'news', obj: 'lind2', pin: '13059' } });
-check('Bewohner lind2: kein Treppenhaus Lind 6', !nw2.care.last.some((x) => /Str\. 6/.test(x.ort)) && !nw2.care.next.some((x) => /Lindenberger Str\. 8/.test(x.ort)), nw2.care);
+// Bewohner-Info: nur eigener Aufgang, erledigt letzte + diese Woche, geplant diese + nächste Woche
+{
+  Object.keys(cache).forEach((k) => delete cache[k]);
+  const plS = sheets['Reinigungsplan'], clS = sheets['Reinigung'];
+  const savePl = plS.grid.map((r) => r.slice()), saveCl = clS.grid.map((r) => r.slice());
+  const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+  const off = (n) => { const x = new Date(day0); x.setDate(x.getDate() + n); return x; };
+  const mon = -((day0.getDay() + 6) % 7); // Montag dieser Woche (Versatz in Tagen)
+  const at = (n, h) => { const x = off(n); x.setHours(h); return x; };
+  plS.grid.splice(1);
+  plS.grid.push([off(0), '', 'Treppenhausreinigung', 'alle Aufgänge', '', ''],
+    [off(mon + 9), '', 'Treppenhausreinigung', 'alle Aufgänge', 'Glas innen/außen', ''],
+    [off(mon + 9), '', 'Reinigung', 'alle Keller', '', ''],
+    [off(mon + 9), '', 'Müllplatzreinigung', 'Müllplatz (außen)', '', ''],
+    [off(mon + 9), '', 'Kontrollgang', 'Elektroraum, Kellerbereich Lindenberger Str. 6', '', ''],
+    [off(mon + 9), '', 'Reinigung', 'Waschküche Lindenberger Str. 4', '', ''],
+    [off(mon + 16), '', 'Treppenhausreinigung', 'alle Aufgänge', '', ''],
+    [off(-40), off(60), 'Winterdienst', '', 'Bereitschaft', '']);
+  clS.grid.splice(1);
+  const scan = (t, code, ort, act, auf) => clS.grid.push([t, code, '100', t, ort, act, '', '', auf, 'QR-Scan']);
+  scan(at(0, 9), 'TH_LIND6', 'Treppenhaus Lindenberger Str. 6', 'Treppenhausreinigung', 'lind6');
+  scan(at(mon - 5, 10), 'TH_LIND6', 'Treppenhaus Lindenberger Str. 6', 'Treppenhausreinigung', 'lind6');
+  scan(at(mon - 10, 10), 'KE_LIND6', 'Kellerbereich Lindenberger Str. 6', 'Reinigung', 'lind6');
+  scan(at(0, 10), 'MUELL', 'Müllplatz (außen)', 'Müllplatzreinigung', '');
+  scan(at(0, 11), 'KE_LIND6', 'Kellerbereich Lindenberger Str. 6', 'Kontrollgang', 'lind6');
+  scan(at(0, 12), 'TH_LIND2', 'Treppenhaus Lindenberger Str. 2', 'Treppenhausreinigung', 'lind2');
+  const nw6 = ctx.doGet({ parameter: { action: 'news', obj: 'lind6', pin: '13059' } }).care;
+  check('Bewohner lind6 erledigt: nur eigenes Treppenhaus, letzte + diese Woche, ohne Gesamtanlage/Kontrollgang/Älteres',
+    nw6.last.length === 2 && nw6.last.every((x) => x.ort === 'Treppenhaus Lindenberger Str. 6' && x.activity === 'Treppenhausreinigung'), nw6.last);
+  check('Bewohner lind6 geplant: nächste Woche eigenes Treppenhaus + Keller mit eigenem Ort; nichts Zentrales, keine Kontrollgänge, nichts in 2 Wochen, heute Erledigtes nicht',
+    nw6.next.length === 2 && nw6.next.some((x) => x.activity === 'Treppenhausreinigung' && x.ort === 'Treppenhaus Lindenberger Str. 6')
+    && nw6.next.some((x) => x.activity === 'Reinigung' && x.ort === 'Kellerbereich Lindenberger Str. 6')
+    && nw6.next.every((x) => x.from === Utilities_fmt(off(mon + 9))), nw6.next);
+  const nw4 = ctx.doGet({ parameter: { action: 'news', obj: 'lind4', pin: '13059' } }).care;
+  check('Bewohner lind4: heute geplantes (noch offenes) Treppenhaus + eigene Waschküche, nichts von Lind 6',
+    nw4.next.some((x) => x.ort === 'Treppenhaus Lindenberger Str. 4' && x.from === Utilities_fmt(off(0)))
+    && nw4.next.some((x) => x.ort === 'Waschküche Lindenberger Str. 4') && !nw4.next.some((x) => /Str\. 6/.test(x.ort)) && !nw4.last.length, nw4);
+  // Leistungsnachweis-Export: alles (auch Gesamtanlage, Kontrollgänge), ohne Mitarbeiternummern, Formeln bleiben Text
+  clS.grid.push([at(0, 13), 'MUELL', '100', at(0, 13), 'Müllplatz (außen)', 'Müllplatzreinigung', '=HYPERLINK("x")', 'https://drive/foto', '', 'manuell gewählt']);
+  const created = [];
+  const origCreate = ctx.SpreadsheetApp.create;
+  ctx.SpreadsheetApp.create = (n) => {
+    const shs = [];
+    const mk = (nm) => { const g = { name: nm, grid: [], getRange: () => ({ setValues(v) { g.grid = v.map((x) => x.slice()); return this; }, setFontWeight() { return this; } }), setName(x) { g.name = x; }, setFrozenRows() {}, autoResizeColumns() {} }; shs.push(g); return g; };
+    mk('Tabelle1');
+    const o = { name: n, shs, getSheets: () => shs, insertSheet: mk, getUrl: () => 'https://docs.google.com/x' };
+    created.push(o); return o;
+  };
+  plS.grid.push([off(mon - 5), '', 'Reinigung', 'alle Keller', '', '']); // letzte Woche, ohne Nachweis
+  const ex = ctx.exportServiceRecord(off(mon - 7), off(mon + 13));
+  const exN = created[0].shs.find((g) => g.name === 'Nachweise').grid, exP = created[0].shs.find((g) => g.name === 'Abgleich mit Plan').grid;
+  check('Export: alle Nachweise im Zeitraum inkl. Müllplatz/Kontrollgang, ohne Mitarbeiter-Nr, ohne Älteres', ex.scans === 6 && exN.length === 7
+    && exN.some((r) => r[4] === 'Kontrollgang') && exN.some((r) => r[2] === 'Müllplatz (außen)') && !exN.flat().some((v) => String(v) === '100') && !exN.some((r) => r[2] === 'Kellerbereich Lindenberger Str. 6' && r[4] === 'Reinigung'), exN);
+  check('Export: Notiz als Text, Foto „ja“, ohne QR gekennzeichnet', exN.some((r) => r[6] === "'=HYPERLINK(\"x\")" && r[7] === 'ja' && /ohne QR/.test(r[5])), exN.slice(-1));
+  check('Export: Plan-Abgleich mit Stand', exP[0].join('|') === 'Datum|Tätigkeit|Ort|Stand' && exP.filter((r) => r[3] !== 'geplant').length - 1 === ex.soll && ex.soll === 6 && ex.ist === 2 && exP.some((r) => r[3] === 'geplant' && r[0] === Utilities_fmt(off(mon + 9)))
+    && exP.some((r) => r[2] === 'Treppenhaus Lindenberger Str. 6' && r[3] === 'erledigt') && exP.some((r) => r[3] === 'fehlt') && /Leistungsnachweis Hausmeister/.test(ex.name), [ex, exP.slice(0, 8)]);
+  ctx.SpreadsheetApp.create = origCreate;
+  const pr = (t) => { const r = ctx.parseExportRange(t, new Date(2026, 10, 7)); return r && [Utilities_fmt(r.from), Utilities_fmt(r.to)].join(' '); };
+  check('Export-Zeitraum: Monat, Von–Bis, leer = Vormonat, Unsinn abgelehnt', pr('10.2026') === '2026-10-01 2026-10-31' && pr('01.10.2026 - 15.10.2026') === '2026-10-01 2026-10-15'
+    && pr('') === '2026-10-01 2026-10-31' && pr('quatsch') === null && pr('31.10.2026 - 01.10.2026') === null, [pr('10.2026'), pr(''), pr('01.10.2026 - 15.10.2026')]);
+  plS.grid = savePl; clS.grid = saveCl;
+  Object.keys(cache).forEach((k) => delete cache[k]);
+}
+function Utilities_fmt(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 
 // ---------- Fehlerbehebungen: Hausmeister ohne PIN, Kalender-Diagnose ----------
 Object.keys(cache).forEach((k) => delete cache[k]);

@@ -256,6 +256,7 @@ function onOpen() {
     .addSeparator()
     .addItem("Reinigungsplan → Kalender übertragen", "syncPlanToCalendar")
     .addItem("Reinigungsplan heute prüfen (Test)", "checkPlanFulfilment")
+    .addItem("Leistungsnachweis exportieren …", "exportServiceRecordPrompt")
     .addItem("Mitarbeiter-Links ergänzen", "ensureStaffLinks")
     .addItem("Mitarbeiter-Link neu erzeugen …", "resetStaffLinkPrompt")
     .addItem("Zugangs-PIN ändern …", "setAppPinPrompt")
@@ -1587,35 +1588,54 @@ function ensureDailyCheckTrigger() {
   if (!exists) ScriptApp.newTrigger("checkPlanFulfilment").timeBased().everyDays(1).atHour(19).inTimezone(CONFIG.TIMEZONE).create();
 }
 
-/** Für die Bewohner-App: zuletzt erledigt (60 Tage) und demnächst geplant (14 Tage) für einen Aufgang. */
+/**
+ * Für die Bewohner-App: nur der eigene Aufgang (Treppenhaus, Keller, Waschküche …), nur drei Wochen.
+ * Erledigt: letzte und diese Woche. Geplant: Rest dieser Woche und nächste Woche (Wochen ab Montag).
+ * Arbeiten an der Gesamtanlage (ohne Aufgang) und Kontrollgänge gibt es auf Nachfrage („Leistungsnachweis exportieren“).
+ */
+function isControlRound(activity) {
+  return /^kontrollgang/i.test(String(activity || "").trim());
+}
+
 function residentCareInfo(object) {
-  const areas = activeAreas().filter((a) => a.residents && (!a.aufgang || a.aufgang === object));
+  const areas = activeAreas().filter((a) => a.residents && a.aufgang && a.aufgang === object);
   if (!areas.length) return { last: [], next: [] };
   const byCode = {};
   areas.forEach((a) => { byCode[a.code.toUpperCase()] = a; });
-  const since = new Date(Date.now() - 60 * 86400000);
+  const today = berlinToday();
+  const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+  const lastWeek = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() - 7);
+  const nextWeekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 13);
+  const ymd = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+
+  // Erledigt: je Ort, Tätigkeit und Tag ein Eintrag (der letzte Scan des Tages)
   const latest = {};
   sheetObjects(CONFIG.SHEETS.cleaning).forEach((s) => {
     const a = byCode[String(s["Ort-Code"] || "").toUpperCase()];
     const t = s["Zeitpunkt (Scan)"];
-    if (!a || !(t instanceof Date) || t < since) return;
-    const k = `${a.code}|${s["Tätigkeit"]}`;
-    if (!latest[k] || latest[k].time < t) latest[k] = { ort: a.ort, bereich: a.bereich, activity: String(s["Tätigkeit"]), time: t };
+    if (!a || !(t instanceof Date) || t < lastWeek || isControlRound(s["Tätigkeit"])) return;
+    const k = `${a.code}|${s["Tätigkeit"]}|${ymd(t)}`;
+    if (!latest[k] || latest[k].time < t) latest[k] = { code: a.code, ort: a.ort, activity: String(s["Tätigkeit"]), time: t };
   });
-  const last = Object.keys(latest).map((k) => latest[k])
-    .sort((x, y) => (x.bereich === "Aufgang" ? 0 : 1) - (y.bereich === "Aufgang" ? 0 : 1) || y.time - x.time)
-    .slice(0, 6).map((x) => ({ ort: x.ort, activity: x.activity, time: x.time.toISOString() }));
+  const lastList = Object.keys(latest).map((k) => latest[k]).sort((x, y) => y.time - x.time);
+  const doneToday = {};
+  lastList.forEach((x) => { if (ymd(x.time) === ymd(today)) doneToday[`${x.code}|${x.activity.toLowerCase()}`] = true; });
+  const last = lastList.slice(0, 8).map((x) => ({ ort: x.ort, activity: x.activity, time: x.time.toISOString() }));
 
+  // Geplant: Plan-Einträge, die einen Ort dieses Aufgangs betreffen – mit dem eigenen Ort statt „alle Aufgänge“
   const allAreas = activeAreas();
-  const today = berlinToday();
-  const until = new Date(today.getTime() + 14 * 86400000);
-  const ymd = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
-  const next = planRows().filter((r) => r.to >= today && r.from <= until).filter((r) => {
-    const t = planAreas(r.ort, allAreas);
-    return t === null || t.some((a) => byCode[a.code.toUpperCase()]);
-  }).sort((a, b) => a.from - b.from).slice(0, 5)
-    .map((r) => ({ activity: r.activity, ort: r.ort, from: ymd(r.from), to: ymd(r.to) }));
-  return { last, next };
+  const next = [];
+  planRows().filter((r) => r.to >= today && r.from <= nextWeekEnd).sort((a, b) => a.from - b.from).forEach((r) => {
+    const targets = planAreas(r.ort, allAreas);
+    if (!targets || isControlRound(r.activity)) return; // ganze Anlage (z. B. Winterdienst), Kontrollgänge: nur auf Nachfrage
+    targets.forEach((t) => {
+      const a = byCode[t.code.toUpperCase()];
+      if (!a) return;
+      if (ymd(r.from) === ymd(today) && ymd(r.to) === ymd(today) && doneToday[`${a.code}|${r.activity.toLowerCase()}`]) return; // heute schon erledigt
+      next.push({ activity: r.activity, ort: a.ort, from: ymd(r.from), to: ymd(r.to) });
+    });
+  });
+  return { last, next: next.slice(0, 8) };
 }
 
 /**
@@ -2383,6 +2403,97 @@ function reportData(y, m) {
     cleaning: { soll, ist, late, missing: missing.slice(0, 20), missingCount: missing.length },
     overdue, longRunners, created: Utilities.formatDate(now, CONFIG.TIMEZONE, "dd.MM.yyyy HH:mm"),
   };
+}
+
+/* ==========================================================================
+   Leistungsnachweis exportieren (auf Nachfrage, z. B. für Beirat oder Eigentümer):
+   alle Nachweise eines Zeitraums – auch Gesamtanlage und Kontrollgänge – plus Abgleich mit dem Plan.
+   Ohne Mitarbeiternummern (Datensparsamkeit).
+   ========================================================================== */
+
+/** „10.2026“ = Monat, „01.10.2026 - 31.10.2026“ = Zeitraum, leer = Vormonat. → { from, to } (to einschließlich) oder null */
+function parseExportRange(text, now) {
+  const t = String(text || "").trim();
+  const base = now || berlinToday();
+  if (!t) return { from: new Date(base.getFullYear(), base.getMonth() - 1, 1), to: new Date(base.getFullYear(), base.getMonth(), 0) };
+  let m = /^(\d{1,2})[.\/](\d{4})$/.exec(t);
+  if (m && +m[1] >= 1 && +m[1] <= 12) return { from: new Date(+m[2], +m[1] - 1, 1), to: new Date(+m[2], +m[1], 0) };
+  const parts = t.split(/\s*(?:-|–|bis)\s*/);
+  if (parts.length === 2) {
+    const from = cellDate(parts[0]), to = cellDate(parts[1]);
+    if (from && to && to >= from && to - from <= 400 * 86400000) return { from, to };
+  }
+  return null;
+}
+
+function exportServiceRecordPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt("Leistungsnachweis exportieren",
+    "Zeitraum eingeben – Monat (z. B. 10.2026) oder Von–Bis (z. B. 01.10.2026 - 31.10.2026).\n"
+    + "Leer lassen = Vormonat.\n\nEs entsteht eine neue Google-Tabelle in Ihrem Drive mit allen Nachweisen "
+    + "(auch Gesamtanlage und Kontrollgänge) und dem Abgleich mit dem Reinigungsplan – ohne Mitarbeiternummern.",
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const range = parseExportRange(r.getResponseText());
+  if (!range) { ui.alert("Zeitraum nicht erkannt. Bitte z. B. 10.2026 oder 01.10.2026 - 31.10.2026 eingeben."); return; }
+  const res = exportServiceRecord(range.from, range.to);
+  showResult("Leistungsnachweis erstellt ✓", `„${res.name}“: ${res.scans} Nachweise, Plan ${res.ist} von ${res.soll} erledigt`
+    + `${res.late ? `, ${res.late} nachgeholt` : ""}.\n\n${res.url}\n\nDie Tabelle liegt in Ihrem Google Drive. Zum Weitergeben: `
+    + "Datei → Herunterladen (PDF oder Excel) oder über „Freigeben“.");
+}
+
+function exportServiceRecord(from, to) {
+  const fmt = (d, f) => Utilities.formatDate(d, CONFIG.TIMEZONE, f);
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1);
+  const areas = activeAreas();
+  const allAreas = sheetObjects(CONFIG.SHEETS.areas);
+  const bereich = {};
+  allAreas.forEach((a) => { bereich[String(a.Code || "").trim().toUpperCase()] = String(a.Bereich || ""); });
+  const scans = sheetObjects(CONFIG.SHEETS.cleaning).filter((s) => s["Zeitpunkt (Scan)"] instanceof Date);
+  const inRange = scans.filter((s) => s["Zeitpunkt (Scan)"] >= from && s["Zeitpunkt (Scan)"] < end)
+    .sort((a, b) => a["Zeitpunkt (Scan)"] - b["Zeitpunkt (Scan)"]);
+
+  const rows1 = [["Datum", "Uhrzeit", "Ort", "Bereich", "Tätigkeit", "Erfassung", "Notiz", "Foto"]];
+  inRange.forEach((s) => {
+    const t = s["Zeitpunkt (Scan)"];
+    // str(): Text, der wie eine Formel aussieht, bleibt in der neuen Tabelle Text
+    rows1.push([fmt(t, "dd.MM.yyyy"), fmt(t, "HH:mm"), str(s.Ort, 120), str(bereich[String(s["Ort-Code"] || "").toUpperCase()] || "", 60),
+      str(s["Tätigkeit"], 60), str(String(s.Erfassung || "").replace(/^manuell gewählt/, "ohne QR (Ort von Hand gewählt)"), 120),
+      str(s.Notiz, 500), s.Foto ? "ja" : ""]);
+  });
+
+  const plan = planRows();
+  const rows2 = [["Datum", "Tätigkeit", "Ort", "Stand"]];
+  let soll = 0, ist = 0, late = 0;
+  const today = berlinToday();
+  for (let d = new Date(from); d < end; d.setDate(d.getDate() + 1)) {
+    const day = new Date(d);
+    planStatusForDay(day, areas, scans, plan).forEach((x) => {
+      if (!x.done && day >= today) { rows2.push([fmt(day, "dd.MM.yyyy"), str(x.activity, 60), str(x.ort, 120), "geplant"]); return; }
+      soll++;
+      let stand = "erledigt";
+      if (x.done) ist++;
+      else {
+        const l = laterScan(scans, day, x, areas);
+        if (l) { late++; stand = `nachgeholt am ${fmt(l["Zeitpunkt (Scan)"], "dd.MM.")}`; } else stand = "fehlt";
+      }
+      rows2.push([fmt(day, "dd.MM.yyyy"), str(x.activity, 60), str(x.ort, 120), stand]);
+    });
+  }
+
+  const name = `Leistungsnachweis Hausmeister ${fmt(from, "dd.MM.yyyy")}–${fmt(to, "dd.MM.yyyy")}`;
+  const out = SpreadsheetApp.create(name);
+  const write = (sheet, rows) => {
+    sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+    sheet.getRange(1, 1, 1, rows[0].length).setFontWeight("bold");
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, rows[0].length);
+  };
+  const s1 = out.getSheets()[0];
+  s1.setName("Nachweise");
+  write(s1, rows1);
+  write(out.insertSheet("Abgleich mit Plan"), rows2);
+  return { name, url: out.getUrl(), scans: inRange.length, soll, ist, late };
 }
 
 /** Erster Nachweis nach dem geplanten Tag (bis 7 Tage) für einen Plan-Eintrag – oder null. */
