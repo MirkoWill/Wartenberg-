@@ -117,6 +117,12 @@ pro Zeile). Der Code ist ein Link: Die Hausmeister scannen in der App, zur Not g
 - Menü **Mieter-App → Reinigungsplan → Kalender übertragen**: überträgt alles in den Google-Kalender
   „WEG Wartenberger Dorfkrug“ (neu, geändert, gelöscht). Nach jeder Änderung am Plan erneut ausführen.
   Beim ersten Mal fragt Google nach der Kalender-Berechtigung. Anderer Kalender: Script-Eigenschaft `CALENDAR_ID`.
+- **Großer Plan (z. B. Jahresplan mit 300+ Zeilen):** Das Übertragen hört nach gut 4 Minuten auf (Google-Grenze 6 Minuten)
+  bzw. wenn Google das Anlegen vieler Termine bremst, und meldet „noch nicht fertig (x von y)“. Einfach erneut aufrufen –
+  es geht an der Stelle weiter, ohne doppelte Termine. Unveränderte Termine werden nicht neu geschrieben.
+- **Tätigkeit im Plan = Tätigkeit beim Scan:** Ein Termin gilt nur als erledigt, wenn am selben Tag am selben Ort mit genau
+  dieser Tätigkeit gescannt wurde. Deshalb im Plan die Standard-Tätigkeit des QR-Orts verwenden und Zusatzleistungen
+  in die Bemerkung schreiben (ein Scan je Ort und Tag).
 - **Es erscheint nichts im Kalender?** Nach dem Übertragen zeigt ein Fenster das Ergebnis („x neu …“) oder den Grund:
   Kalender nicht gefunden (dann nennt es die Kalender, die das Konto sieht), oder Zeilen, deren Datum nicht lesbar ist.
   Der Kalender muss im **selben Google-Konto** liegen, dem die Tabelle gehört, oder für dieses Konto mit

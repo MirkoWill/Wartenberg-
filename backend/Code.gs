@@ -1470,31 +1470,59 @@ function showPlanSyncResult(msg) {
   return msg;
 }
 
-function syncPlanToCalendarCore() {
+function syncPlanToCalendarCore(budgetMs) {
   const cal = findCalendar();
   const sheet = getSpreadsheet().getSheetByName(CONFIG.SHEETS.plan.name);
   const idCol = CONFIG.SHEETS.plan.headers.indexOf("Kalender-ID") + 1;
   const rows = planRows();
   const keep = {};
   let created = 0, updated = 0, removed = 0;
+  // Ein Jahresplan hat mehrere hundert Zeilen: nach gut 4 Minuten aufhören (Google bricht nach 6 Minuten ab),
+  // neue Kalender-IDs auf einmal speichern und beim nächsten Aufruf weitermachen.
+  const deadline = Date.now() + (budgetMs === undefined ? 260000 : budgetMs);
+  const ids = sheet.getLastRow() > 1 ? sheet.getRange(2, idCol, sheet.getLastRow() - 1, 1).getValues() : [];
+  const ymd = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+  let done = 0, stopped = "";
 
-  rows.forEach((r) => {
+  for (let i = 0; i < rows.length; i++) {
+    if (i > 0 && Date.now() >= deadline) { stopped = "Zeit"; break; }
+    const r = rows[i];
     const title = r.ort ? `${r.activity} – ${r.ort}` : r.activity;
     const endExcl = new Date(r.to.getFullYear(), r.to.getMonth(), r.to.getDate() + 1);
     const desc = `${r.note ? r.note + "\n\n" : ""}${PLAN_TAG}`;
-    let ev = r.eventId ? cal.getEventById(r.eventId) : null;
-    if (ev) {
-      ev.setTitle(title); ev.setAllDayDates(r.from, endExcl); ev.setDescription(desc);
-      updated++;
-    } else {
-      ev = cal.createAllDayEvent(title, r.from, endExcl, { description: desc });
-      sheet.getRange(r.row, idCol).setValue(ev.getId());
-      created++;
+    try {
+      let ev = r.eventId ? cal.getEventById(r.eventId) : null;
+      if (ev) {
+        // Nur Geändertes schreiben – jeder Schreibzugriff auf den Kalender kostet Zeit.
+        if (ev.getTitle() !== title || ymd(ev.getAllDayStartDate()) !== ymd(r.from)
+          || ymd(ev.getAllDayEndDate()) !== ymd(endExcl) || ev.getDescription() !== desc) {
+          ev.setTitle(title); ev.setAllDayDates(r.from, endExcl); ev.setDescription(desc);
+          updated++;
+        }
+      } else {
+        ev = cal.createAllDayEvent(title, r.from, endExcl, { description: desc });
+        ids[r.row - 2] = [ev.getId()];
+        created++;
+      }
+      keep[ev.getId()] = true;
+      done++;
+    } catch (err) {
+      if (!done) throw err; // gleich beim ersten Termin: echter Fehler (z. B. kein Schreibrecht) – anzeigen
+      // z. B. „zu viele Termine in kurzer Zeit“ – Google erlaubt es nach einer Pause wieder
+      console.warn("Kalender:", err);
+      stopped = "Google";
+      break;
     }
-    keep[ev.getId()] = true;
-  });
+  }
+  if (created) sheet.getRange(2, idCol, ids.length, 1).setValues(ids.map((x) => [x && x[0] !== undefined ? x[0] : ""]));
+  if (stopped) {
+    return `Kalender „${cal.getName()}“: ${created} neu, ${updated} aktualisiert – noch nicht fertig (${done} von ${rows.length} Terminen). `
+      + (stopped === "Zeit"
+        ? "Bitte „Reinigungsplan → Kalender übertragen“ gleich noch einmal aufrufen; es geht an der Stelle weiter."
+        : "Google hat das Anlegen vorübergehend gebremst. Bitte in etwa einer Stunde noch einmal aufrufen; es geht an der Stelle weiter.");
+  }
 
-  // Einträge, die aus dem Plan gelöscht wurden, auch im Kalender entfernen.
+  // Einträge, die aus dem Plan gelöscht wurden, auch im Kalender entfernen (nur nach vollständigem Durchlauf).
   const now = new Date();
   const start = new Date(now.getFullYear() - 1, 0, 1);
   const end = new Date(now.getFullYear() + 2, 0, 1);
