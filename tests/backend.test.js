@@ -6,7 +6,7 @@ let calName = 'WEG Wartenberger Dorfkrug'; const trashed = []; const alerts = []
 const events = {}; let evSeq = 0;
 const fetches = []; const pushLog = []; const ntfyLog = []; const pushCodes = {}; let pushThrow = false; const wx = { fail: false, alerts: [], hours: [] }; const tr = { down: false, onlyVbb: false };
 const mkHours = (date, icons, tmin, tmax) => Array.from({ length: 24 }, (_, h) => ({ timestamp: `${date}T${String(h).padStart(2, '0')}:00:00+02:00`, temperature: tmin + (tmax - tmin) * Math.sin(Math.PI * h / 23), icon: icons(h), precipitation: icons(h) === 'rain' ? 0.5 : 0 }));
-const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
+const mkEv = (title, start, end, opt) => { const id = 'ev' + (++evSeq); const e = { id, title, start, end, desc: (opt || {}).description || '', getId: () => id, setTitle(t) { e.title = t; }, setAllDayDates(a, b) { e.start = a; e.end = b; }, setDescription(d) { e.desc = d; }, getDescription: () => e.desc, getTitle: () => e.title, getAllDayStartDate: () => e.start, getAllDayEndDate: () => e.end, deleteEvent() { delete events[id]; } }; events[id] = e; return e; };
 const cal = { getName: () => 'WEG Wartenberger Dorfkrug', getEventById: (id) => events[id] || null, createAllDayEvent: mkEv, getEvents: () => Object.values(events) }; const sheets = {}, props = { APP_PIN: '13059' }, mails = [], files = []; const prompts = []; let cacheNews = false;
 const chain = (o) => { const p = new Proxy(o, { get: (t, k) => (k in t || typeof k !== 'string' || k === 'toJSON' || k === 'then' ? t[k] : () => p) }); return p; };
 function mkSheet(name) {
@@ -275,7 +275,7 @@ check('Mehrtägig: Ende exklusiv', (w.end - w.start) / 86400000 >= 90, (w.end - 
 pl.grid[2][2] = 'Fensterreinigung Aufgang'; pl.grid[2][3] = 'Treppenhaus Lindenberger Str. 8';
 pl.grid.splice(3, 1);
 msg = ctx.syncPlanToCalendar();
-check('Kalender: Änderung + Löschung', /0 neu, 3 aktualisiert, 1 entfernt/.test(msg) && Object.values(events).some((e) => /Lindenberger Str. 8/.test(e.title)), msg);
+check('Kalender: Änderung + Löschung (nur Geändertes wird geschrieben)', /0 neu, 1 aktualisiert, 1 entfernt/.test(msg) && Object.values(events).some((e) => /Lindenberger Str. 8/.test(e.title)), msg);
 
 mails.length = 0;
 let miss = ctx.checkPlanFulfilment();
@@ -552,6 +552,24 @@ check('Kalender fehlt: Meldung mit sichtbaren Kalendern', /nicht gefunden.*„Pr
 props.CALENDAR_ID = 'good'; alerts.length = 0;
 check('CALENDAR_ID wird verwendet', /Kalender „WEG Wartenberger Dorfkrug“/.test(ctx.syncPlanToCalendar()));
 delete props.CALENDAR_ID; calName = 'WEG Wartenberger Dorfkrug';
+// Jahresplan mit vielen Zeilen: Zeitbudget, Weitermachen beim nächsten Aufruf, Bremse von Google
+pl.grid.splice(1);
+pl.grid.push([fmt(dd(10)), '', 'Reinigung', 'alle Keller', '', ''], [fmt(dd(17)), '', 'Reinigung', 'alle Keller', '', '']);
+const evBefore = Object.keys(events).length;
+msg = ctx.syncPlanToCalendarCore(0);
+check('Zeitbudget: Abbruch nach 1 Termin, ID gespeichert, nichts gelöscht', /1 neu, 0 aktualisiert – noch nicht fertig \(1 von 2/.test(msg) && Object.keys(events).length === evBefore + 1 && pl.grid[1][5] && !pl.grid[2][5], msg);
+msg = ctx.syncPlanToCalendarCore();
+check('Nächster Aufruf macht weiter, ohne Dopplung; alte Termine entfernt', new RegExp(`1 neu, 0 aktualisiert, ${evBefore} entfernt`).test(msg) && Object.keys(events).length === 2 && pl.grid[2][5], msg);
+pl.grid.push([fmt(dd(24)), '', 'Reinigung', 'alle Keller', '', '']);
+const realCreate = cal.createAllDayEvent; cal.createAllDayEvent = () => { throw new Error('You have been creating too many events'); };
+msg = ctx.syncPlanToCalendarCore();
+check('Google bremst: verständliche Meldung, später weiter', /noch nicht fertig \(2 von 3.*gebremst/.test(msg) && Object.keys(events).length === 2, msg);
+pl.grid.splice(1); pl.grid.push([fmt(dd(31)), '', 'Reinigung', 'alle Keller', '', '']);
+let thrown = '';
+try { ctx.syncPlanToCalendarCore(); } catch (e) { thrown = e.message; }
+check('Fehler gleich beim ersten Termin wird gemeldet (nicht als Bremse)', /too many/.test(thrown), thrown);
+cal.createAllDayEvent = realCreate; pl.grid.splice(1);
+ctx.syncPlanToCalendarCore();
 console.log(fails ? fails + ' FEHLER' : 'ALLE OK');
 // Klingelschild: Info-Mail nennt Hausmeister-Mail
 Object.keys(cache).forEach((k) => delete cache[k]); mails.length = 0;
