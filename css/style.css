@@ -902,6 +902,7 @@ body.lang-de .i18n-note { display: none; }
 
 /* Bewohner: Hausreinigung */
 .care { margin-top: 28px; }
+.care__scope { margin: 0 0 12px; }
 .care__title { margin: 0 0 6px; font-size: 16px; color: var(--c-primary); }
 .care__title + .care__list { margin-bottom: 12px; }
 .care__list li { display: grid; grid-template-columns: 7.2em 1fr; gap: 10px; padding: 6px 0; border-top: 1px solid var(--c-border); }

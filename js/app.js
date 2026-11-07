@@ -3130,6 +3130,7 @@
     box.innerHTML = `
       <h2 class="news__heading">${esc(t_("Hausreinigung & Pflege"))}</h2>
       <div class="card care__card">
+        <p class="muted small care__scope">${esc(t_("Ihr Aufgang – letzte, diese und nächste Woche. Nachweise für die gesamte Anlage erhalten Sie auf Anfrage bei der Hausverwaltung."))}</p>
         ${last.length ? `<h3 class="care__title">${esc(t_("Zuletzt erledigt"))}</h3>
           <ul class="care__list">${last.map((l) => `<li><span class="care__date">${esc(day(l.time))}</span>
             <span><strong>${esc(t_(l.activity))}</strong><br><span class="muted">${esc(l.ort)}</span></span></li>`).join("")}</ul>` : ""}
