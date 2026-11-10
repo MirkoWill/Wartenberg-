@@ -498,6 +498,23 @@ function makeQrVideo(text) {
       check("Keine Fehler (Diese Woche)", p.errors.length === 0, p.errors);
       await ctx.close();
     }
+    {
+      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date());
+      const state = { plan: { day, items: [{ activity: "Fensterreinigung Aufgang", ort: "Treppenhaus Lindenberger Str. 6", done: false }], notes: [], week: [] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${STAFF}#hausmeister`); await p.waitForSelector("#planToday:not([hidden])");
+      await p.click("#manualBtn"); await p.selectOption("#scanManual", "TH_LIND6");
+      check("Scan: Tätigkeit laut Plan von heute vorausgewählt (statt Standard) mit Hinweis", (await p.inputValue("#scanActivity")) === "Fensterreinigung Aufgang" && await p.isVisible("#scanPlanHint"));
+      await p.selectOption("#scanManual", "MUELL");
+      check("Ort ohne Plan heute: Standard-Tätigkeit, kein Hinweis", (await p.inputValue("#scanActivity")) === "Müllplatzreinigung" && !(await p.isVisible("#scanPlanHint")));
+      await p.selectOption("#scanManual", "TH_LIND6"); await p.click("#scanForm [type=submit]"); await p.waitForTimeout(600);
+      const sent = (state.updates || []).concat(state.logs || []);
+      await p.click("#manualBtn"); await p.selectOption("#scanManual", "TH_LIND6");
+      check("Nach dem Speichern: geplante Tätigkeit erledigt → wieder Standard", (await p.inputValue("#scanActivity")) === "Treppenhausreinigung" && !(await p.isVisible("#scanPlanHint")), sent);
+      check("Keine Fehler (Vorauswahl)", p.errors.length === 0, p.errors);
+      await ctx.close();
+    }
 
     console.log("--- Stimmungsbild");
     {

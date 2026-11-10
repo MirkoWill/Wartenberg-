@@ -1819,8 +1819,32 @@
     $("#scanManual").hidden = !manual;
     $("#scanManual").required = manual;
     $("#scanManual").value = area ? area.code : "";
-    if (area && area.activity) $("#scanActivity").value = area.activity;
+    presetActivity(area);
     $("#scanForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /**
+   * Tätigkeit vorauswählen: was laut Plan heute an diesem Ort noch offen ist (ein Scan, ein Klick),
+   * sonst die Standard-Tätigkeit des Orts.
+   */
+  function presetActivity(area) {
+    const sel = $("#scanActivity");
+    $("#scanPlanHint").hidden = true;
+    if (!area) return;
+    const s = staff() || {};
+    const low = (v) => String(v || "").trim().toLowerCase();
+    const day = toIsoDate(today());
+    const plan = s.plan && s.plan.day === day && Array.isArray(s.plan.items) ? s.plan.items : [];
+    const t = readJson(STAFF_TODAY_KEY);
+    const mine = t && t.day === day ? t.items : [];
+    const options = Array.from(sel.options).map((o) => o.value);
+    const option = (activity) => options.find((o) => low(o) === low(activity));
+    const open = plan.find((x) => low(x.ort) === low(area.ort) && option(x.activity) && !x.done
+      && !mine.some((m) => low(m.activity) === low(x.activity) && low(m.ort) === low(area.ort)));
+    if (open) {
+      sel.value = option(open.activity);
+      $("#scanPlanHint").hidden = false;
+    } else if (area.activity) sel.value = area.activity;
   }
 
   function resetScanForm() {
@@ -2633,8 +2657,7 @@
     $("#scanCancel").addEventListener("click", stopScan);
     $("#manualBtn").addEventListener("click", () => showScanForm(null, true));
     $("#scanManual").addEventListener("change", (e) => {
-      const area = ((staff() || {}).areas || []).find((a) => a.code === e.target.value);
-      if (area && area.activity) $("#scanActivity").value = area.activity;
+      presetActivity(((staff() || {}).areas || []).find((a) => a.code === e.target.value));
     });
     $("#scanForm").addEventListener("submit", submitScan);
     $("#scanFormCancel").addEventListener("click", resetScanForm);
