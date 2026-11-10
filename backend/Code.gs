@@ -1220,21 +1220,41 @@ function staffLogin(user) {
   };
 }
 
-/** „Heute zu tun“: eintägige Einträge des Reinigungsplans für heute mit Stand laut Nachweisen. */
+/**
+ * „Heute zu tun“ und „Diese Woche“ für den Hausmeisterdienst (kommt mit der Anmeldung):
+ * items = heutige Einträge je Ort mit Stand, notes = was heute laut Bemerkung dazugehört,
+ * week = alle Tage Mo–So dieser Woche mit den Plan-Zeilen (Tätigkeit, Ort, Bemerkung, erledigt/gesamt).
+ */
 function todayPlan() {
   const cache = CacheService.getScriptCache();
-  const hit = cache.get("todayPlan");
+  const hit = cache.get("staffPlan");
   if (hit) { try { return JSON.parse(hit); } catch (e) { /* neu berechnen */ } }
   try {
     const day = berlinToday();
-    const items = planStatusForDay(day, activeAreas(), sheetObjects(CONFIG.SHEETS.cleaning), planRows())
+    const ymd = (d) => Utilities.formatDate(d, CONFIG.TIMEZONE, "yyyy-MM-dd");
+    const areas = activeAreas(), scans = sheetObjects(CONFIG.SHEETS.cleaning), plan = planRows();
+    const items = planStatusForDay(day, areas, scans, plan)
       .map((x) => ({ activity: plain(x.activity, 60), ort: plain(x.ort, 80), done: x.done === true }));
-    const out = { day: Utilities.formatDate(day, CONFIG.TIMEZONE, "yyyy-MM-dd"), items: items.slice(0, 40) };
-    cache.put("todayPlan", JSON.stringify(out), 120); // 2 Min.: mehrere Anmeldungen hintereinander rechnen nicht neu
+    const monday = new Date(day.getFullYear(), day.getMonth(), day.getDate() - ((day.getDay() + 6) % 7));
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const rows = plan.filter((r) => ymd(r.from) === ymd(d) && ymd(r.to) === ymd(d)).map((r) => {
+        const st = planStatusForDay(d, areas, scans, [r]);
+        return { activity: plain(r.activity, 60), ort: plain(r.ort, 120), note: plain(r.note, 300),
+          total: st.length, done: st.filter((x) => x.done).length };
+      });
+      if (rows.length) week.push({ day: ymd(d), rows: rows.slice(0, 20) });
+    }
+    const today = week.find((w) => w.day === ymd(day));
+    const notes = today ? today.rows.filter((r) => r.note && r.note.toLowerCase() !== r.activity.toLowerCase())
+      .map((r) => ({ activity: r.activity, ort: r.ort, note: r.note })) : [];
+    const out = { day: ymd(day), items: items.slice(0, 40), notes, week };
+    cache.put("staffPlan", JSON.stringify(out), 120); // 2 Min.: mehrere Anmeldungen hintereinander rechnen nicht neu
     return out;
   } catch (err) {
     console.warn("Heute zu tun:", err);
-    return { day: "", items: [] };
+    return { day: "", items: [], notes: [], week: [] };
   }
 }
 
@@ -1824,7 +1844,7 @@ function resetTestData() {
   props.deleteProperty("REPORT_PENDING");
   // Zwischengespeicherte Daten verwerfen (Startseite, Wetter, Plan, Orte, Mitarbeiter)
   try {
-    CacheService.getScriptCache().removeAll(["staff", "areas", "todayPlan", "weather", "pinFails", "news_-"]
+    CacheService.getScriptCache().removeAll(["staff", "areas", "staffPlan", "weather", "pinFails", "news_-"]
       .concat(Object.keys(CONFIG.ENTRANCE_NAMES).map((k) => `news_${k}`)));
   } catch (e) { console.error("Cache:", e); }
   try { rebuildMeterOverview(); } catch (e) { console.error("Zähler-Übersicht:", e); }

@@ -1819,8 +1819,32 @@
     $("#scanManual").hidden = !manual;
     $("#scanManual").required = manual;
     $("#scanManual").value = area ? area.code : "";
-    if (area && area.activity) $("#scanActivity").value = area.activity;
+    presetActivity(area);
     $("#scanForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /**
+   * Tätigkeit vorauswählen: was laut Plan heute an diesem Ort noch offen ist (ein Scan, ein Klick),
+   * sonst die Standard-Tätigkeit des Orts.
+   */
+  function presetActivity(area) {
+    const sel = $("#scanActivity");
+    $("#scanPlanHint").hidden = true;
+    if (!area) return;
+    const s = staff() || {};
+    const low = (v) => String(v || "").trim().toLowerCase();
+    const day = toIsoDate(today());
+    const plan = s.plan && s.plan.day === day && Array.isArray(s.plan.items) ? s.plan.items : [];
+    const t = readJson(STAFF_TODAY_KEY);
+    const mine = t && t.day === day ? t.items : [];
+    const options = Array.from(sel.options).map((o) => o.value);
+    const option = (activity) => options.find((o) => low(o) === low(activity));
+    const open = plan.find((x) => low(x.ort) === low(area.ort) && option(x.activity) && !x.done
+      && !mine.some((m) => low(m.activity) === low(x.activity) && low(m.ort) === low(area.ort)));
+    if (open) {
+      sel.value = option(open.activity);
+      $("#scanPlanHint").hidden = false;
+    } else if (area.activity) sel.value = area.activity;
   }
 
   function resetScanForm() {
@@ -1943,6 +1967,7 @@
     const plan = s.plan;
     const day = toIsoDate(today());
     const items = plan && plan.day === day && Array.isArray(plan.items) ? plan.items : [];
+    renderPlanWeek(plan && plan.day === day ? plan : null, day);
     box.hidden = !items.length;
     if (!items.length) return;
     const low = (v) => String(v || "").trim().toLowerCase();
@@ -1958,6 +1983,36 @@
     $("#planTodayList").innerHTML = list.sort((a, b) => a.ok - b.ok).map((x) => `
       <li class="${x.ok ? "is-done" : ""}"><span aria-hidden="true">${x.ok ? "✓" : "○"}</span>
         <span><strong>${esc(x.activity)}</strong><br><span class="muted small">${esc(x.ort)}</span></span></li>`).join("");
+    // Was laut Plan heute dazugehört (Bemerkung, z. B. „Leuchten reinigen“)
+    const notes = Array.isArray(plan.notes) ? plan.notes : [];
+    $("#planTodayNotes").hidden = !notes.length;
+    $("#planTodayNotes").innerHTML = notes.length ? `<strong>Dazu heute:</strong><ul>${notes.map((x) =>
+      `<li><strong>${esc(x.activity)}</strong> (${esc(x.ort)}): ${esc(x.note)}</li>`).join("")}</ul>` : "";
+  }
+
+  /** „Diese Woche“: alle Einsatztage Mo–So mit Plan-Zeilen; vergangene mit Stand, kommende als „geplant“. */
+  function renderPlanWeek(plan, day) {
+    const box = $("#planWeek");
+    const week = (plan && Array.isArray(plan.week) ? plan.week : []).filter((w) => w.day !== day || !(plan.items || []).length);
+    box.hidden = !week.length;
+    if (!week.length) return;
+    const label = (iso) => parseIsoDate(iso).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+    const mon = parseIsoDate(day); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    $("#planWeekRange").textContent = `${label(toIsoDate(mon))} – ${label(toIsoDate(sun))}`;
+    $("#planWeekList").innerHTML = week.map((w) => {
+      const past = w.day < day;
+      const rows = (w.rows || []).map((r) => {
+        const total = Number(r.total) || 0, done = Number(r.done) || 0;
+        const state = past
+          ? `<span class="badge ${done >= total ? "badge--erledigt" : "badge--offen"}">${done}/${total}</span>`
+          : '<span class="badge">geplant</span>';
+        return `<li><span><strong>${esc(r.activity)}</strong> · ${esc(r.ort || "ganze Anlage")}${r.note && r.note.toLowerCase() !== String(r.activity).toLowerCase()
+          ? `<br><span class="muted small">${esc(r.note)}</span>` : ""}</span>${state}</li>`;
+      }).join("");
+      return `<div class="plan-week__day"><div class="plan-week__date">${esc(label(w.day))}${w.day === day ? " · heute" : ""}</div>
+        <ul class="plan-week__list">${rows}</ul></div>`;
+    }).join("");
   }
 
   /* ---------- Aufträge ---------- */
@@ -2602,8 +2657,7 @@
     $("#scanCancel").addEventListener("click", stopScan);
     $("#manualBtn").addEventListener("click", () => showScanForm(null, true));
     $("#scanManual").addEventListener("change", (e) => {
-      const area = ((staff() || {}).areas || []).find((a) => a.code === e.target.value);
-      if (area && area.activity) $("#scanActivity").value = area.activity;
+      presetActivity(((staff() || {}).areas || []).find((a) => a.code === e.target.value));
     });
     $("#scanForm").addEventListener("submit", submitScan);
     $("#scanFormCancel").addEventListener("click", resetScanForm);
