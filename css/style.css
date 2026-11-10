@@ -1063,6 +1063,7 @@ button.kpi { font: inherit; color: inherit; text-align: left; width: 100%; curso
 .chip--check:has(input:focus-visible) { outline: 3px solid var(--c-primary); outline-offset: 2px; }
 
 /* Hausmeister: Heute zu tun */
+.plan-today.plan-week { margin-top: 16px; }
 .plan-today { margin: 0 0 14px; padding: 12px 14px; background: var(--c-surface); border: 1px solid var(--c-border); border-left: 5px solid var(--c-primary); border-radius: var(--radius); }
 .plan-today__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .plan-today__list { list-style: none; margin: 0; padding: 0; }
@@ -1070,6 +1071,15 @@ button.kpi { font: inherit; color: inherit; text-align: left; width: 100%; curso
 .plan-today__list li:last-child { border-bottom: 0; }
 .plan-today__list li.is-done { opacity: .6; }
 .plan-today__list li.is-done strong { text-decoration: line-through; }
+.plan-today__notes { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--c-border); }
+.plan-today__notes ul { margin: 4px 0 0; padding-left: 18px; }
+.plan-today__notes li { margin: 3px 0; }
+.plan-week__day + .plan-week__day { margin-top: 10px; }
+.plan-week__date { font-weight: 700; color: var(--c-primary); margin: 4px 0 2px; }
+.plan-week__list { list-style: none; margin: 0; padding: 0; }
+.plan-week__list li { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--c-border); }
+.plan-week__list li:last-child { border-bottom: 0; }
+.plan-week__list .badge { flex: none; }
 
 /* Kalender-Abo */
 .cal-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }

@@ -480,6 +480,24 @@ function makeQrVideo(text) {
       check("Keine Fehler (Heute zu tun)", p.errors.length === 0, p.errors);
       await ctx.close();
     }
+    {
+      const iso = (n) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + n * 86400000));
+      const day = iso(0);
+      const state = { plan: { day, items: [{ activity: "Müllplatzreinigung", ort: "Müllplatz (außen)", done: false }],
+        notes: [{ activity: "Treppenhausreinigung", ort: "alle Aufgänge", note: "Leuchten und Hausbeschilderung reinigen" }],
+        week: [{ day: iso(-1), rows: [{ activity: "Reinigung", ort: "alle Keller", note: "", total: 4, done: 3 }] },
+          { day, rows: [{ activity: "Müllplatzreinigung", ort: "Müllplatz (außen)", note: "", total: 1, done: 0 }] },
+          { day: iso(1), rows: [{ activity: "Kontrollgang", ort: "Elektroraum, Heizungsraum", note: "Sichtkontrolle", total: 3, done: 0 }] }] } };
+      const ctx = await newContext(browser, { backend: fakeBackend(state), preset: "resident" });
+      const p = await newPage(ctx);
+      await p.goto(`${base}?obj=lind6&hm=${STAFF}#hausmeister`); await p.waitForSelector("#planWeek:not([hidden])");
+      const wk = await p.textContent("#planWeek");
+      check("Diese Woche: gestern mit Stand 3/4, morgen geplant mit Bemerkung, heute nicht doppelt", /Diese Woche/.test(wk) && /alle Keller/.test(wk) && /3\/4/.test(wk)
+        && /Kontrollgang/.test(wk) && /geplant/.test(wk) && /Sichtkontrolle/.test(wk) && !/heute/.test(wk), wk);
+      check("Dazu heute: Bemerkung unter „Heute zu tun“", /Dazu heute:.*Leuchten und Hausbeschilderung reinigen/s.test(await p.textContent("#planTodayNotes")));
+      check("Keine Fehler (Diese Woche)", p.errors.length === 0, p.errors);
+      await ctx.close();
+    }
 
     console.log("--- Stimmungsbild");
     {

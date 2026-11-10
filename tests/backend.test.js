@@ -391,6 +391,32 @@ wx.fail = false; delete cache.weather;
   check('Beenden nur mit passendem Titel', !post({ action: 'adminNewsEnd', token: admTok, row: row + 1, title: 'falsch' }).ok && post({ action: 'adminNewsEnd', token: admTok, row: row + 1, title: 'Cockpit-Testhinweis' }).ok && nsh.grid[row][0] === false);
   const lg2 = post({ action: 'hmLogin', token: hmTok });
   check('Heute zu tun: Plan für heute kommt mit der Anmeldung', lg2.plan && /^\d{4}-\d{2}-\d{2}$/.test(lg2.plan.day) && Array.isArray(lg2.plan.items), lg2.plan);
+  // Diese Woche: Plan-Zeilen Mo–So mit Stand und Bemerkung, „Dazu heute“ aus der Bemerkung
+  {
+    const plS = sheets['Reinigungsplan'], clS = sheets['Reinigung'];
+    const savePl = plS.grid.map((r) => r.slice()), saveCl = clS.grid.map((r) => r.slice());
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    const o = (n) => { const x = new Date(d0); x.setDate(x.getDate() + n); return x; };
+    const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    const mon = -((d0.getDay() + 6) % 7);
+    plS.grid.splice(1);
+    plS.grid.push([o(0), '', 'Treppenhausreinigung', 'alle Aufgänge', 'Leuchten und Hausbeschilderung reinigen', ''],
+      [o(0), '', 'Müllplatzreinigung', 'Müllplatz (außen)', 'Müllplatzreinigung', ''],
+      [o(mon), '', 'Reinigung', 'alle Keller', '', ''], [o(mon + 7), '', 'Reinigung', 'Tiefgarage', '', ''],
+      [o(-40), o(60), 'Winterdienst', '', 'Bereitschaft', '']);
+    clS.grid.splice(1);
+    const t = new Date(); clS.grid.push([t, 'TH_LIND6', '100', t, 'Treppenhaus Lindenberger Str. 6', 'Treppenhausreinigung', '', '', 'lind6', 'QR-Scan']);
+    Object.keys(cache).forEach((k) => delete cache[k]);
+    const wp = post({ action: 'hmLogin', token: hmTok }).plan;
+    const tdy = wp.week.find((w) => w.day === ymd(d0));
+    const th = tdy && tdy.rows.find((r) => r.activity === 'Treppenhausreinigung');
+    check('Diese Woche: heute mit Stand je Plan-Zeile (1/5 Treppenhäuser), Montag dabei, nächste Woche/Zeiträume nicht',
+      th && th.total === 5 && th.done === 1 && th.ort === 'alle Aufgänge' && wp.week.some((w) => w.day === ymd(o(mon)))
+      && !wp.week.some((w) => w.day === ymd(o(mon + 7))) && !wp.week.some((w) => w.rows.some((r) => r.activity === 'Winterdienst')), wp.week);
+    check('Dazu heute: Bemerkung als Hinweis, nicht wenn sie nur die Tätigkeit wiederholt', wp.notes.length === 1 && /Leuchten/.test(wp.notes[0].note) && wp.items.length === 6, wp.notes);
+    plS.grid = savePl; clS.grid = saveCl;
+    Object.keys(cache).forEach((k) => delete cache[k]);
+  }
 }
 
 // ================= Paket B: Nachher-Foto, Kalender-Abo =================

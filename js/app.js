@@ -1943,6 +1943,7 @@
     const plan = s.plan;
     const day = toIsoDate(today());
     const items = plan && plan.day === day && Array.isArray(plan.items) ? plan.items : [];
+    renderPlanWeek(plan && plan.day === day ? plan : null, day);
     box.hidden = !items.length;
     if (!items.length) return;
     const low = (v) => String(v || "").trim().toLowerCase();
@@ -1958,6 +1959,36 @@
     $("#planTodayList").innerHTML = list.sort((a, b) => a.ok - b.ok).map((x) => `
       <li class="${x.ok ? "is-done" : ""}"><span aria-hidden="true">${x.ok ? "✓" : "○"}</span>
         <span><strong>${esc(x.activity)}</strong><br><span class="muted small">${esc(x.ort)}</span></span></li>`).join("");
+    // Was laut Plan heute dazugehört (Bemerkung, z. B. „Leuchten reinigen“)
+    const notes = Array.isArray(plan.notes) ? plan.notes : [];
+    $("#planTodayNotes").hidden = !notes.length;
+    $("#planTodayNotes").innerHTML = notes.length ? `<strong>Dazu heute:</strong><ul>${notes.map((x) =>
+      `<li><strong>${esc(x.activity)}</strong> (${esc(x.ort)}): ${esc(x.note)}</li>`).join("")}</ul>` : "";
+  }
+
+  /** „Diese Woche“: alle Einsatztage Mo–So mit Plan-Zeilen; vergangene mit Stand, kommende als „geplant“. */
+  function renderPlanWeek(plan, day) {
+    const box = $("#planWeek");
+    const week = (plan && Array.isArray(plan.week) ? plan.week : []).filter((w) => w.day !== day || !(plan.items || []).length);
+    box.hidden = !week.length;
+    if (!week.length) return;
+    const label = (iso) => parseIsoDate(iso).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+    const mon = parseIsoDate(day); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    $("#planWeekRange").textContent = `${label(toIsoDate(mon))} – ${label(toIsoDate(sun))}`;
+    $("#planWeekList").innerHTML = week.map((w) => {
+      const past = w.day < day;
+      const rows = (w.rows || []).map((r) => {
+        const total = Number(r.total) || 0, done = Number(r.done) || 0;
+        const state = past
+          ? `<span class="badge ${done >= total ? "badge--erledigt" : "badge--offen"}">${done}/${total}</span>`
+          : '<span class="badge">geplant</span>';
+        return `<li><span><strong>${esc(r.activity)}</strong> · ${esc(r.ort || "ganze Anlage")}${r.note && r.note.toLowerCase() !== String(r.activity).toLowerCase()
+          ? `<br><span class="muted small">${esc(r.note)}</span>` : ""}</span>${state}</li>`;
+      }).join("");
+      return `<div class="plan-week__day"><div class="plan-week__date">${esc(label(w.day))}${w.day === day ? " · heute" : ""}</div>
+        <ul class="plan-week__list">${rows}</ul></div>`;
+    }).join("");
   }
 
   /* ---------- Aufträge ---------- */
