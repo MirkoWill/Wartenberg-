@@ -846,6 +846,27 @@ function makeQrVideo(text) {
       await ctx.close();
     }
 
+    console.log("--- Stromausfall-Anleitung");
+    {
+      for (const lang of ["de", "en"]) {
+        const ctx = await newContext(browser, { backend: fakeBackend({}), preset: "resident", lang });
+        const p = await newPage(ctx);
+        await p.goto(`${base}?obj=lind6#notfall`); await p.waitForSelector("#emergencyRules details");
+        const det = p.locator("#emergencyRules details", { has: p.locator("figure.breakers") });
+        await det.locator("summary").click();
+        const txt = await det.textContent();
+        if (lang === "de") {
+          check("Stromausfall: Anleitung mit Grafik Sicherungskasten und 5 Schritten, Anruf-Knöpfe", (await det.locator(".guide__steps li").count()) === 5
+            && await det.locator("figure.breakers svg").isVisible() && /Was tun bei Stromausfall\?/.test(txt) && /FI-Schalter/.test(txt) && /0800 211 25 25/.test(txt)
+            && (await det.locator('a[href="tel:+498002112525"]').count()) === 1 && (await det.locator('a[href="tel:+491794073564"]').count()) === 1, txt);
+        } else {
+          check("Stromausfall-Anleitung übersetzt (EN)", /What to do in a power cut\?/.test(txt) && /Check the fuses:/.test(txt) && /switch up/.test(txt) && !/Sicherungen prüfen/.test(txt), txt);
+        }
+        check(`Keine Fehler (Stromausfall ${lang})`, p.errors.length === 0, p.errors);
+        await ctx.close();
+      }
+    }
+
     console.log("--- Wetter");
     {
       const day = (off) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(Date.now() + off * 86400000));

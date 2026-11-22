@@ -1520,6 +1520,24 @@
           <figcaption><span class="tag tag--stop">zu</span> Drehgriff im Uhrzeigersinn</figcaption>
         </figure>
       </div>`,
+    breakers: `
+      <figure class="breakers" role="img" aria-label="Sicherungskasten: Schalter oben ist an, Schalter unten ist aus.">
+        <svg viewBox="0 0 240 92" aria-hidden="true">
+          <rect class="b-box" x="2" y="2" width="236" height="88" rx="8"/>
+          <rect class="b-rail" x="10" y="40" width="220" height="12" rx="2"/>
+          ${[0, 1, 2, 3].map((i) => {
+            const x = 16 + i * 36, off = i === 2;
+            return `<rect class="b-mod" x="${x}" y="14" width="30" height="64" rx="3"/>
+              <rect class="b-slot" x="${x + 10}" y="24" width="10" height="44" rx="5"/>
+              <rect class="b-lever ${off ? "b-off" : "b-on"}" x="${x + 7}" y="${off ? 50 : 22}" width="16" height="20" rx="3"/>`;
+          }).join("")}
+          <rect class="b-mod b-fi" x="168" y="14" width="62" height="64" rx="3"/>
+          <rect class="b-slot" x="178" y="24" width="10" height="44" rx="5"/>
+          <rect class="b-lever b-on" x="175" y="22" width="16" height="20" rx="3"/>
+          <text class="b-label" x="212" y="52" text-anchor="middle">FI</text>
+        </svg>
+        <figcaption><span class="tag tag--ok">an</span> Schalter oben <span class="tag tag--stop">aus</span> Schalter unten</figcaption>
+      </figure>`,
   };
 
   /** Direkt-Button (Anruf oder WhatsApp) für Verhaltensregeln. */
