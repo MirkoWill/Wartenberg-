@@ -852,6 +852,17 @@ body.lang-de .i18n-note { display: none; }
 .v-wheel { fill: var(--c-danger); }
 .v-arrow { fill: none; stroke: var(--c-text); stroke-width: 3; stroke-linecap: round; }
 .v-arrowhead { fill: var(--c-text); }
+.breakers { margin: 0; text-align: center; }
+.breakers svg { width: 100%; max-width: 320px; height: auto; }
+.breakers figcaption { font-size: 13px; line-height: 1.4; margin-top: 4px; }
+.breakers figcaption .tag + .tag { margin-left: 10px; }
+.b-box { fill: var(--c-surface); stroke: var(--c-border); stroke-width: 2; }
+.b-rail { fill: #c3c8cc; }
+.b-mod { fill: #fff; stroke: #9aa3ab; stroke-width: 1.5; }
+.b-slot { fill: #e4e6e8; }
+.b-lever.b-on { fill: #2e7d32; }
+.b-lever.b-off { fill: var(--c-danger); }
+.b-label { font: 700 16px "Source Sans 3", sans-serif; fill: var(--c-text); }
 .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-weight: 700; font-size: 13px; color: #fff; margin-bottom: 2px; }
 .tag--ok { background: #2e7d32; }
 .tag--stop { background: var(--c-danger); }

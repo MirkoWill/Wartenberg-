@@ -85,6 +85,18 @@ window.APP_CONFIG = {
           { type: "tel", label: "Hausmeister-Notdienst anrufen", phone: "+491794073564" },
           { type: "tel", label: "Stromnetz Berlin anrufen", phone: "+498002112525" },
         ],
+        // Anleitung in drei Schritten (wie bei Stromnetz Berlin) – mit Grafik Sicherungskasten
+        guide: {
+          title: "Was tun bei Stromausfall?",
+          figure: "breakers",
+          steps: [
+            { label: "Sicherungen prüfen:", text: "Der Sicherungskasten ist im Flur Ihrer Wohnung. Ist ein Schalter unten, ist er ausgeschaltet. Prüfen Sie auch den breiteren FI-Schalter (Fehlerstrom-Schutzschalter)." },
+            { label: "Nur ohne Gefahr einschalten:", text: "Schalter nach oben drücken – aber nur, wenn kein Wasser in der Nähe ist, es nicht verbrannt riecht und kein Gerät beschädigt ist. Springt er sofort wieder heraus: Stecker der Geräte in diesem Bereich ziehen und noch einmal versuchen." },
+            { label: "Ganzes Haus dunkel?", text: "Kein Licht im Treppenhaus und bei den Nachbarn: Hausmeister-Notdienst anrufen." },
+            { label: "Auch die Straße dunkel?", text: "Sind Nachbarhäuser und Straßenlaternen ebenfalls aus, ist das Stromnetz gestört: Stromnetz Berlin anrufen, 0800 211 25 25 (kostenlos)." },
+            { label: "Bis der Strom zurück ist:", text: "Kühlschrank und Gefriertruhe geschlossen halten. Herd, Bügeleisen und Heizlüfter ausschalten. Lieber Taschenlampe als Kerzen." },
+          ],
+        },
       },
       {
         title: "Gasgeruch",
